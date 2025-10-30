@@ -89,6 +89,15 @@ public class VideoPlayer extends JFrame {
     // Adicionar no início da classe, junto com outras variáveis de instância
     private boolean hardwareAccelerationEnabled = false;
 
+    // No início da classe, junto com outras variáveis:
+    private JButton rewindButton;
+    private JButton forwardButton;
+    private JButton nextFrameButton;
+    private JButton captureFrameButton;
+
+    // No início da classe, junto com outras variáveis:
+    private int framesToSkip = 1; // Quantidade de frames para avançar
+
 
 public VideoPlayer() {
     setTitle("Video Player - JavaCV");
@@ -838,26 +847,52 @@ private void setupContextMenu() {
 
     contextMenu.add(subtitleSettingsMenu);
 
-    // Modificar apenas a parte do menu Performance:
-// NOVO: Menu de Performance
+    // NOVO: Menu de Performance
     JMenu performanceMenu = new JMenu("Performance");
 
     JCheckBoxMenuItem hwAccelItem = new JCheckBoxMenuItem("Aceleração GPU");
-    hwAccelItem.setSelected(hardwareAccelerationEnabled); // Usar variável
+    hwAccelItem.setSelected(hardwareAccelerationEnabled);
     hwAccelItem.addActionListener(e -> {
         hardwareAccelerationEnabled = hwAccelItem.isSelected();
         System.out.println("Aceleração GPU: " + (hardwareAccelerationEnabled ? "Habilitada" : "Desabilitada"));
 
-        // Avisar que precisa recarregar vídeo
         if (grabber != null) {
             JOptionPane.showMessageDialog(VideoPlayer.this,
                     "A aceleração GPU será aplicada ao recarregar o vídeo.",
                     "Aviso", JOptionPane.INFORMATION_MESSAGE);
         }
-        //restoreVideoStateAfterAudioSwitch();
     });
 
     performanceMenu.add(hwAccelItem);
+
+// NOVO: Submenu para configurar quantidade de frames
+    performanceMenu.addSeparator();
+    JMenu frameSkipMenu = new JMenu("Frames por Avanço");
+
+    ButtonGroup frameSkipGroup = new ButtonGroup();
+    int[] skipValues = {1, 2, 3, 5, 10, 15, 30};
+
+    for (int skipValue : skipValues) {
+        JRadioButtonMenuItem skipItem = new JRadioButtonMenuItem(skipValue + " frame" + (skipValue > 1 ? "s" : ""));
+        skipItem.setSelected(skipValue == framesToSkip);
+
+        final int value = skipValue;
+        skipItem.addActionListener(e -> {
+            framesToSkip = value;
+            System.out.println("Frames por avanço alterado para: " + framesToSkip);
+
+            // Atualizar tooltip do botão nextFrame
+            if (nextFrameButton != null) {
+                nextFrameButton.setToolTipText("Avançar " + framesToSkip + " frame" + (framesToSkip > 1 ? "s" : ""));
+            }
+        });
+
+        frameSkipGroup.add(skipItem);
+        frameSkipMenu.add(skipItem);
+    }
+
+    performanceMenu.add(frameSkipMenu);
+
     contextMenu.add(performanceMenu);
 
     // Separador
@@ -1115,11 +1150,11 @@ private void initComponents() {
     openButton.setToolTipText("Abrir nova midia");
     openButton.addActionListener(e -> openVideo());
 
-    JButton rewindButton = new JButton("⏪");
+    rewindButton = new JButton("⏪");
     rewindButton.setEnabled(false);
     rewindButton.setPreferredSize(new Dimension(35, 35));
     rewindButton.setToolTipText("Retroceder 10 segundos");
-    // rewindButton.addActionListener(e -> rewind10Seconds()); // Implementar depois
+    rewindButton.addActionListener(e -> rewind10Seconds());
 
     playPauseButton = new JButton("▶");
     playPauseButton.setEnabled(false);
@@ -1127,11 +1162,11 @@ private void initComponents() {
     playPauseButton.setToolTipText("Tocar/Pausar");
     playPauseButton.addActionListener(e -> togglePlayPause());
 
-    JButton forwardButton = new JButton("⏩");
+    forwardButton = new JButton("⏩");
     forwardButton.setEnabled(false);
     forwardButton.setPreferredSize(new Dimension(35, 35));
     forwardButton.setToolTipText("Avançar 10 segundos");
-    // forwardButton.addActionListener(e -> forward10Seconds()); // Implementar depois
+    forwardButton.addActionListener(e -> forward10Seconds());
 
     stopButton = new JButton("■");
     stopButton.setEnabled(false);
@@ -1139,17 +1174,17 @@ private void initComponents() {
     stopButton.setToolTipText("Parar");
     stopButton.addActionListener(e -> stopVideo());
 
-    JButton nextFrameButton = new JButton("⏭");
+    nextFrameButton = new JButton("⏭");
     nextFrameButton.setEnabled(false);
     nextFrameButton.setPreferredSize(new Dimension(35, 35));
     nextFrameButton.setToolTipText("Avançar um frame");
-    // nextFrameButton.addActionListener(e -> nextFrame()); // Implementar depois
+    nextFrameButton.addActionListener(e -> nextFrame());
 
-    JButton captureFrameButton = new JButton("📷");
+    captureFrameButton = new JButton("📷");
     captureFrameButton.setEnabled(false);
-    captureFrameButton.setPreferredSize(new Dimension(35, 35)); // Maior que os outros
+    captureFrameButton.setPreferredSize(new Dimension(35, 35));
     captureFrameButton.setToolTipText("Capturar frame atual");
-    // captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
+  // captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
 
     centerButtonPanel.add(openButton);
     centerButtonPanel.add(rewindButton);
@@ -1442,6 +1477,10 @@ private void loadVideo(String filepath) {
                 progressSlider.setEnabled(true);
                 progressSlider.setValue(0);
                 openButton.setEnabled(true);
+                rewindButton.setEnabled(true);      // NOVO
+                forwardButton.setEnabled(true);     // NOVO
+                nextFrameButton.setEnabled(true);   // NOVO
+                captureFrameButton.setEnabled(true); // NOVO
 
                 updateTimeLabel();
 
@@ -1473,6 +1512,208 @@ private void loadVideo(String filepath) {
     loaderThread.start();
     System.out.println("Thread iniciada! Aguardando conclusão...");
     System.out.println("=== FIM loadVideo (método principal) ===");
+}
+
+    private void rewind10Seconds() {
+        if (grabber == null || totalFrames == 0) return;
+
+        System.out.println("Retrocedendo 10 segundos...");
+
+        // Calcular quantos frames correspondem a 10 segundos
+        long framesTo10Seconds = (long)(frameRate * 10);
+        long targetFrame = Math.max(0, currentFrame - framesTo10Seconds);
+
+        boolean wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pauseVideo();
+        }
+
+        try {
+            grabber.setFrameNumber((int)targetFrame);
+            currentFrame = targetFrame;
+
+            // Capturar e exibir frame
+            Frame frame = grabber.grabImage();
+            if (frame != null && frame.image != null) {
+                BufferedImage img = converter.convert(frame);
+                if (img != null) {
+                    videoPanel.updateImage(img);
+                }
+            }
+
+            // Resetar posição
+            grabber.setFrameNumber((int)targetFrame);
+
+            // Atualizar UI
+            updateTimeLabel();
+            int progress = (int)((targetFrame * 100) / totalFrames);
+            progressSlider.setValue(progress);
+
+            // Atualizar legenda
+            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+            updateSubtitle(currentTimeMs);
+
+            if (audioLine != null) {
+                audioLine.flush();
+            }
+
+            System.out.println("Retrocedeu para frame: " + targetFrame);
+
+            if (wasPlaying) {
+                Thread.sleep(100);
+                playVideo();
+            }
+
+        } catch (Exception e) {
+            System.err.println("Erro ao retroceder: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void forward10Seconds() {
+        if (grabber == null || totalFrames == 0) return;
+
+        System.out.println("Avançando 10 segundos...");
+
+        // Calcular quantos frames correspondem a 10 segundos
+        long framesTo10Seconds = (long)(frameRate * 10);
+        long targetFrame = Math.min(totalFrames - 1, currentFrame + framesTo10Seconds);
+
+        boolean wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pauseVideo();
+        }
+
+        try {
+            grabber.setFrameNumber((int)targetFrame);
+            currentFrame = targetFrame;
+
+            // Capturar e exibir frame
+            Frame frame = grabber.grabImage();
+            if (frame != null && frame.image != null) {
+                BufferedImage img = converter.convert(frame);
+                if (img != null) {
+                    videoPanel.updateImage(img);
+                }
+            }
+
+            // Resetar posição
+            grabber.setFrameNumber((int)targetFrame);
+
+            // Atualizar UI
+            updateTimeLabel();
+            int progress = (int)((targetFrame * 100) / totalFrames);
+            progressSlider.setValue(progress);
+
+            // Atualizar legenda
+            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+            updateSubtitle(currentTimeMs);
+
+            if (audioLine != null) {
+                audioLine.flush();
+            }
+
+            System.out.println("Avançou para frame: " + targetFrame);
+
+            if (wasPlaying) {
+                Thread.sleep(100);
+                playVideo();
+            }
+
+        } catch (Exception e) {
+            System.err.println("Erro ao avançar: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+private void nextFrame() {
+    if (grabber == null || totalFrames == 0) return;
+
+    System.out.println("Avançando " + framesToSkip + " frame(s)...");
+
+    // Se estiver tocando, pausar primeiro
+    if (isPlaying) {
+        pauseVideo();
+    }
+
+    // Verificar se não está no final
+    if (currentFrame >= totalFrames - 1) {
+        System.out.println("Já está no último frame");
+        return;
+    }
+
+    try {
+        int framesAdvanced = 0;
+
+        // Avançar a quantidade configurada de frames
+        while (framesAdvanced < framesToSkip) {
+            Frame frame = grabber.grab();
+
+            if (frame == null) {
+                System.out.println("Chegou ao fim do vídeo");
+                break;
+            }
+
+            // Se for frame de vídeo, contar
+            if (frame.image != null) {
+                framesAdvanced++;
+
+                // Só exibir o último frame
+                if (framesAdvanced == framesToSkip) {
+                    BufferedImage img = converter.convert(frame);
+                    if (img != null) {
+                        videoPanel.updateImage(img);
+                        currentFrame++;
+
+                        // Atualizar UI
+                        updateTimeLabel();
+                        int progress = (int)((currentFrame * 100) / totalFrames);
+                        progressSlider.setValue(progress);
+
+                        // Atualizar legenda
+                        long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                        updateSubtitle(currentTimeMs);
+
+                        System.out.println("Frame atual: " + currentFrame + " (avançou " + framesToSkip + " frames)");
+                    }
+                } else {
+                    // Contar frame mas não exibir
+                    currentFrame++;
+                }
+            }
+            // Frames de áudio são ignorados automaticamente
+        }
+
+    } catch (Exception e) {
+        System.err.println("Erro ao avançar frame: " + e.getMessage());
+        e.printStackTrace();
+
+        // Fallback: tentar com setFrameNumber
+        try {
+            System.out.println("Tentando fallback com setFrameNumber...");
+            long targetFrame = Math.min(totalFrames - 1, currentFrame + framesToSkip);
+            grabber.setFrameNumber((int)targetFrame);
+            currentFrame = targetFrame;
+
+            Frame frame = grabber.grabImage();
+            if (frame != null && frame.image != null) {
+                BufferedImage img = converter.convert(frame);
+                if (img != null) {
+                    videoPanel.updateImage(img);
+                    updateTimeLabel();
+                    int progress = (int)((targetFrame * 100) / totalFrames);
+                    progressSlider.setValue(progress);
+
+                    long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                    updateSubtitle(currentTimeMs);
+                }
+            }
+            grabber.setFrameNumber((int)targetFrame);
+        } catch (Exception fallbackError) {
+            System.err.println("Fallback também falhou: " + fallbackError.getMessage());
+        }
+    }
 }
 
 
