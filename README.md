@@ -1,17 +1,20 @@
-# PersonalVideoPlayer
+# PersonalVideoPlayer 🎬✨
 
-Project to create an functional video and audio player using java with javacv and ffmpeg library 
+Project to create a functional video and audio player using java with javacv and ffmpeg library 
 
-## Features until now
-- Video player with support the majority video formats((*.mp4, *.avi, *.mkv, *.mov, *.flv, *.wmv, *.webm, *.gif)
-- Support to acceleration by hardware for heavy codecs
-- Using Swing with flatlaf for better UI
-
-## Features to be implemented
-- Correct audio
-- Show and chose Subtitles
-- Chose different audio options if available
-- Option to advance by frame
-- Capture of the current image of the video
-- Change UI 
+## 🎯 Features until now
+- ✅ Video player with support the majority video formats((*.mp4, *.avi, *.mkv, *.mov, *.flv, *.wmv, *.webm, *.gif)
+- ✅ Support to acceleration by hardware for heavy codecs
+- ✅ Using Swing with flatlaf for better UI
+- ✅ Simplified context menu 
+- ✅ Can choose between different audio channels if video have
+- ✅ Support to subtitles from external file like .srt, and embed subtitles
+- ✅ Rewind and advance options
+- ✅ Advance by frame
+- ✅ Can capture an image and save in computer 📸, 
+- ✅ Support to fullscreen mode,
+ 
+## 🚀 Features to be implemented
+- ℹ️ 🎵 Support to audio like mp3
+- ℹ️ Option to capture all frames in video and save in the computer
 

@@ -7,6 +7,7 @@ import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.opencv.opencv_core.*;
 
+import javax.imageio.ImageIO;
 import javax.sound.sampled.*;
 import javax.swing.*;
 import java.awt.*;
@@ -26,6 +27,7 @@ import java.util.*;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 
 public class VideoPlayer extends JFrame {
     private VideoPanel videoPanel;
@@ -98,8 +100,12 @@ public class VideoPlayer extends JFrame {
     // No início da classe, junto com outras variáveis:
     private int framesToSkip = 1; // Quantidade de frames para avançar
 
+    // Adicionar no início da classe, junto com outras variáveis de instância
+    private boolean silentCapture = false;
+    private String customCapturePath = null;
 
-public VideoPlayer() {
+
+    public VideoPlayer() {
     setTitle("Video Player - JavaCV");
     setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     setSize(800, 600);
@@ -108,7 +114,83 @@ public VideoPlayer() {
     converter = new Java2DFrameConverter();
     initComponents();
 
-    // Adicionar listener de teclado no painel de vídeo (não no frame)
+    // NOVO: Adicionar KeyEventDispatcher global para capturar teclas em qualquer lugar
+    KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
+        @Override
+        public boolean dispatchKeyEvent(KeyEvent e) {
+            // Só processar quando a tecla for pressionada (não released)
+            if (e.getID() != KeyEvent.KEY_PRESSED) {
+                return false;
+            }
+
+            // Não processar se estiver digitando em um campo de texto
+            Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+            if (focusOwner instanceof JTextField || focusOwner instanceof JTextArea) {
+                return false;
+            }
+
+            // Processar atalhos globais
+            switch (e.getKeyCode()) {
+                case KeyEvent.VK_ESCAPE:
+                    GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+                    if (gd.getFullScreenWindow() == VideoPlayer.this) {
+                        exitFullScreen();
+                        return true; // Consumir evento
+                    }
+                    break;
+
+                case KeyEvent.VK_F11:
+                    toggleFullScreen();
+                    return true;
+
+                case KeyEvent.VK_SPACE:
+                    if (grabber != null) {
+                        togglePlayPause();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_LEFT:
+                    if (grabber != null) {
+                        rewind10Seconds();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_RIGHT:
+                    if (grabber != null) {
+                        forward10Seconds();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_X:
+                    if (grabber != null) {
+                        nextFrame();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_S:
+                    if (grabber != null) {
+                        stopVideo();
+                        return true;
+                    }
+                    break;
+                case KeyEvent.VK_C:
+                    if (grabber != null) {
+                        captureFrame();
+                        return true;
+                    }
+                    break;
+
+            }
+
+            return false; // Não consumir o evento se não for um dos nossos atalhos
+        }
+    });
+
+    // Adicionar listener de teclado no painel de vídeo (mantido como backup)
     videoPanel.setFocusable(true);
     videoPanel.addKeyListener(new KeyAdapter() {
         @Override
@@ -122,27 +204,29 @@ public VideoPlayer() {
                 toggleFullScreen();
             } else if (e.getKeyCode() == KeyEvent.VK_SPACE) {
                 togglePlayPause();
+            } else if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+                rewind10Seconds();
+            } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+                forward10Seconds();
+            } else if (e.getKeyCode() == KeyEvent.VK_X) {
+                nextFrame();
+            } else if (e.getKeyCode() == KeyEvent.VK_S) {
+                stopVideo();
+            }else if (e.getKeyCode() == KeyEvent.VK_C) {
+                captureFrame();
             }
         }
     });
-    // No construtor VideoPlayer(), adicionar após initComponents():
+
+    // Click esquerdo para pausar/continuar
     videoPanel.addMouseListener(new MouseAdapter() {
         @Override
         public void mouseClicked(MouseEvent e) {
             if (SwingUtilities.isLeftMouseButton(e)) {
-                // Click esquerdo - pausar/continuar
                 if (grabber != null && (isPlaying || !isStopped)) {
                     togglePlayPause();
                 }
             }
-            videoPanel.requestFocusInWindow();
-        }
-    });
-
-    // Garantir que o painel receba foco ao clicar
-    videoPanel.addMouseListener(new MouseAdapter() {
-        @Override
-        public void mouseClicked(MouseEvent e) {
             videoPanel.requestFocusInWindow();
         }
     });
@@ -291,7 +375,7 @@ public VideoPlayer() {
         }
     }
 
-private void saveVideoState() {
+ private void saveVideoState() {
     if (videoFilePath != null) {
         currentVideoPath = videoFilePath;
         savedFramePosition = currentFrame;
@@ -768,6 +852,11 @@ private void parseAudioStreamsFromJson(String json) {
     class VideoPanel extends JPanel {
         private BufferedImage currentImage;
 
+        public BufferedImage getCurrentImage() {
+            return currentImage;
+        }
+
+
         public VideoPanel() {
             setBackground(Color.BLACK);
             setDoubleBuffered(true);
@@ -894,6 +983,55 @@ private void setupContextMenu() {
     performanceMenu.add(frameSkipMenu);
 
     contextMenu.add(performanceMenu);
+
+    // ========== NOVO: Menu de Captura ==========
+    JMenu captureMenu = new JMenu("Captura");
+
+    // Opção de captura silenciosa
+    JCheckBoxMenuItem silentCaptureItem = new JCheckBoxMenuItem("Captura Silenciosa");
+    silentCaptureItem.setSelected(silentCapture);
+    silentCaptureItem.addActionListener(e -> {
+        silentCapture = silentCaptureItem.isSelected();
+        System.out.println("Captura silenciosa: " + (silentCapture ? "Ativada" : "Desativada"));
+    });
+    captureMenu.add(silentCaptureItem);
+
+    captureMenu.addSeparator();
+
+    // Opção de definir pasta personalizada
+    JMenuItem selectFolderItem = new JMenuItem("Definir Pasta...");
+    selectFolderItem.addActionListener(e -> selectCaptureFolder());
+    captureMenu.add(selectFolderItem);
+
+    // Opção de resetar para pasta padrão
+    JMenuItem resetFolderItem = new JMenuItem("Usar Pasta do Vídeo");
+    resetFolderItem.addActionListener(e -> resetCaptureFolder());
+    captureMenu.add(resetFolderItem);
+
+    captureMenu.addSeparator();
+
+    // Mostrar pasta atual
+    JMenuItem showCurrentFolder = new JMenuItem("Pasta Atual");
+    showCurrentFolder.addActionListener(e -> {
+        String currentFolder;
+        if (customCapturePath != null && !customCapturePath.isEmpty()) {
+            currentFolder = customCapturePath;
+        } else if (videoFilePath != null) {
+            File videoFile = new File(videoFilePath);
+            currentFolder = videoFile.getParent();
+        } else {
+            currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
+        }
+
+        JOptionPane.showMessageDialog(VideoPlayer.this,
+                "Pasta atual para capturas:\n" + currentFolder,
+                "Pasta de Captura",
+                JOptionPane.INFORMATION_MESSAGE);
+    });
+    captureMenu.add(showCurrentFolder);
+
+    contextMenu.add(captureMenu);
+    // ========== FIM: Menu de Captura ==========
 
     // Separador
     contextMenu.addSeparator();
@@ -1145,7 +1283,7 @@ private void initComponents() {
     // Painel central com controles principais (centralizado)
     JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
 
-    openButton = new JButton("Abrir");
+    openButton = new JButton("\uD83D\uDCC1");
     openButton.setPreferredSize(new Dimension(35, 35));
     openButton.setToolTipText("Abrir nova midia");
     openButton.addActionListener(e -> openVideo());
@@ -1184,7 +1322,7 @@ private void initComponents() {
     captureFrameButton.setEnabled(false);
     captureFrameButton.setPreferredSize(new Dimension(35, 35));
     captureFrameButton.setToolTipText("Capturar frame atual");
-  // captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
+    captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
 
     centerButtonPanel.add(openButton);
     centerButtonPanel.add(rewindButton);
@@ -1220,12 +1358,138 @@ private void initComponents() {
     add(controlPanel, BorderLayout.SOUTH);
 }
 
+private void captureFrame() {
+    // Verificar se há um vídeo carregado
+    if (grabber == null) {
+        JOptionPane.showMessageDialog(this,
+                "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
+                "Aviso",
+                JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    // Verificar se há uma imagem atual no painel
+    BufferedImage currentImage = videoPanel.getCurrentImage();
+    if (currentImage == null) {
+        JOptionPane.showMessageDialog(this,
+                "Nenhum frame disponível para captura.",
+                "Aviso",
+                JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    try {
+        // Determinar o diretório de destino
+        String targetDirectory;
+        if (customCapturePath != null && !customCapturePath.isEmpty()) {
+            targetDirectory = customCapturePath;
+        } else {
+            // Usar o diretório do vídeo
+            File videoFile = new File(videoFilePath);
+            targetDirectory = videoFile.getParent();
+        }
+
+        // Obter o nome do vídeo sem extensão
+        File videoFile = new File(videoFilePath);
+        String videoName = videoFile.getName();
+        int lastDotIndex = videoName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            videoName = videoName.substring(0, lastDotIndex);
+        }
+
+        // Criar o nome do arquivo de imagem
+        String imageName = String.format("%s_frame_%d.jpg", videoName, currentFrame);
+        File outputFile = new File(targetDirectory, imageName);
+
+        // Verificar se o arquivo já existe e criar um nome único se necessário
+        int counter = 1;
+        while (outputFile.exists()) {
+            imageName = String.format("%s_frame_%d_(%d).jpg", videoName, currentFrame, counter);
+            outputFile = new File(targetDirectory, imageName);
+            counter++;
+        }
+
+        // Salvar a imagem em formato JPEG
+        ImageIO.write(currentImage, "jpg", outputFile);
+
+        System.out.println("Frame capturado: " + outputFile.getAbsolutePath());
+
+        // Mostrar mensagem de sucesso (se não estiver em modo silencioso)
+        if (!silentCapture) {
+            int response = JOptionPane.showConfirmDialog(this,
+                    "Frame capturado com sucesso!\n" +
+                            "Arquivo: " + imageName + "\n" +
+                            "Local: " + targetDirectory + "\n\n" +
+                            "Deseja abrir a pasta?",
+                    "Captura Realizada",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE);
+
+            // Abrir a pasta se o usuário confirmar
+            if (response == JOptionPane.YES_OPTION) {
+                try {
+                    Desktop desktop = Desktop.getDesktop();
+                    desktop.open(new File(targetDirectory));
+                } catch (Exception ex) {
+                    System.err.println("Erro ao abrir pasta: " + ex.getMessage());
+                }
+            }
+        }
+
+    } catch (IOException ex) {
+        ex.printStackTrace();
+        JOptionPane.showMessageDialog(this,
+                "Erro ao salvar a imagem:\n" + ex.getMessage(),
+                "Erro",
+                JOptionPane.ERROR_MESSAGE);
+    }
+}
+
+    private void selectCaptureFolder() {
+        JFileChooser folderChooser = new JFileChooser();
+        folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        folderChooser.setDialogTitle("Selecionar Pasta para Capturas");
+
+        // Definir pasta inicial
+        if (customCapturePath != null) {
+            folderChooser.setCurrentDirectory(new File(customCapturePath));
+        } else if (videoFilePath != null) {
+            File videoFile = new File(videoFilePath);
+            folderChooser.setCurrentDirectory(videoFile.getParentFile());
+        }
+
+        int result = folderChooser.showDialog(this, "Selecionar");
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFolder = folderChooser.getSelectedFile();
+            customCapturePath = selectedFolder.getAbsolutePath();
+
+            JOptionPane.showMessageDialog(this,
+                    "Pasta de captura definida:\n" + customCapturePath,
+                    "Configuração Salva",
+                    JOptionPane.INFORMATION_MESSAGE);
+
+            System.out.println("Pasta de captura definida: " + customCapturePath);
+        }
+    }
+
+    private void resetCaptureFolder() {
+        customCapturePath = null;
+        JOptionPane.showMessageDialog(this,
+                "A pasta de captura foi redefinida.\n" +
+                        "As capturas serão salvas na pasta do vídeo.",
+                "Configuração Restaurada",
+                JOptionPane.INFORMATION_MESSAGE);
+        System.out.println("Pasta de captura restaurada para padrão");
+    }
+
+
     private void openVideo() {
         if (isPlaying) {
             pauseVideo();
         }
         JnaFileChooser fc = new JnaFileChooser();
-        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov","3gp");
+        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov","3gp", "mp3");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
             loadVideo(f.getAbsolutePath());
@@ -2860,7 +3124,7 @@ private void switchSubtitleStream(int streamIndex) {
                 e.printStackTrace();
                 SwingUtilities.invokeLater(() -> {
                     isPlaying = false;
-                    playPauseButton.setText("▶ Play");
+                    playPauseButton.setText("▶");
                 });
             }
         });
@@ -2880,7 +3144,7 @@ private void switchSubtitleStream(int streamIndex) {
     private void stopVideo() {
         isPlaying = false;
         isStopped = true;
-        playPauseButton.setText("▶ Play");
+        playPauseButton.setText("▶");
 
         if (audioLine != null && audioLine.isRunning()) {
             audioLine.stop();
