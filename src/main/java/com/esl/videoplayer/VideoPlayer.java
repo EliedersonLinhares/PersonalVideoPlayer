@@ -27,6 +27,8 @@ import java.util.*;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 
 public class VideoPlayer extends JFrame {
@@ -96,6 +98,7 @@ public class VideoPlayer extends JFrame {
     private JButton forwardButton;
     private JButton nextFrameButton;
     private JButton captureFrameButton;
+    private JButton captureAllFrameButton;
 
     // No início da classe, junto com outras variáveis:
     private int framesToSkip = 1; // Quantidade de frames para avançar
@@ -103,7 +106,14 @@ public class VideoPlayer extends JFrame {
     // Adicionar no início da classe, junto com outras variáveis de instância
     private boolean silentCapture = false;
     private String customCapturePath = null;
+    private String batchCapturePath = null;
+    private int batchCaptureInterval = 2; // Capturar a cada N frames
+    private Thread batchCaptureThread = null;
+    private volatile boolean batchCapturePaused = false;
+    private volatile boolean batchCaptureCancelled = false;
 
+    String ffmpegPath = new File("lib/ffmpeg/bin/ffmpeg.exe").getAbsolutePath();
+    String ffprobePath = new File("lib/ffmpeg/bin/ffprobe.exe").getAbsolutePath();
 
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
@@ -183,9 +193,13 @@ public class VideoPlayer extends JFrame {
                         return true;
                     }
                     break;
-
+                case KeyEvent.VK_V:
+                    if (grabber != null) {
+                        batchCaptureFrames();
+                        return true;
+                    }
+                    break;
             }
-
             return false; // Não consumir o evento se não for um dos nossos atalhos
         }
     });
@@ -214,6 +228,8 @@ public class VideoPlayer extends JFrame {
                 stopVideo();
             }else if (e.getKeyCode() == KeyEvent.VK_C) {
                 captureFrame();
+            }else if (e.getKeyCode() == KeyEvent.VK_V) {
+                batchCaptureFrames();
             }
         }
     });
@@ -739,8 +755,16 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
     // Modificar o método detectAudioStreamNames
     private void detectAudioStreamNames(String filepath) {
         try {
+//            ProcessBuilder pb = new ProcessBuilder(
+//                    "ffprobe",
+//                    "-v", "quiet",
+//                    "-print_format", "json",
+//                    "-show_streams",
+//                    "-select_streams", "a",
+//                    filepath
+//            );
             ProcessBuilder pb = new ProcessBuilder(
-                    "ffprobe",
+                    ffprobePath,
                     "-v", "quiet",
                     "-print_format", "json",
                     "-show_streams",
@@ -1033,6 +1057,67 @@ private void setupContextMenu() {
     contextMenu.add(captureMenu);
     // ========== FIM: Menu de Captura ==========
 
+    // ========== NOVO: Menu de Captura em Lote ==========
+    JMenu batchCaptureMenu = new JMenu("Captura em Lote");
+
+    // Intervalo de frames
+    JMenu intervalMenu = new JMenu("Intervalo de Captura");
+    ButtonGroup intervalGroup = new ButtonGroup();
+    int[] intervals = { 2, 3, 5, 10, 15, 30, 60, 120};
+
+    for (int interval : intervals) {
+        JRadioButtonMenuItem intervalItem = new JRadioButtonMenuItem("A cada " + interval + " frame" + (interval > 2 ? "s" : ""));
+        intervalItem.setSelected(interval == batchCaptureInterval);
+
+        final int value = interval;
+        intervalItem.addActionListener(e -> {
+            batchCaptureInterval = value;
+            System.out.println("Intervalo de captura em lote alterado para: " + batchCaptureInterval);
+        });
+
+        intervalGroup.add(intervalItem);
+        intervalMenu.add(intervalItem);
+    }
+
+    batchCaptureMenu.add(intervalMenu);
+
+    batchCaptureMenu.addSeparator();
+
+    // Definir pasta personalizada
+    JMenuItem selectBatchFolderItem = new JMenuItem("Definir Pasta...");
+    selectBatchFolderItem.addActionListener(e -> selectBatchCaptureFolder());
+    batchCaptureMenu.add(selectBatchFolderItem);
+
+    // Resetar para pasta padrão
+    JMenuItem resetBatchFolderItem = new JMenuItem("Usar Pasta do Vídeo");
+    resetBatchFolderItem.addActionListener(e -> resetBatchCaptureFolder());
+    batchCaptureMenu.add(resetBatchFolderItem);
+
+    batchCaptureMenu.addSeparator();
+
+    // Mostrar pasta atual
+    JMenuItem showBatchFolder = new JMenuItem("Pasta Atual");
+    showBatchFolder.addActionListener(e -> {
+        String currentFolder;
+        if (batchCapturePath != null && !batchCapturePath.isEmpty()) {
+            currentFolder = batchCapturePath;
+        } else if (videoFilePath != null) {
+            File videoFile = new File(videoFilePath);
+            currentFolder = videoFile.getParent();
+        } else {
+            currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
+        }
+
+        JOptionPane.showMessageDialog(VideoPlayer.this,
+                "Pasta atual para captura em lote:\n" + currentFolder,
+                "Pasta de Captura em Lote",
+                JOptionPane.INFORMATION_MESSAGE);
+    });
+    batchCaptureMenu.add(showBatchFolder);
+
+    contextMenu.add(batchCaptureMenu);
+    // ========== FIM: Menu de Captura em Lote ==========
+
     // Separador
     contextMenu.addSeparator();
 
@@ -1324,6 +1409,12 @@ private void initComponents() {
     captureFrameButton.setToolTipText("Capturar frame atual");
     captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
 
+    captureAllFrameButton = new JButton("\uD83D\uDCE6");
+    captureAllFrameButton.setEnabled(false);
+    captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
+    captureAllFrameButton.setToolTipText("Capturar todo os frames");
+    captureAllFrameButton.addActionListener(e -> batchCaptureFrames()); // Implementar depois
+
     centerButtonPanel.add(openButton);
     centerButtonPanel.add(rewindButton);
     centerButtonPanel.add(playPauseButton);
@@ -1331,6 +1422,7 @@ private void initComponents() {
     centerButtonPanel.add(stopButton);
     centerButtonPanel.add(nextFrameButton);
     centerButtonPanel.add(captureFrameButton);
+    centerButtonPanel.add(captureAllFrameButton);
 
     // Painel direito com controle de volume
     JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
@@ -1482,6 +1574,345 @@ private void captureFrame() {
                 JOptionPane.INFORMATION_MESSAGE);
         System.out.println("Pasta de captura restaurada para padrão");
     }
+
+    // ========== CAPTURA EM LOTE ==========
+
+    private void selectBatchCaptureFolder() {
+        JFileChooser folderChooser = new JFileChooser();
+        folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        folderChooser.setDialogTitle("Selecionar Pasta para Captura em Lote");
+
+        if (batchCapturePath != null) {
+            folderChooser.setCurrentDirectory(new File(batchCapturePath));
+        } else if (videoFilePath != null) {
+            File videoFile = new File(videoFilePath);
+            folderChooser.setCurrentDirectory(videoFile.getParentFile());
+        }
+
+        int result = folderChooser.showDialog(this, "Selecionar");
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFolder = folderChooser.getSelectedFile();
+            batchCapturePath = selectedFolder.getAbsolutePath();
+
+            JOptionPane.showMessageDialog(this,
+                    "Pasta para captura em lote definida:\n" + batchCapturePath,
+                    "Configuração Salva",
+                    JOptionPane.INFORMATION_MESSAGE);
+
+            System.out.println("Pasta de captura em lote definida: " + batchCapturePath);
+        }
+    }
+
+    private void resetBatchCaptureFolder() {
+        batchCapturePath = null;
+        JOptionPane.showMessageDialog(this,
+                "A pasta de captura em lote foi redefinida.\n" +
+                        "As capturas serão salvas na pasta do vídeo.",
+                "Configuração Restaurada",
+                JOptionPane.INFORMATION_MESSAGE);
+        System.out.println("Pasta de captura em lote restaurada para padrão");
+    }
+
+    public void batchCaptureFrames() {
+        // Verificar se há um vídeo carregado
+        if (grabber == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Verificar se já há uma captura em andamento
+        if (batchCaptureThread != null && batchCaptureThread.isAlive()) {
+            JOptionPane.showMessageDialog(this,
+                    "Já existe uma captura em lote em andamento.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Pausar o vídeo se estiver tocando
+        boolean wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pauseVideo();
+        }
+
+        // Calcular informações do vídeo
+        long totalFramesToCapture = totalFrames / batchCaptureInterval;
+        double durationSeconds = totalFrames / frameRate;
+        int durationMinutes = (int) (durationSeconds / 60);
+
+        // Obter resolução do vídeo
+        int videoWidth = grabber.getImageWidth();
+        int videoHeight = grabber.getImageHeight();
+        boolean isHighRes = (videoWidth > 720 || videoHeight > 480);
+        boolean isLongVideo = durationMinutes > 15;
+
+        // Construir mensagem de confirmação
+        StringBuilder message = new StringBuilder();
+        message.append("Deseja capturar todos os frames do vídeo?\n\n");
+        message.append("Informações:\n");
+        message.append("• Total de frames: ").append(totalFrames).append("\n");
+        message.append("• Frames a capturar: ").append(totalFramesToCapture).append(" (a cada ").append(batchCaptureInterval).append(" frames)\n");
+        message.append("• Duração: ").append(durationMinutes).append(" min ").append((int)(durationSeconds % 60)).append(" seg\n");
+        message.append("• Resolução: ").append(videoWidth).append("x").append(videoHeight).append("\n\n");
+
+        // Determinar pasta de destino
+        String targetDirectory;
+        if (batchCapturePath != null && !batchCapturePath.isEmpty()) {
+            targetDirectory = batchCapturePath;
+        } else {
+            File videoFile = new File(videoFilePath);
+            targetDirectory = videoFile.getParent();
+        }
+        message.append("Pasta de destino:\n").append(targetDirectory).append("\n\n");
+
+        // Avisos
+        if (isLongVideo || isHighRes) {
+            message.append("⚠️ AVISO:\n");
+            if (isLongVideo) {
+                message.append("• Vídeo longo (>15 min) - A captura pode demorar\n");
+            }
+            if (isHighRes) {
+                message.append("• Alta resolução (>720x480) - Processo pode ser lento\n");
+            }
+            message.append("\n");
+        }
+
+        message.append("Continuar com a captura?");
+
+        int response = JOptionPane.showConfirmDialog(this,
+                message.toString(),
+                "Confirmar Captura em Lote",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+
+        if (response != JOptionPane.YES_OPTION) {
+            if (wasPlaying) {
+                playVideo();
+            }
+            return;
+        }
+
+        // Iniciar captura em lote
+        startBatchCapture(targetDirectory, totalFramesToCapture, wasPlaying);
+    }
+
+
+    private void startBatchCapture(String targetDirectory, long totalFramesToCapture, boolean wasPlaying) {
+        // Resetar flags de controle
+        batchCapturePaused = false;
+        batchCaptureCancelled = false;
+
+        // Criar janela de progresso
+        JDialog progressDialog = new JDialog(this, "Captura em Lote", true);
+        progressDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        progressDialog.setSize(500, 200);
+        progressDialog.setLocationRelativeTo(this);
+        progressDialog.setResizable(false);
+
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        // Label de status
+        JLabel statusLabel = new JLabel("Iniciando captura...", SwingConstants.CENTER);
+        statusLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        panel.add(statusLabel, BorderLayout.NORTH);
+
+        // Barra de progresso
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setStringPainted(true);
+        progressBar.setPreferredSize(new Dimension(450, 30));
+        panel.add(progressBar, BorderLayout.CENTER);
+
+        // Painel de botões
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        JButton pauseButton = new JButton("Pausar");
+        JButton cancelButton = new JButton("Cancelar");
+
+        pauseButton.addActionListener(e -> {
+            if (batchCapturePaused) {
+                batchCapturePaused = false;
+                pauseButton.setText("Pausar");
+                statusLabel.setText("Retomando captura...");
+            } else {
+                batchCapturePaused = true;
+                pauseButton.setText("Retomar");
+                statusLabel.setText("Captura pausada");
+            }
+        });
+
+        cancelButton.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(progressDialog,
+                    "Deseja realmente cancelar a captura em lote?",
+                    "Confirmar Cancelamento",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                batchCaptureCancelled = true;
+                statusLabel.setText("Cancelando...");
+                pauseButton.setEnabled(false);
+                cancelButton.setEnabled(false);
+            }
+        });
+
+        buttonPanel.add(pauseButton);
+        buttonPanel.add(cancelButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        progressDialog.add(panel);
+
+        // Thread de captura
+        batchCaptureThread = new Thread(() -> {
+            try {
+                // Salvar posição atual
+                long savedFrame = currentFrame;
+
+                // Ir para o início
+                grabber.setFrameNumber(0);
+                currentFrame = 0;
+
+                File videoFile = new File(videoFilePath);
+                String videoName = videoFile.getName();
+                int lastDotIndex = videoName.lastIndexOf('.');
+                if (lastDotIndex > 0) {
+                    videoName = videoName.substring(0, lastDotIndex);
+                }
+
+                // Criar subpasta para a captura em lote
+                String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+                String batchFolderName = videoName + "_batch_" + timestamp;
+                File batchFolder = new File(targetDirectory, batchFolderName);
+
+                if (!batchFolder.exists()) {
+                    batchFolder.mkdirs();
+                }
+
+                long capturedCount = 0;
+                long frameIndex = 0;
+
+                while (frameIndex < totalFrames && !batchCaptureCancelled) {
+                    // Verificar se está pausado
+                    while (batchCapturePaused && !batchCaptureCancelled) {
+                        Thread.sleep(100);
+                    }
+
+                    if (batchCaptureCancelled) break;
+
+                    // Capturar apenas frames no intervalo definido
+                    if (frameIndex % batchCaptureInterval == 0) {
+                        Frame frame = grabber.grabImage();
+
+                        if (frame != null && frame.image != null) {
+                            BufferedImage img = converter.convert(frame);
+
+                            if (img != null) {
+                                // Salvar imagem
+                                String imageName = String.format("%s_frame_%06d.jpg", videoName, frameIndex);
+                                File outputFile = new File(batchFolder, imageName);
+                                ImageIO.write(img, "jpg", outputFile);
+
+                                capturedCount++;
+
+                                // Atualizar UI
+                                final long currentCaptured = capturedCount;
+                                final long currentFrameIndex = frameIndex;
+                                SwingUtilities.invokeLater(() -> {
+                                    int progress = (int) ((currentFrameIndex * 100) / totalFrames);
+                                    progressBar.setValue(progress);
+                                    statusLabel.setText(String.format("Capturando: %d / %d frames (%.1f%%)",
+                                            currentCaptured, totalFramesToCapture, (progress)));
+                                });
+                            }
+                        }
+                    } else {
+                        // Pular frame sem decodificar imagem
+                        grabber.grabImage();
+                    }
+
+                    frameIndex++;
+                }
+
+                // Criar variável final para uso na lambda
+                final long finalCapturedCount = capturedCount;
+
+                // Finalizar
+                SwingUtilities.invokeLater(() -> {
+                    progressBar.setValue(100);
+
+                    if (batchCaptureCancelled) {
+                        statusLabel.setText("Captura cancelada!");
+                        JOptionPane.showMessageDialog(progressDialog,
+                                "Captura em lote cancelada.\n" +
+                                        "Frames capturados: " + finalCapturedCount + "\n" +
+                                        "Pasta: " + batchFolder.getAbsolutePath(),
+                                "Captura Cancelada",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        statusLabel.setText("Captura concluída!");
+                        int openFolder = JOptionPane.showConfirmDialog(progressDialog,
+                                "Captura em lote concluída!\n" +
+                                        "Total de frames capturados: " + finalCapturedCount + "\n" +
+                                        "Pasta: " + batchFolder.getAbsolutePath() + "\n\n" +
+                                        "Deseja abrir a pasta?",
+                                "Captura Concluída",
+                                JOptionPane.YES_NO_OPTION,
+                                JOptionPane.INFORMATION_MESSAGE);
+
+                        if (openFolder == JOptionPane.YES_OPTION) {
+                            try {
+                                Desktop.getDesktop().open(batchFolder);
+                            } catch (Exception ex) {
+                                System.err.println("Erro ao abrir pasta: " + ex.getMessage());
+                            }
+                        }
+                    }
+
+                    // Restaurar posição do vídeo
+                    try {
+                        grabber.setFrameNumber((int) savedFrame);
+                        Frame frame = grabber.grabImage();
+                        if (frame != null && frame.image != null) {
+                            BufferedImage img = converter.convert(frame);
+                            if (img != null) {
+                                videoPanel.updateImage(img);
+                            }
+                        }
+                        currentFrame = savedFrame;
+                        updateTimeLabel();
+
+                        if (wasPlaying) {
+                            playVideo();
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+
+                    progressDialog.dispose();
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(progressDialog,
+                            "Erro durante a captura:\n" + e.getMessage(),
+                            "Erro",
+                            JOptionPane.ERROR_MESSAGE);
+                    progressDialog.dispose();
+                });
+            }
+        });
+
+        batchCaptureThread.start();
+        progressDialog.setVisible(true);
+    }
+
+
+
+
 
 
     private void openVideo() {
@@ -1745,6 +2176,7 @@ private void loadVideo(String filepath) {
                 forwardButton.setEnabled(true);     // NOVO
                 nextFrameButton.setEnabled(true);   // NOVO
                 captureFrameButton.setEnabled(true); // NOVO
+                captureAllFrameButton.setEnabled(true); // NOVO
 
                 updateTimeLabel();
 
@@ -2180,8 +2612,15 @@ private void loadSubtitleFile(File file) {
     private void detectEmbeddedSubtitles(String videoPath) {
         try {
             // Executar ffprobe para obter informações dos streams
+//            ProcessBuilder pb = new ProcessBuilder(
+//                    "ffprobe",
+//                    "-v", "quiet",
+//                    "-print_format", "json",
+//                    "-show_streams",
+//                    videoPath
+//            );
             ProcessBuilder pb = new ProcessBuilder(
-                    "ffprobe",
+                    ffprobePath,
                     "-v", "quiet",
                     "-print_format", "json",
                     "-show_streams",
@@ -2795,8 +3234,16 @@ private void switchSubtitleStream(int streamIndex) {
             System.out.println("Extraindo legenda para: " + tempSubtitle.getAbsolutePath());
             System.out.println("Comando: ffmpeg -i \"" + videoFilePath + "\" -map 0:s:" + streamIndex + " \"" + tempSubtitle.getAbsolutePath() + "\"");
 
+//            ProcessBuilder pb = new ProcessBuilder(
+//                    "ffmpeg",
+//                    "-i", videoFilePath,
+//                    "-map", "0:s:" + streamIndex,
+//                    "-c:s", "srt", // Converter para SRT
+//                    "-y",
+//                    tempSubtitle.getAbsolutePath()
+//            );
             ProcessBuilder pb = new ProcessBuilder(
-                    "ffmpeg",
+                    ffmpegPath,
                     "-i", videoFilePath,
                     "-map", "0:s:" + streamIndex,
                     "-c:s", "srt", // Converter para SRT

@@ -35,5 +35,7 @@ build/
 ### VS Code ###
 .vscode/
 
+lib/ffmpeg
+
 ### Mac OS ###
 .DS_Store

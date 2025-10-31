@@ -12,9 +12,10 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ Rewind and advance options
 - ✅ Advance by frame
 - ✅ Can capture an image and save in computer 📸, 
+- ✅ Can capture all frames in video and save in the computer📸,
 - ✅ Support to fullscreen mode,
  
 ## 🚀 Features to be implemented
 - ℹ️ 🎵 Support to audio like mp3
-- ℹ️ Option to capture all frames in video and save in the computer
+- ℹ️ Apply filters on video
 
