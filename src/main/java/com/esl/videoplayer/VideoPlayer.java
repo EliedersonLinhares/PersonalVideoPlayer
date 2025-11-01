@@ -54,6 +54,8 @@ public class VideoPlayer extends JFrame {
     private int audioChannels;
     private int sampleRate;
     private float volume = 1.0f;
+    private float previousVolume = 1.0f; // Guardar volume anterior ao mutar
+    private boolean isMuted = false;
     private int currentAudioStream = 0;
     private int totalAudioStreams = 0;
 
@@ -1721,130 +1723,317 @@ private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
     }
 
 
-private void initComponents() {
-    setLayout(new BorderLayout());
+//private void initComponents() {
+//    setLayout(new BorderLayout());
+//
+//    videoPanel = new VideoPanel();
+//    add(videoPanel, BorderLayout.CENTER);
+//
+//    // Painel de controles
+//    JPanel controlPanel = new JPanel(new BorderLayout());
+//    controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+//
+//    // Barra de progresso (PRIMEIRO - no topo)
+//    JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
+//    progressSlider = new JSlider(0, 100, 0);
+//    progressSlider.setEnabled(false);
+//    progressSlider.addChangeListener(e -> {
+//        if (progressSlider.getValueIsAdjusting() && grabber != null) {
+//            isSeeking = true;
+//        } else if (isSeeking) {
+//            seekToPosition(progressSlider.getValue());
+//            isSeeking = false;
+//        }
+//    });
+//
+//    Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
+//
+//    timeLabel = new JLabel("00:00");
+//    timeLabelPassed = new JLabel("00:00");
+//    timeLabel.setFont(mainFont);
+//    timeLabelPassed.setFont(mainFont);
+//
+//    progressPanel.add(timeLabelPassed, BorderLayout.WEST);
+//    progressPanel.add(progressSlider, BorderLayout.CENTER);
+//    progressPanel.add(timeLabel, BorderLayout.EAST);
+//
+//    // Botões (SEGUNDO - embaixo do progressPanel)
+//    JPanel buttonPanel = new JPanel(new BorderLayout());
+//
+//    // Painel central com controles principais (centralizado)
+//    JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+//
+//    openButton = new JButton("\uD83D\uDCC1");
+//    openButton.setPreferredSize(new Dimension(35, 35));
+//    openButton.setToolTipText("Abrir nova midia");
+//    openButton.addActionListener(e -> openVideo());
+//
+//    rewindButton = new JButton("⏪");
+//    rewindButton.setEnabled(false);
+//    rewindButton.setPreferredSize(new Dimension(35, 35));
+//    rewindButton.setToolTipText("Retroceder 10 segundos");
+//    rewindButton.addActionListener(e -> rewind10Seconds());
+//
+//    playPauseButton = new JButton("▶");
+//    playPauseButton.setEnabled(false);
+//    playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
+//    playPauseButton.setToolTipText("Tocar/Pausar");
+//    playPauseButton.addActionListener(e -> togglePlayPause());
+//
+//    forwardButton = new JButton("⏩");
+//    forwardButton.setEnabled(false);
+//    forwardButton.setPreferredSize(new Dimension(35, 35));
+//    forwardButton.setToolTipText("Avançar 10 segundos");
+//    forwardButton.addActionListener(e -> forward10Seconds());
+//
+//    stopButton = new JButton("■");
+//    stopButton.setEnabled(false);
+//    stopButton.setPreferredSize(new Dimension(35, 35));
+//    stopButton.setToolTipText("Parar");
+//    stopButton.addActionListener(e -> stopVideo());
+//
+//    nextFrameButton = new JButton("⏭");
+//    nextFrameButton.setEnabled(false);
+//    nextFrameButton.setPreferredSize(new Dimension(35, 35));
+//    nextFrameButton.setToolTipText("Avançar um frame");
+//    nextFrameButton.addActionListener(e -> nextFrame());
+//
+//    captureFrameButton = new JButton("📷");
+//    captureFrameButton.setEnabled(false);
+//    captureFrameButton.setPreferredSize(new Dimension(35, 35));
+//    captureFrameButton.setToolTipText("Capturar frame atual");
+//    captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
+//
+//    captureAllFrameButton = new JButton("\uD83D\uDCE6");
+//    captureAllFrameButton.setEnabled(false);
+//    captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
+//    captureAllFrameButton.setToolTipText("Capturar todo os frames");
+//    captureAllFrameButton.addActionListener(e -> batchCaptureFrames()); // Implementar depois
+//
+//    centerButtonPanel.add(openButton);
+//    centerButtonPanel.add(rewindButton);
+//    centerButtonPanel.add(playPauseButton);
+//    centerButtonPanel.add(forwardButton);
+//    centerButtonPanel.add(stopButton);
+//    centerButtonPanel.add(nextFrameButton);
+//    centerButtonPanel.add(captureFrameButton);
+//    centerButtonPanel.add(captureAllFrameButton);
+//
+//    // Painel direito com controle de volume
+//    JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
+//
+//
+//
+//    volumeLabel = new JLabel("100%");
+//    volumeSlider = new JSlider(0, 100, 100);
+//    volumeSlider.setPreferredSize(new Dimension(100, 20));
+//    volumeSlider.addChangeListener(e -> {
+//        int vol = volumeSlider.getValue();
+//        volume = vol / 100.0f;
+//        volumeLabel.setText( vol + "%");
+//    });
+//
+//
+//    rightButtonPanel.add(volumeLabel);
+//    rightButtonPanel.add(volumeSlider);
+//
+//    // Montar painel de botões
+//    buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
+//    buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
+//
+//    // Adicionar ao painel de controles
+//    controlPanel.add(progressPanel, BorderLayout.NORTH);
+//    controlPanel.add(buttonPanel, BorderLayout.SOUTH);
+//
+//    add(controlPanel, BorderLayout.SOUTH);
+//}
 
-    videoPanel = new VideoPanel();
-    add(videoPanel, BorderLayout.CENTER);
+    private void initComponents() {
+        setLayout(new BorderLayout());
 
-    // Painel de controles
-    JPanel controlPanel = new JPanel(new BorderLayout());
-    controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        videoPanel = new VideoPanel();
+        add(videoPanel, BorderLayout.CENTER);
 
-    // Barra de progresso (PRIMEIRO - no topo)
-    JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
-    progressSlider = new JSlider(0, 100, 0);
-    progressSlider.setEnabled(false);
-    progressSlider.addChangeListener(e -> {
-        if (progressSlider.getValueIsAdjusting() && grabber != null) {
-            isSeeking = true;
-        } else if (isSeeking) {
-            seekToPosition(progressSlider.getValue());
-            isSeeking = false;
+        // Painel de controles
+        JPanel controlPanel = new JPanel(new BorderLayout());
+        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Barra de progresso (PRIMEIRO - no topo)
+        JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
+        progressSlider = new JSlider(0, 100, 0);
+        progressSlider.setEnabled(false);
+        progressSlider.addChangeListener(e -> {
+            if (progressSlider.getValueIsAdjusting() && grabber != null) {
+                isSeeking = true;
+            } else if (isSeeking) {
+                seekToPosition(progressSlider.getValue());
+                isSeeking = false;
+            }
+        });
+
+        Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
+
+        timeLabel = new JLabel("00:00");
+        timeLabelPassed = new JLabel("00:00");
+        timeLabel.setFont(mainFont);
+        timeLabelPassed.setFont(mainFont);
+
+        progressPanel.add(timeLabelPassed, BorderLayout.WEST);
+        progressPanel.add(progressSlider, BorderLayout.CENTER);
+        progressPanel.add(timeLabel, BorderLayout.EAST);
+
+        // Botões (SEGUNDO - embaixo do progressPanel)
+        JPanel buttonPanel = new JPanel(new BorderLayout());
+
+        // Painel central com controles principais (centralizado)
+        JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+
+        openButton = new JButton("\uD83D\uDCC1");
+        openButton.setPreferredSize(new Dimension(35, 35));
+        openButton.setToolTipText("Abrir nova midia");
+        openButton.addActionListener(e -> openVideo());
+
+        rewindButton = new JButton("⏪");
+        rewindButton.setEnabled(false);
+        rewindButton.setPreferredSize(new Dimension(35, 35));
+        rewindButton.setToolTipText("Retroceder 10 segundos");
+        rewindButton.addActionListener(e -> rewind10Seconds());
+
+        playPauseButton = new JButton("▶");
+        playPauseButton.setEnabled(false);
+        playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
+        playPauseButton.setToolTipText("Tocar/Pausar");
+        playPauseButton.addActionListener(e -> togglePlayPause());
+
+        forwardButton = new JButton("⏩");
+        forwardButton.setEnabled(false);
+        forwardButton.setPreferredSize(new Dimension(35, 35));
+        forwardButton.setToolTipText("Avançar 10 segundos");
+        forwardButton.addActionListener(e -> forward10Seconds());
+
+        stopButton = new JButton("■");
+        stopButton.setEnabled(false);
+        stopButton.setPreferredSize(new Dimension(35, 35));
+        stopButton.setToolTipText("Parar");
+        stopButton.addActionListener(e -> stopVideo());
+
+        nextFrameButton = new JButton("⏭");
+        nextFrameButton.setEnabled(false);
+        nextFrameButton.setPreferredSize(new Dimension(35, 35));
+        nextFrameButton.setToolTipText("Avançar um frame");
+        nextFrameButton.addActionListener(e -> nextFrame());
+
+        captureFrameButton = new JButton("📷");
+        captureFrameButton.setEnabled(false);
+        captureFrameButton.setPreferredSize(new Dimension(35, 35));
+        captureFrameButton.setToolTipText("Capturar frame atual");
+        captureFrameButton.addActionListener(e -> captureFrame());
+
+        captureAllFrameButton = new JButton("\uD83D\uDCE6");
+        captureAllFrameButton.setEnabled(false);
+        captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
+        captureAllFrameButton.setToolTipText("Capturar todos os frames");
+        captureAllFrameButton.addActionListener(e -> batchCaptureFrames());
+
+        centerButtonPanel.add(openButton);
+        centerButtonPanel.add(rewindButton);
+        centerButtonPanel.add(playPauseButton);
+        centerButtonPanel.add(forwardButton);
+        centerButtonPanel.add(stopButton);
+        centerButtonPanel.add(nextFrameButton);
+        centerButtonPanel.add(captureFrameButton);
+        centerButtonPanel.add(captureAllFrameButton);
+
+        // Painel direito com controle de volume
+        JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
+
+        volumeButton = new JButton("🔊");
+        volumeButton.setEnabled(false);
+        volumeButton.setPreferredSize(new Dimension(35, 35));
+        volumeButton.setToolTipText("Ativar/Desativar Som");
+
+        // NOVO: Adicionar ActionListener para mute/unmute
+        volumeButton.addActionListener(e -> toggleMute());
+
+        volumeLabel = new JLabel("100%");
+        volumeSlider = new JSlider(0, 100, 100);
+        volumeSlider.setPreferredSize(new Dimension(100, 20));
+        volumeSlider.addChangeListener(e -> {
+            // Só processar se não estiver mutado ou se o usuário estiver arrastando o slider
+            if (volumeSlider.getValueIsAdjusting() || !isMuted) {
+                int vol = volumeSlider.getValue();
+                volume = vol / 100.0f;
+                volumeLabel.setText(vol + "%");
+
+                // Se estava mutado e o usuário moveu o slider, desmutar
+                if (isMuted && volumeSlider.getValueIsAdjusting() && vol > 0) {
+                    isMuted = false;
+                    updateVolumeButton();
+                }
+
+                // Se o volume foi para 0, considerar como mutado
+                if (vol == 0 && !isMuted) {
+                    isMuted = true;
+                    previousVolume = 0.5f; // Definir um volume padrão para unmute
+                    updateVolumeButton();
+                }
+            }
+        });
+
+        rightButtonPanel.add(volumeButton);
+        rightButtonPanel.add(volumeLabel);
+        rightButtonPanel.add(volumeSlider);
+
+        // Montar painel de botões
+        buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
+        buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
+
+        // Adicionar ao painel de controles
+        controlPanel.add(progressPanel, BorderLayout.NORTH);
+        controlPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        add(controlPanel, BorderLayout.SOUTH);
+    }
+
+    // NOVO: Método para alternar mute/unmute
+    private void toggleMute() {
+        if (isMuted) {
+            // Desmutar - restaurar volume anterior
+            isMuted = false;
+            volume = previousVolume;
+            int volumePercent = (int)(volume * 100);
+            volumeSlider.setValue(volumePercent);
+            volumeLabel.setText(volumePercent + "%");
+            System.out.println("Som ativado - Volume restaurado para: " + volumePercent + "%");
+        } else {
+            // Mutar - salvar volume atual e zerar
+            isMuted = true;
+            previousVolume = volume;
+            volume = 0.0f;
+            volumeSlider.setValue(0);
+            volumeLabel.setText("0%");
+            System.out.println("Som desativado - Volume anterior salvo: " + (int)(previousVolume * 100) + "%");
         }
-    });
 
-    Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
+        updateVolumeButton();
+    }
 
-    timeLabel = new JLabel("00:00");
-    timeLabelPassed = new JLabel("00:00");
-    timeLabel.setFont(mainFont);
-    timeLabelPassed.setFont(mainFont);
-
-    progressPanel.add(timeLabelPassed, BorderLayout.WEST);
-    progressPanel.add(progressSlider, BorderLayout.CENTER);
-    progressPanel.add(timeLabel, BorderLayout.EAST);
-
-    // Botões (SEGUNDO - embaixo do progressPanel)
-    JPanel buttonPanel = new JPanel(new BorderLayout());
-
-    // Painel central com controles principais (centralizado)
-    JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
-
-    openButton = new JButton("\uD83D\uDCC1");
-    openButton.setPreferredSize(new Dimension(35, 35));
-    openButton.setToolTipText("Abrir nova midia");
-    openButton.addActionListener(e -> openVideo());
-
-    rewindButton = new JButton("⏪");
-    rewindButton.setEnabled(false);
-    rewindButton.setPreferredSize(new Dimension(35, 35));
-    rewindButton.setToolTipText("Retroceder 10 segundos");
-    rewindButton.addActionListener(e -> rewind10Seconds());
-
-    playPauseButton = new JButton("▶");
-    playPauseButton.setEnabled(false);
-    playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
-    playPauseButton.setToolTipText("Tocar/Pausar");
-    playPauseButton.addActionListener(e -> togglePlayPause());
-
-    forwardButton = new JButton("⏩");
-    forwardButton.setEnabled(false);
-    forwardButton.setPreferredSize(new Dimension(35, 35));
-    forwardButton.setToolTipText("Avançar 10 segundos");
-    forwardButton.addActionListener(e -> forward10Seconds());
-
-    stopButton = new JButton("■");
-    stopButton.setEnabled(false);
-    stopButton.setPreferredSize(new Dimension(35, 35));
-    stopButton.setToolTipText("Parar");
-    stopButton.addActionListener(e -> stopVideo());
-
-    nextFrameButton = new JButton("⏭");
-    nextFrameButton.setEnabled(false);
-    nextFrameButton.setPreferredSize(new Dimension(35, 35));
-    nextFrameButton.setToolTipText("Avançar um frame");
-    nextFrameButton.addActionListener(e -> nextFrame());
-
-    captureFrameButton = new JButton("📷");
-    captureFrameButton.setEnabled(false);
-    captureFrameButton.setPreferredSize(new Dimension(35, 35));
-    captureFrameButton.setToolTipText("Capturar frame atual");
-    captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
-
-    captureAllFrameButton = new JButton("\uD83D\uDCE6");
-    captureAllFrameButton.setEnabled(false);
-    captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
-    captureAllFrameButton.setToolTipText("Capturar todo os frames");
-    captureAllFrameButton.addActionListener(e -> batchCaptureFrames()); // Implementar depois
-
-    centerButtonPanel.add(openButton);
-    centerButtonPanel.add(rewindButton);
-    centerButtonPanel.add(playPauseButton);
-    centerButtonPanel.add(forwardButton);
-    centerButtonPanel.add(stopButton);
-    centerButtonPanel.add(nextFrameButton);
-    centerButtonPanel.add(captureFrameButton);
-    centerButtonPanel.add(captureAllFrameButton);
-
-    // Painel direito com controle de volume
-    JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
-
-
-
-    volumeLabel = new JLabel("100%");
-    volumeSlider = new JSlider(0, 100, 100);
-    volumeSlider.setPreferredSize(new Dimension(100, 20));
-    volumeSlider.addChangeListener(e -> {
-        int vol = volumeSlider.getValue();
-        volume = vol / 100.0f;
-        volumeLabel.setText( vol + "%");
-    });
-
-
-    rightButtonPanel.add(volumeLabel);
-    rightButtonPanel.add(volumeSlider);
-
-    // Montar painel de botões
-    buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
-    buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
-
-    // Adicionar ao painel de controles
-    controlPanel.add(progressPanel, BorderLayout.NORTH);
-    controlPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-    add(controlPanel, BorderLayout.SOUTH);
-}
+    // NOVO: Método para atualizar o ícone do botão de volume
+    private void updateVolumeButton() {
+        if (isMuted || volume == 0.0f) {
+            volumeButton.setText("🔇"); // Mudo
+            volumeButton.setToolTipText("Ativar Som");
+        } else if (volume < 0.33f) {
+            volumeButton.setText("🔈"); // Volume baixo
+            volumeButton.setToolTipText("Desativar Som");
+        } else if (volume < 0.66f) {
+            volumeButton.setText("🔉"); // Volume médio
+            volumeButton.setToolTipText("Desativar Som");
+        } else {
+            volumeButton.setText("🔊"); // Volume alto
+            volumeButton.setToolTipText("Desativar Som");
+        }
+    }
 
 private void captureFrame() {
     // Verificar se há um vídeo carregado
