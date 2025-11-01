@@ -5,7 +5,8 @@ import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
-import org.bytedeco.opencv.opencv_core.*;
+
+import java.nio.ByteBuffer;
 
 import javax.imageio.ImageIO;
 import javax.sound.sampled.*;
@@ -14,7 +15,6 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,8 +23,8 @@ import java.util.Map;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.*;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.text.SimpleDateFormat;
@@ -41,6 +41,7 @@ public class VideoPlayer extends JFrame {
     private JLabel timeLabelPassed;
     private JLabel volumeLabel;
     private JButton openButton;
+    private JButton volumeButton;
 
     private FFmpegFrameGrabber grabber;
     private Java2DFrameConverter converter;
@@ -114,6 +115,13 @@ public class VideoPlayer extends JFrame {
 
     String ffmpegPath = new File("lib/ffmpeg/bin/ffmpeg.exe").getAbsolutePath();
     String ffprobePath = new File("lib/ffmpeg/bin/ffprobe.exe").getAbsolutePath();
+
+    // Filtros de vídeo
+    private double brightness = 0.0;  // -1.0 a 1.0
+    private double contrast = 1.0;    // 0.0 a 2.0
+    private double gamma = 1.0;       // 0.1 a 10.0
+    private double saturation = 1.0;  // 0.0 a 3.0
+    private boolean filtersEnabled = false;
 
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
@@ -391,6 +399,309 @@ public class VideoPlayer extends JFrame {
         }
     }
 
+    // ========== FILTROS DE VÍDEO ==========
+
+    private String buildFilterString() {
+        if (!filtersEnabled) {
+            return null;
+        }
+
+        StringBuilder filterString = new StringBuilder();
+
+        // Ajustar brilho: eq=brightness=valor (-1.0 a 1.0)
+        if (brightness != 0.0) {
+            if (filterString.length() > 0) filterString.append(",");
+            filterString.append(String.format("eq=brightness=%.2f", brightness));
+        }
+
+        // Ajustar contraste: eq=contrast=valor (0.0 a 2.0, padrão 1.0)
+        if (contrast != 1.0) {
+            if (filterString.length() > 0) filterString.append(",");
+            filterString.append(String.format("eq=contrast=%.2f", contrast));
+        }
+
+        // Ajustar gamma: eq=gamma=valor (0.1 a 10.0, padrão 1.0)
+        if (gamma != 1.0) {
+            if (filterString.length() > 0) filterString.append(",");
+            filterString.append(String.format("eq=gamma=%.2f", gamma));
+        }
+
+        // Ajustar saturação: eq=saturation=valor (0.0 a 3.0, padrão 1.0)
+        if (saturation != 1.0) {
+            if (filterString.length() > 0) filterString.append(",");
+            filterString.append(String.format("eq=saturation=%.2f", saturation));
+        }
+
+        return filterString.length() > 0 ? filterString.toString() : null;
+    }
+
+    private void applyFilters() {
+        if (grabber == null || videoFilePath == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Nenhum vídeo carregado.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Apenas notificar que os filtros serão aplicados em tempo real
+        String message;
+        if (filtersEnabled && buildFilterString() != null) {
+            message = "Filtros ativados!\n\nOs filtros serão aplicados em tempo real durante a reprodução.";
+        } else {
+            message = "Filtros desativados!\n\nO vídeo será exibido sem filtros.";
+        }
+
+        JOptionPane.showMessageDialog(this,
+                message,
+                "Filtros",
+                JOptionPane.INFORMATION_MESSAGE);
+
+        // Forçar atualização do frame atual
+        if (!isPlaying) {
+            try {
+                Frame frame = grabber.grab();
+                if (frame != null && frame.image != null) {
+                    BufferedImage img = converter.convert(frame);
+                    if (img != null) {
+                        img = applyImageFilters(img);
+                        videoPanel.updateImage(img);
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private BufferedImage applyImageFilters(BufferedImage original) {
+        if (!filtersEnabled || original == null) {
+            return original;
+        }
+
+        int width = original.getWidth();
+        int height = original.getHeight();
+
+        // Criar imagem de saída
+        BufferedImage filtered = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+        // Obter arrays de pixels para processamento em lote
+        int[] srcPixels = original.getRGB(0, 0, width, height, null, 0, width);
+        int[] dstPixels = new int[srcPixels.length];
+
+        // Pre-calcular tabelas de lookup para otimização
+        int[] brightnessContrastLUT = null;
+        int[] gammaLUT = null;
+
+        // Criar LUT combinada para brilho + contraste + gamma
+        if (brightness != 0.0 || contrast != 1.0 || gamma != 1.0) {
+            brightnessContrastLUT = new int[256];
+
+            for (int i = 0; i < 256; i++) {
+                double value = i;
+
+                // Aplicar contraste: g(x) = α * (f(x) - 128) + 128
+                if (contrast != 1.0) {
+                    value = (value - 128.0) * contrast + 128.0;
+                }
+
+                // Aplicar brilho: g(x) = f(x) + β
+                if (brightness != 0.0) {
+                    value += brightness * 255.0;
+                }
+
+                // Aplicar gamma
+                if (gamma != 1.0) {
+                    value = Math.max(0, Math.min(255, value));
+                    value = 255.0 * Math.pow(value / 255.0, 1.0 / gamma);
+                }
+
+                brightnessContrastLUT[i] = (int)Math.max(0, Math.min(255, value));
+            }
+        }
+
+        // Processar pixels
+        if (saturation != 1.0) {
+            // Processamento com saturação (mais complexo)
+            for (int i = 0; i < srcPixels.length; i++) {
+                int rgb = srcPixels[i];
+
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+
+                // Aplicar brilho + contraste + gamma via LUT
+                if (brightnessContrastLUT != null) {
+                    r = brightnessContrastLUT[r];
+                    g = brightnessContrastLUT[g];
+                    b = brightnessContrastLUT[b];
+                }
+
+                // Aplicar saturação
+                float gray = r * 0.299f + g * 0.587f + b * 0.114f;
+                r = clamp((int)(gray + saturation * (r - gray)), 0, 255);
+                g = clamp((int)(gray + saturation * (g - gray)), 0, 255);
+                b = clamp((int)(gray + saturation * (b - gray)), 0, 255);
+
+                dstPixels[i] = (r << 16) | (g << 8) | b;
+            }
+        } else {
+            // Processamento sem saturação (muito mais rápido)
+            if (brightnessContrastLUT != null) {
+                for (int i = 0; i < srcPixels.length; i++) {
+                    int rgb = srcPixels[i];
+
+                    int r = brightnessContrastLUT[(rgb >> 16) & 0xFF];
+                    int g = brightnessContrastLUT[(rgb >> 8) & 0xFF];
+                    int b = brightnessContrastLUT[rgb & 0xFF];
+
+                    dstPixels[i] = (r << 16) | (g << 8) | b;
+                }
+            } else {
+                // Sem filtros ativos
+                System.arraycopy(srcPixels, 0, dstPixels, 0, srcPixels.length);
+            }
+        }
+
+        // Definir pixels processados
+        filtered.setRGB(0, 0, width, height, dstPixels, 0, width);
+
+        return filtered;
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+// Remover métodos rgbToHsl, hslToRgb e hueToRgb (não são mais necessários)
+
+    private void resetFilters() {
+        brightness = 0.0;
+        contrast = 1.0;
+        gamma = 1.0;
+        saturation = 1.0;
+        filtersEnabled = false;
+
+        // Reaplicar (sem filtros)
+        applyFilters();
+    }
+
+
+    private void showBrightnessDialog() {
+        if (grabber == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Nenhum vídeo carregado.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Criar diálogo customizado
+        JDialog dialog = new JDialog(this, "Ajustar Brilho", true);
+        dialog.setSize(450, 200);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        // Painel superior com informações
+        JPanel topPanel = new JPanel(new BorderLayout());
+        JLabel titleLabel = new JLabel("Ajustar Brilho", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        topPanel.add(titleLabel, BorderLayout.NORTH);
+
+        JLabel infoLabel = new JLabel("<html><center>Arraste o controle para ajustar<br>(-1.0 = mais escuro, 0 = normal, +1.0 = mais claro)</center></html>", SwingConstants.CENTER);
+        topPanel.add(infoLabel, BorderLayout.CENTER);
+        panel.add(topPanel, BorderLayout.NORTH);
+
+        // Painel central com slider
+        JPanel centerPanel = new JPanel(new BorderLayout(10, 5));
+
+        JLabel valueLabel = new JLabel(String.format("Valor: %.2f", brightness), SwingConstants.CENTER);
+        valueLabel.setFont(new Font("Arial", Font.BOLD, 14));
+
+        JSlider slider = new JSlider(-100, 100, (int)(brightness * 100));
+        slider.setPreferredSize(new Dimension(100, 20));
+        slider.setMajorTickSpacing(50);
+        slider.setMinorTickSpacing(10);
+       // slider.setPaintTicks(true);
+        //slider.setPaintLabels(true);
+
+
+
+        // Criar labels personalizados
+        java.util.Hashtable<Integer, JLabel> labelTable = new java.util.Hashtable<>();
+        labelTable.put(-100, new JLabel("-1.0"));
+        labelTable.put(-50, new JLabel("-0.5"));
+        labelTable.put(0, new JLabel("0"));
+        labelTable.put(50, new JLabel("0.5"));
+        labelTable.put(100, new JLabel("1.0"));
+        slider.setLabelTable(labelTable);
+
+        slider.addChangeListener(e -> {
+            double value = slider.getValue() / 100.0;
+            valueLabel.setText(String.format("Valor: %.2f", value));
+        });
+
+        centerPanel.add(valueLabel, BorderLayout.NORTH);
+        centerPanel.add(slider, BorderLayout.CENTER);
+        panel.add(centerPanel, BorderLayout.CENTER);
+
+        // Painel inferior com botões
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+
+        JButton applyButton = new JButton("Aplicar");
+        JButton resetButton = new JButton("Resetar");
+        JButton cancelButton = new JButton("Cancelar");
+
+        applyButton.addActionListener(e -> {
+            brightness = slider.getValue() / 100.0;
+            filtersEnabled = true;
+            dialog.dispose();
+
+            // Mostrar mensagem de processamento
+            SwingUtilities.invokeLater(() -> {
+                JDialog processingDialog = new JDialog(this, "Processando...", true);
+                processingDialog.setSize(300, 100);
+                processingDialog.setLocationRelativeTo(this);
+                processingDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+                JPanel procPanel = new JPanel(new BorderLayout(10, 10));
+                procPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+                JLabel procLabel = new JLabel("Aplicando filtros, aguarde...", SwingConstants.CENTER);
+                procPanel.add(procLabel, BorderLayout.CENTER);
+                processingDialog.add(procPanel);
+
+                // Aplicar filtros em thread separada
+                new Thread(() -> {
+                    applyFilters();
+                    SwingUtilities.invokeLater(() -> processingDialog.dispose());
+                }).start();
+
+                processingDialog.setVisible(true);
+            });
+        });
+
+        resetButton.addActionListener(e -> {
+            slider.setValue(0);
+            valueLabel.setText("Valor: 0.00");
+        });
+
+        cancelButton.addActionListener(e -> {
+            dialog.dispose();
+        });
+
+        buttonPanel.add(resetButton);
+        buttonPanel.add(applyButton);
+        buttonPanel.add(cancelButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
+
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+
+
  private void saveVideoState() {
     if (videoFilePath != null) {
         currentVideoPath = videoFilePath;
@@ -590,6 +901,7 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
     stopButton.setEnabled(false);
     progressSlider.setEnabled(false);
     openButton.setEnabled(false);
+    volumeButton.setEnabled(false);
 
     setTitle("Video Player - Carregando...");
 
@@ -718,6 +1030,7 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
                 progressSlider.setEnabled(true);
                 progressSlider.setValue(0);
                 openButton.setEnabled(true);
+                volumeButton.setEnabled(true);
 
                 updateTimeLabel();
 
@@ -745,6 +1058,7 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
                 openButton.setEnabled(true);
                 playPauseButton.setEnabled(false);
                 stopButton.setEnabled(false);
+                volumeButton.setEnabled(false);
                 setTitle("Video Player - JavaCV");
             });
         }
@@ -755,14 +1069,6 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
     // Modificar o método detectAudioStreamNames
     private void detectAudioStreamNames(String filepath) {
         try {
-//            ProcessBuilder pb = new ProcessBuilder(
-//                    "ffprobe",
-//                    "-v", "quiet",
-//                    "-print_format", "json",
-//                    "-show_streams",
-//                    "-select_streams", "a",
-//                    filepath
-//            );
             ProcessBuilder pb = new ProcessBuilder(
                     ffprobePath,
                     "-v", "quiet",
@@ -1118,6 +1424,74 @@ private void setupContextMenu() {
     contextMenu.add(batchCaptureMenu);
     // ========== FIM: Menu de Captura em Lote ==========
 
+    // ========== NOVO: Menu de Filtros (apenas para resoluções <= 1280x720) ==========
+    JMenu filtersMenu = new JMenu("Filtros");
+
+    // Ajuste de brilho
+    JMenuItem brightnessItem = new JMenuItem("Brilho...");
+    brightnessItem.addActionListener(e -> showBrightnessDialog());
+    filtersMenu.add(brightnessItem);
+
+    // TODO: Adicionar outros filtros depois
+    // JMenuItem contrastItem = new JMenuItem("Contraste...");
+    // JMenuItem gammaItem = new JMenuItem("Gamma...");
+    // JMenuItem saturationItem = new JMenuItem("Saturação...");
+
+    filtersMenu.addSeparator();
+
+    // Resetar todos os filtros
+    JMenuItem resetFiltersItem = new JMenuItem("Resetar Filtros");
+    resetFiltersItem.addActionListener(e -> {
+        int confirm = JOptionPane.showConfirmDialog(VideoPlayer.this,
+                "Deseja resetar todos os filtros aplicados?",
+                "Confirmar Reset",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            resetFilters();
+        }
+    });
+    filtersMenu.add(resetFiltersItem);
+
+    filtersMenu.addSeparator();
+
+    // Mostrar filtros ativos
+    JMenuItem showFiltersItem = new JMenuItem("Filtros Ativos");
+    showFiltersItem.addActionListener(e -> {
+        StringBuilder info = new StringBuilder();
+        info.append("Filtros atualmente aplicados:\n\n");
+
+        if (!filtersEnabled || buildFilterString() == null) {
+            info.append("Nenhum filtro ativo");
+        } else {
+            if (brightness != 0.0) {
+                info.append(String.format("• Brilho: %.2f\n", brightness));
+            }
+            if (contrast != 1.0) {
+                info.append(String.format("• Contraste: %.2f\n", contrast));
+            }
+            if (gamma != 1.0) {
+                info.append(String.format("• Gamma: %.2f\n", gamma));
+            }
+            if (saturation != 1.0) {
+                info.append(String.format("• Saturação: %.2f\n", saturation));
+            }
+
+            info.append("\nString FFmpeg:\n").append(buildFilterString());
+        }
+
+        JOptionPane.showMessageDialog(VideoPlayer.this,
+                info.toString(),
+                "Filtros Ativos",
+                JOptionPane.INFORMATION_MESSAGE);
+    });
+    filtersMenu.add(showFiltersItem);
+
+    // Adicionar menu de filtros ao contexto (será habilitado/desabilitado dinamicamente)
+    contextMenu.add(filtersMenu);
+    // ========== FIM: Menu de Filtros ==========
+
     // Separador
     contextMenu.addSeparator();
 
@@ -1142,6 +1516,22 @@ private void setupContextMenu() {
             updateContextMenus(audioMenu, subtitleMenu);
             GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
             fullscreenItem.setSelected(gd.getFullScreenWindow() == VideoPlayer.this);
+
+            // Verificar resolução do vídeo e habilitar/desabilitar menu de filtros
+            int videoWidth = grabber.getImageWidth();
+            int videoHeight = grabber.getImageHeight();
+            boolean isHighResolution = (videoWidth > 1280 || videoHeight > 720);
+
+            if (isHighResolution) {
+                filtersMenu.setEnabled(false);
+                filtersMenu.setToolTipText(String.format(
+                        "Filtros desabilitados para vídeos com resolução superior a 1280x720 (Atual: %dx%d)",
+                        videoWidth, videoHeight
+                ));
+            } else {
+                filtersMenu.setEnabled(true);
+                filtersMenu.setToolTipText(null);
+            }
         }
         public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
         public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
@@ -1161,6 +1551,9 @@ private void setupContextMenu() {
         }
     });
 }
+
+
+
         // Novo método para calcular tamanho adaptativo
         private int getAdaptiveSubtitleSize() {
             int panelHeight = getHeight();
@@ -1427,14 +1820,17 @@ private void initComponents() {
     // Painel direito com controle de volume
     JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
 
-    volumeLabel = new JLabel("🔊 100%");
+
+
+    volumeLabel = new JLabel("100%");
     volumeSlider = new JSlider(0, 100, 100);
     volumeSlider.setPreferredSize(new Dimension(100, 20));
     volumeSlider.addChangeListener(e -> {
         int vol = volumeSlider.getValue();
         volume = vol / 100.0f;
-        volumeLabel.setText("🔊 " + vol + "%");
+        volumeLabel.setText( vol + "%");
     });
+
 
     rightButtonPanel.add(volumeLabel);
     rightButtonPanel.add(volumeSlider);
@@ -1978,6 +2374,13 @@ private void loadVideo(String filepath) {
     stopButton.setEnabled(false);
     progressSlider.setEnabled(false);
     openButton.setEnabled(false);
+    volumeButton.setEnabled(false);
+
+    brightness = 0.0;
+    contrast = 1.0;
+    gamma = 1.0;
+    saturation = 1.0;
+    filtersEnabled = false;
 
     System.out.println("Atualizando título...");
     setTitle("Video Player - Carregando...");
@@ -2177,7 +2580,7 @@ private void loadVideo(String filepath) {
                 nextFrameButton.setEnabled(true);   // NOVO
                 captureFrameButton.setEnabled(true); // NOVO
                 captureAllFrameButton.setEnabled(true); // NOVO
-
+                volumeButton.setEnabled(true);
                 updateTimeLabel();
 
                 setTitle("Video Player - " + new java.io.File(filepath).getName());
@@ -2199,6 +2602,7 @@ private void loadVideo(String filepath) {
                 openButton.setEnabled(true);
                 playPauseButton.setEnabled(false);
                 stopButton.setEnabled(false);
+                volumeButton.setEnabled(false);
                 setTitle("Video Player - JavaCV");
             });
         }
@@ -2611,14 +3015,6 @@ private void loadSubtitleFile(File file) {
 
     private void detectEmbeddedSubtitles(String videoPath) {
         try {
-            // Executar ffprobe para obter informações dos streams
-//            ProcessBuilder pb = new ProcessBuilder(
-//                    "ffprobe",
-//                    "-v", "quiet",
-//                    "-print_format", "json",
-//                    "-show_streams",
-//                    videoPath
-//            );
             ProcessBuilder pb = new ProcessBuilder(
                     ffprobePath,
                     "-v", "quiet",
@@ -3234,14 +3630,6 @@ private void switchSubtitleStream(int streamIndex) {
             System.out.println("Extraindo legenda para: " + tempSubtitle.getAbsolutePath());
             System.out.println("Comando: ffmpeg -i \"" + videoFilePath + "\" -map 0:s:" + streamIndex + " \"" + tempSubtitle.getAbsolutePath() + "\"");
 
-//            ProcessBuilder pb = new ProcessBuilder(
-//                    "ffmpeg",
-//                    "-i", videoFilePath,
-//                    "-map", "0:s:" + streamIndex,
-//                    "-c:s", "srt", // Converter para SRT
-//                    "-y",
-//                    tempSubtitle.getAbsolutePath()
-//            );
             ProcessBuilder pb = new ProcessBuilder(
                     ffmpegPath,
                     "-i", videoFilePath,
@@ -3390,6 +3778,10 @@ private void switchSubtitleStream(int streamIndex) {
 
                         BufferedImage img = converter.convert(frame);
                         if (img != null) {
+                            // APLICAR FILTROS SE HABILITADOS
+                            if (filtersEnabled) {
+                                img = applyImageFilters(img);
+                            }
                             videoPanel.updateImage(img);
                         }
 
