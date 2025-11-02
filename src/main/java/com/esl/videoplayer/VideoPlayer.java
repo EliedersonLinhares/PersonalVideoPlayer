@@ -5,7 +5,6 @@ import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
-
 import java.nio.ByteBuffer;
 
 import javax.imageio.ImageIO;
@@ -124,6 +123,9 @@ public class VideoPlayer extends JFrame {
     private double gamma = 1.0;       // 0.1 a 10.0
     private double saturation = 1.0;  // 0.0 a 3.0
     private boolean filtersEnabled = false;
+
+    // Adicionar variável de instância para controlar se é áudio ou vídeo
+    private boolean isAudioOnly = false;
 
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
@@ -1534,6 +1536,27 @@ private void setupContextMenu() {
                 filtersMenu.setEnabled(true);
                 filtersMenu.setToolTipText(null);
             }
+            if(isAudioOnly){
+                subtitleMenu.setEnabled(false);
+                filtersMenu.setEnabled(false);
+                audioMenu.setEnabled(false);
+                captureMenu.setEnabled(false);
+                batchCaptureMenu.setEnabled(false);
+                performanceMenu.setEnabled(false);
+                intervalMenu.setEnabled(false);
+                fullscreenItem.setEnabled(false);
+                subtitleSettingsMenu.setEnabled(false);
+            }else {
+                subtitleMenu.setEnabled(true);
+                filtersMenu.setEnabled(true);
+                audioMenu.setEnabled(true);
+                captureMenu.setEnabled(true);
+                batchCaptureMenu.setEnabled(true);
+                performanceMenu.setEnabled(true);
+                intervalMenu.setEnabled(true);
+                fullscreenItem.setEnabled(true);
+                subtitleSettingsMenu.setEnabled(true);
+            }
         }
         public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
         public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
@@ -1722,132 +1745,6 @@ private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
         }
     }
 
-
-//private void initComponents() {
-//    setLayout(new BorderLayout());
-//
-//    videoPanel = new VideoPanel();
-//    add(videoPanel, BorderLayout.CENTER);
-//
-//    // Painel de controles
-//    JPanel controlPanel = new JPanel(new BorderLayout());
-//    controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-//
-//    // Barra de progresso (PRIMEIRO - no topo)
-//    JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
-//    progressSlider = new JSlider(0, 100, 0);
-//    progressSlider.setEnabled(false);
-//    progressSlider.addChangeListener(e -> {
-//        if (progressSlider.getValueIsAdjusting() && grabber != null) {
-//            isSeeking = true;
-//        } else if (isSeeking) {
-//            seekToPosition(progressSlider.getValue());
-//            isSeeking = false;
-//        }
-//    });
-//
-//    Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
-//
-//    timeLabel = new JLabel("00:00");
-//    timeLabelPassed = new JLabel("00:00");
-//    timeLabel.setFont(mainFont);
-//    timeLabelPassed.setFont(mainFont);
-//
-//    progressPanel.add(timeLabelPassed, BorderLayout.WEST);
-//    progressPanel.add(progressSlider, BorderLayout.CENTER);
-//    progressPanel.add(timeLabel, BorderLayout.EAST);
-//
-//    // Botões (SEGUNDO - embaixo do progressPanel)
-//    JPanel buttonPanel = new JPanel(new BorderLayout());
-//
-//    // Painel central com controles principais (centralizado)
-//    JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
-//
-//    openButton = new JButton("\uD83D\uDCC1");
-//    openButton.setPreferredSize(new Dimension(35, 35));
-//    openButton.setToolTipText("Abrir nova midia");
-//    openButton.addActionListener(e -> openVideo());
-//
-//    rewindButton = new JButton("⏪");
-//    rewindButton.setEnabled(false);
-//    rewindButton.setPreferredSize(new Dimension(35, 35));
-//    rewindButton.setToolTipText("Retroceder 10 segundos");
-//    rewindButton.addActionListener(e -> rewind10Seconds());
-//
-//    playPauseButton = new JButton("▶");
-//    playPauseButton.setEnabled(false);
-//    playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
-//    playPauseButton.setToolTipText("Tocar/Pausar");
-//    playPauseButton.addActionListener(e -> togglePlayPause());
-//
-//    forwardButton = new JButton("⏩");
-//    forwardButton.setEnabled(false);
-//    forwardButton.setPreferredSize(new Dimension(35, 35));
-//    forwardButton.setToolTipText("Avançar 10 segundos");
-//    forwardButton.addActionListener(e -> forward10Seconds());
-//
-//    stopButton = new JButton("■");
-//    stopButton.setEnabled(false);
-//    stopButton.setPreferredSize(new Dimension(35, 35));
-//    stopButton.setToolTipText("Parar");
-//    stopButton.addActionListener(e -> stopVideo());
-//
-//    nextFrameButton = new JButton("⏭");
-//    nextFrameButton.setEnabled(false);
-//    nextFrameButton.setPreferredSize(new Dimension(35, 35));
-//    nextFrameButton.setToolTipText("Avançar um frame");
-//    nextFrameButton.addActionListener(e -> nextFrame());
-//
-//    captureFrameButton = new JButton("📷");
-//    captureFrameButton.setEnabled(false);
-//    captureFrameButton.setPreferredSize(new Dimension(35, 35));
-//    captureFrameButton.setToolTipText("Capturar frame atual");
-//    captureFrameButton.addActionListener(e -> captureFrame()); // Implementar depois
-//
-//    captureAllFrameButton = new JButton("\uD83D\uDCE6");
-//    captureAllFrameButton.setEnabled(false);
-//    captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
-//    captureAllFrameButton.setToolTipText("Capturar todo os frames");
-//    captureAllFrameButton.addActionListener(e -> batchCaptureFrames()); // Implementar depois
-//
-//    centerButtonPanel.add(openButton);
-//    centerButtonPanel.add(rewindButton);
-//    centerButtonPanel.add(playPauseButton);
-//    centerButtonPanel.add(forwardButton);
-//    centerButtonPanel.add(stopButton);
-//    centerButtonPanel.add(nextFrameButton);
-//    centerButtonPanel.add(captureFrameButton);
-//    centerButtonPanel.add(captureAllFrameButton);
-//
-//    // Painel direito com controle de volume
-//    JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
-//
-//
-//
-//    volumeLabel = new JLabel("100%");
-//    volumeSlider = new JSlider(0, 100, 100);
-//    volumeSlider.setPreferredSize(new Dimension(100, 20));
-//    volumeSlider.addChangeListener(e -> {
-//        int vol = volumeSlider.getValue();
-//        volume = vol / 100.0f;
-//        volumeLabel.setText( vol + "%");
-//    });
-//
-//
-//    rightButtonPanel.add(volumeLabel);
-//    rightButtonPanel.add(volumeSlider);
-//
-//    // Montar painel de botões
-//    buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
-//    buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
-//
-//    // Adicionar ao painel de controles
-//    controlPanel.add(progressPanel, BorderLayout.NORTH);
-//    controlPanel.add(buttonPanel, BorderLayout.SOUTH);
-//
-//    add(controlPanel, BorderLayout.SOUTH);
-//}
-
     private void initComponents() {
         setLayout(new BorderLayout());
 
@@ -1891,7 +1788,13 @@ private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
         openButton = new JButton("\uD83D\uDCC1");
         openButton.setPreferredSize(new Dimension(35, 35));
         openButton.setToolTipText("Abrir nova midia");
-        openButton.addActionListener(e -> openVideo());
+        openButton.addActionListener(e -> {
+            try {
+                openVideo();
+            } catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
 
         rewindButton = new JButton("⏪");
         rewindButton.setEnabled(false);
@@ -2495,24 +2398,262 @@ private void captureFrame() {
         progressDialog.setVisible(true);
     }
 
-
-
-
-
-
-    private void openVideo() {
+    private void openVideo() throws Exception {
         if (isPlaying) {
             pauseVideo();
         }
         JnaFileChooser fc = new JnaFileChooser();
-        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov","3gp", "mp3");
+        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov","3gp");
+        fc.addFilter("Arquivos de Audio (*.mp3)", "mp3");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
-            loadVideo(f.getAbsolutePath());
+            if(f.getName().endsWith("mp3")){
+                loadAudio(f.getAbsolutePath());
+            }else {
+                loadVideo(f.getAbsolutePath());
+            }
         }
     }
+    public static void playMp3(String filePath) throws Exception{
+        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(filePath);
+        grabber.start();
 
-private void loadVideo(String filepath) {
+        AudioFormat audioFormat = new AudioFormat(
+                grabber.getSampleRate(),
+                16, // 16-bit samples
+                grabber.getAudioChannels(),
+                true, // signed
+                false // little-endian
+        );
+
+        SourceDataLine line = AudioSystem.getSourceDataLine(audioFormat);
+        line.open(audioFormat);
+        line.start();
+
+        Frame frame;
+        while ((frame = grabber.grabSamples()) != null) {
+            if (frame.samples != null) {
+                ShortBuffer samples = (ShortBuffer) frame.samples[0];
+                byte[] audioBytes = new byte[samples.capacity() * 2]; // 2 bytes per short
+                for (int i = 0; i < samples.capacity(); i++) {
+                    short s = samples.get(i);
+                    audioBytes[i * 2] = (byte) (s & 0xFF);
+                    audioBytes[i * 2 + 1] = (byte) ((s >> 8) & 0xFF);
+                }
+                line.write(audioBytes, 0, audioBytes.length);
+            }
+        }
+
+        line.drain();
+        line.stop();
+        line.close();
+        grabber.stop();
+        grabber.release();
+    }
+
+
+    private void loadAudio(String filepath) {
+        // Salvar caminho do áudio
+        currentVideoPath = filepath;
+        videoFilePath = filepath;
+
+        System.out.println("=== INÍCIO loadAudio ===");
+
+        // Fechar reprodução anterior ANTES de iniciar nova thread
+        if (isPlaying) {
+            System.out.println("Parando reprodução anterior...");
+            isPlaying = false;
+            if (playbackThread != null) {
+                try {
+                    playbackThread.interrupt();
+                    playbackThread.join(500);
+                } catch (Exception e) {
+                    System.out.println("Erro ao parar thread de playback: " + e.getMessage());
+                }
+            }
+        }
+
+        if (grabber != null) {
+            System.out.println("Fechando grabber anterior...");
+            try {
+                grabber.stop();
+                grabber.release();
+            } catch (Exception e) {
+                System.out.println("Erro ao fechar grabber anterior: " + e.getMessage());
+            }
+            grabber = null;
+        }
+
+        if (audioLine != null && audioLine.isOpen()) {
+            System.out.println("Fechando audioLine anterior...");
+            audioLine.close();
+            audioLine = null;
+        }
+
+        // Limpar estado
+        System.out.println("Limpando estado...");
+        subtitles.clear();
+        currentSubtitleText = "";
+        currentSubtitleStream = -1;
+        currentFrame = 0;
+
+        // Desabilitar controles durante carregamento
+        System.out.println("Desabilitando controles...");
+        playPauseButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        progressSlider.setEnabled(false);
+        openButton.setEnabled(false);
+        volumeButton.setEnabled(false);
+        rewindButton.setEnabled(false);
+        forwardButton.setEnabled(false);
+        nextFrameButton.setEnabled(false);
+        captureFrameButton.setEnabled(false);
+        captureAllFrameButton.setEnabled(false);
+
+        // Resetar filtros
+        brightness = 0.0;
+        contrast = 1.0;
+        gamma = 1.0;
+        saturation = 1.0;
+        filtersEnabled = false;
+
+        System.out.println("Atualizando título...");
+        setTitle("Video Player - Carregando áudio...");
+
+        System.out.println("Iniciando thread de carregamento de áudio...");
+
+        // Carregar áudio em thread separada
+        Thread loaderThread = new Thread(() -> {
+            System.out.println("Thread de carregamento de áudio INICIADA");
+            try {
+                System.out.println("1. Criando FFmpegFrameGrabber para áudio...");
+                grabber = new FFmpegFrameGrabber(filepath);
+                System.out.println("2. FFmpegFrameGrabber criado");
+
+                // Opções para melhorar performance de áudio
+                System.out.println("3. Aplicando opções de áudio...");
+                try {
+                    grabber.setOption("analyzeduration", "2000000");
+                    grabber.setOption("probesize", "2000000");
+                    System.out.println("3. Opções aplicadas");
+                } catch (Exception e) {
+                    System.out.println("Erro nas opções: " + e.getMessage());
+                }
+
+                System.out.println("4. Chamando grabber.start()...");
+                grabber.start();
+                System.out.println("5. grabber.start() CONCLUÍDO!");
+
+                // Marcar como áudio apenas
+                isAudioOnly = true;
+
+                System.out.println("6. Obtendo informações do áudio...");
+                audioChannels = grabber.getAudioChannels();
+                sampleRate = grabber.getSampleRate();
+                System.out.println("7. Canais: " + audioChannels + ", SampleRate: " + sampleRate);
+
+                // Calcular duração em "frames" baseado na taxa de amostragem
+                // Para áudio, vamos simular frames a 30 FPS para controle de progresso
+                frameRate = 30.0;
+                double durationSeconds = grabber.getLengthInTime() / 1000000.0; // microsegundos para segundos
+                totalFrames = (long)(durationSeconds * frameRate);
+                currentFrame = 0;
+                System.out.println("8. Duração: " + durationSeconds + "s, Frames simulados: " + totalFrames);
+
+                // Configurar linha de áudio
+                if (audioChannels > 0 && sampleRate > 0) {
+                    System.out.println("9. Criando audioLine...");
+                    try {
+                        int outputChannels = audioChannels > 2 ? 2 : audioChannels;
+
+                        if (audioChannels > 2) {
+                            System.out.println("Áudio " + audioChannels + " canais detectado, fazendo downmix para estéreo");
+                        }
+
+                        AudioFormat audioFormat = new AudioFormat(
+                                sampleRate,
+                                16,                    // 16-bit samples
+                                outputChannels,        // stereo ou mono
+                                true,                  // signed
+                                false                   // big-endian (Para audio tem que ser false)
+                        );
+
+                        DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
+                        audioLine = (SourceDataLine) AudioSystem.getLine(info);
+
+                        int bufferSize = sampleRate * outputChannels * 2;
+                        audioLine.open(audioFormat, bufferSize);
+                        System.out.println("10. AudioLine configurado com sucesso");
+                    } catch (Exception audioEx) {
+                        System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
+                        audioLine = null;
+                    }
+                }
+
+                System.out.println("11. Áudio carregado! Habilitando UI...");
+
+                SwingUtilities.invokeLater(() -> {
+
+                    // Redimensionar e centralizar a janela
+                    setSize(800, 600);
+                    setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
+
+                    System.out.println("12. SwingUtilities.invokeLater EXECUTANDO");
+                    playPauseButton.setEnabled(true);
+                    stopButton.setEnabled(true);
+                    progressSlider.setEnabled(true);
+                    progressSlider.setValue(0);
+                    openButton.setEnabled(true);
+                    rewindButton.setEnabled(true);
+                    forwardButton.setEnabled(true);
+                    volumeButton.setEnabled(true);
+
+                    // Desabilitar controles de vídeo
+                    nextFrameButton.setEnabled(false);
+                    captureFrameButton.setEnabled(false);
+                    captureAllFrameButton.setEnabled(false);
+
+                    updateTimeLabel();
+
+                    // Limpar painel de vídeo e mostrar mensagem
+                    videoPanel.updateImage(null);
+                    videoPanel.repaint();
+
+                    setTitle("Video Player - " + new java.io.File(filepath).getName());
+
+                    playVideo();
+                    System.out.println("13. UI HABILITADA - Pronto para reproduzir áudio!");
+                });
+
+                System.out.println("14. Thread de carregamento de áudio CONCLUÍDA");
+
+            } catch (Exception e) {
+                System.err.println("ERRO CRÍTICO na thread de carregamento de áudio:");
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao abrir arquivo de áudio:\n" + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Video Player - JavaCV");
+                });
+            }
+        }, "AudioLoader");
+
+        System.out.println("Thread criada, iniciando...");
+        loaderThread.start();
+        System.out.println("Thread iniciada! Aguardando conclusão...");
+        System.out.println("=== FIM loadAudio (método principal) ===");
+    }
+
+    private void loadVideo(String filepath) {
+        isAudioOnly = false;
+
     // Salvar caminho do vídeo
     currentVideoPath = filepath;
     videoFilePath = filepath;
@@ -2757,7 +2898,23 @@ private void loadVideo(String filepath) {
 
             System.out.println("21. Vídeo carregado! Habilitando UI...");
 
+
+            int videoWidth = grabber.getImageWidth();
+            int videoHeight = grabber.getImageHeight();
+            int tempVideoWidth = videoWidth;
+            if(videoWidth <= 500){
+                tempVideoWidth = 600;
+            }
+            // Guardar dimensões para usar no SwingUtilities.invokeLater
+            final int finalWidth = tempVideoWidth;
+            final int finalHeight = videoHeight;
+
             SwingUtilities.invokeLater(() -> {
+
+                // Redimensionar e centralizar a janela
+                setSize(finalWidth, finalHeight);
+                setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
+
                 System.out.println("22. SwingUtilities.invokeLater EXECUTANDO");
                 playPauseButton.setEnabled(true);
                 stopButton.setEnabled(true);
@@ -2773,6 +2930,8 @@ private void loadVideo(String filepath) {
                 updateTimeLabel();
 
                 setTitle("Video Player - " + new java.io.File(filepath).getName());
+
+                playVideo();
 
                 System.out.println("23. UI HABILITADA - Pronto para reproduzir!");
             });
@@ -2793,6 +2952,7 @@ private void loadVideo(String filepath) {
                 stopButton.setEnabled(false);
                 volumeButton.setEnabled(false);
                 setTitle("Video Player - JavaCV");
+
             });
         }
     }, "VideoLoader");
@@ -2803,23 +2963,31 @@ private void loadVideo(String filepath) {
     System.out.println("=== FIM loadVideo (método principal) ===");
 }
 
-    private void rewind10Seconds() {
-        if (grabber == null || totalFrames == 0) return;
+private void rewind10Seconds() {
+    if (grabber == null || totalFrames == 0) return;
 
-        System.out.println("Retrocedendo 10 segundos...");
+    System.out.println("Retrocedendo 10 segundos...");
 
-        // Calcular quantos frames correspondem a 10 segundos
-        long framesTo10Seconds = (long)(frameRate * 10);
-        long targetFrame = Math.max(0, currentFrame - framesTo10Seconds);
+    // Calcular quantos frames correspondem a 10 segundos
+    long framesTo10Seconds = (long)(frameRate * 10);
+    long targetFrame = Math.max(0, currentFrame - framesTo10Seconds);
 
-        boolean wasPlaying = isPlaying;
-        if (wasPlaying) {
-            pauseVideo();
-        }
+    boolean wasPlaying = isPlaying;
+    if (wasPlaying) {
+        pauseVideo();
+    }
 
-        try {
+    try {
+        currentFrame = targetFrame;
+
+        if (isAudioOnly) {
+            // Para áudio, usar timestamp
+            long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
+            grabber.setTimestamp(targetTimestamp);
+            System.out.println("Retrocedeu áudio para frame: " + targetFrame);
+        } else {
+            // Para vídeo, usar frame number
             grabber.setFrameNumber((int)targetFrame);
-            currentFrame = targetFrame;
 
             // Capturar e exibir frame
             Frame frame = grabber.grabImage();
@@ -2833,31 +3001,32 @@ private void loadVideo(String filepath) {
             // Resetar posição
             grabber.setFrameNumber((int)targetFrame);
 
-            // Atualizar UI
-            updateTimeLabel();
-            int progress = (int)((targetFrame * 100) / totalFrames);
-            progressSlider.setValue(progress);
-
             // Atualizar legenda
             long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
             updateSubtitle(currentTimeMs);
-
-            if (audioLine != null) {
-                audioLine.flush();
-            }
-
-            System.out.println("Retrocedeu para frame: " + targetFrame);
-
-            if (wasPlaying) {
-                Thread.sleep(100);
-                playVideo();
-            }
-
-        } catch (Exception e) {
-            System.err.println("Erro ao retroceder: " + e.getMessage());
-            e.printStackTrace();
         }
+
+        // Atualizar UI
+        updateTimeLabel();
+        int progress = (int)((targetFrame * 100) / totalFrames);
+        progressSlider.setValue(progress);
+
+        if (audioLine != null) {
+            audioLine.flush();
+        }
+
+        System.out.println("Retrocedeu para frame: " + targetFrame);
+
+        if (wasPlaying) {
+            Thread.sleep(100);
+            playVideo();
+        }
+
+    } catch (Exception e) {
+        System.err.println("Erro ao retroceder: " + e.getMessage());
+        e.printStackTrace();
     }
+}
 
     private void forward10Seconds() {
         if (grabber == null || totalFrames == 0) return;
@@ -2874,29 +3043,38 @@ private void loadVideo(String filepath) {
         }
 
         try {
-            grabber.setFrameNumber((int)targetFrame);
             currentFrame = targetFrame;
 
-            // Capturar e exibir frame
-            Frame frame = grabber.grabImage();
-            if (frame != null && frame.image != null) {
-                BufferedImage img = converter.convert(frame);
-                if (img != null) {
-                    videoPanel.updateImage(img);
-                }
-            }
+            if (isAudioOnly) {
+                // Para áudio, usar timestamp
+                long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
+                grabber.setTimestamp(targetTimestamp);
+                System.out.println("Avançou áudio para frame: " + targetFrame);
+            } else {
+                // Para vídeo, usar frame number
+                grabber.setFrameNumber((int)targetFrame);
 
-            // Resetar posição
-            grabber.setFrameNumber((int)targetFrame);
+                // Capturar e exibir frame
+                Frame frame = grabber.grabImage();
+                if (frame != null && frame.image != null) {
+                    BufferedImage img = converter.convert(frame);
+                    if (img != null) {
+                        videoPanel.updateImage(img);
+                    }
+                }
+
+                // Resetar posição
+                grabber.setFrameNumber((int)targetFrame);
+
+                // Atualizar legenda
+                long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                updateSubtitle(currentTimeMs);
+            }
 
             // Atualizar UI
             updateTimeLabel();
             int progress = (int)((targetFrame * 100) / totalFrames);
             progressSlider.setValue(progress);
-
-            // Atualizar legenda
-            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-            updateSubtitle(currentTimeMs);
 
             if (audioLine != null) {
                 audioLine.flush();
@@ -2914,7 +3092,6 @@ private void loadVideo(String filepath) {
             e.printStackTrace();
         }
     }
-
 
 private void nextFrame() {
     if (grabber == null || totalFrames == 0) return;
@@ -3924,34 +4101,108 @@ private void switchSubtitleStream(int streamIndex) {
         }
     }
 
-    private void playVideo() {
-        if (grabber == null || isPlaying) return;
+private void playVideo() {
+    if (grabber == null || isPlaying) return;
 
-        isPlaying = true;
-        isStopped = false;
-        playPauseButton.setText("⏸");
+    isPlaying = true;
+    isStopped = false;
+    playPauseButton.setText("⏸");
 
-        if (audioLine != null && !audioLine.isRunning()) {
-            audioLine.start();
-        }
+    if (audioLine != null && !audioLine.isRunning()) {
+        audioLine.start();
+    }
 
-        playbackThread = new Thread(() -> {
-            try {
-                long startTime = System.currentTimeMillis();
-                long frameDelay = (long)(1000.0 / frameRate);
-                long frameCount = 0;
+    playbackThread = new Thread(() -> {
+        try {
+            long startTime = System.currentTimeMillis();
+            long frameDelay = (long)(1000.0 / frameRate);
+            long frameCount = 0;
+
+            // Se for áudio apenas, usar lógica simplificada
+            if (isAudioOnly) {
+                System.out.println("Iniciando reprodução de áudio...");
+
+                // Posicionar no frame atual (para retomar de onde parou)
+                try {
+                    long targetTimestamp = (long)((currentFrame / frameRate) * 1000000); // microsegundos
+                    grabber.setTimestamp(targetTimestamp);
+                    System.out.println("Retomando áudio do frame: " + currentFrame + " (timestamp: " + targetTimestamp + "µs)");
+                } catch (Exception e) {
+                    System.err.println("Erro ao posicionar áudio: " + e.getMessage());
+                }
+
+                Frame frame;
+                long lastUpdateTime = System.currentTimeMillis();
+                int samplesProcessed = 0;
+
+                while (isPlaying) {
+                    frame = grabber.grabSamples();
+
+                    // Se não houver mais samples, chegou ao fim
+                    if (frame == null) {
+                        System.out.println("Fim do áudio alcançado");
+                        SwingUtilities.invokeLater(() -> stopVideo());
+                        break;
+                    }
+
+                    if (frame.samples != null && audioLine != null) {
+                        try {
+                            ShortBuffer channelSamples = (ShortBuffer) frame.samples[0];
+                            channelSamples.rewind();
+
+                            if (channelSamples.remaining() > 0) {
+                                // Processar áudio (com downmix se necessário)
+                                byte[] audioBytes = processAudioSamples(channelSamples);
+
+                                if (audioBytes != null) {
+                                    audioLine.write(audioBytes, 0, audioBytes.length);
+                                    samplesProcessed++;
+                                }
+                            }
+
+                            // Calcular frame atual baseado no tempo decorrido
+                            long currentTime = System.currentTimeMillis();
+                            long elapsedTime = currentTime - lastUpdateTime;
+
+                            if (elapsedTime >= 100) { // Atualizar a cada 100ms
+                                // Incrementar frames baseado no tempo real decorrido
+                                long framesElapsed = (long)((elapsedTime / 1000.0) * frameRate);
+                                currentFrame += framesElapsed;
+
+                                // Garantir que não ultrapasse o total
+                                if (currentFrame > totalFrames) {
+                                    currentFrame = totalFrames;
+                                }
+
+                                lastUpdateTime = currentTime;
+
+                                SwingUtilities.invokeLater(() -> {
+                                    if (!isSeeking && totalFrames > 0) {
+                                        int progress = (int)((currentFrame * 100) / totalFrames);
+                                        progressSlider.setValue(progress);
+                                        updateTimeLabel();
+                                    }
+                                });
+                            }
+
+                        } catch (Exception audioEx) {
+                            System.err.println("Erro ao processar áudio: " + audioEx.getMessage());
+                        }
+                    }
+                }
+
+                System.out.println("Reprodução de áudio finalizada (samples processados: " + samplesProcessed + ")");
+
+            } else {
+                // Lógica original de vídeo (mantida intacta)
                 long lastUpdateTime = startTime;
                 double avgFrameTime = frameDelay;
-
-                // Estatísticas para debug
                 long totalDecodeTime = 0;
                 long totalRenderTime = 0;
                 int statsCounter = 0;
 
                 while (isPlaying) {
                     long frameStartTime = System.currentTimeMillis();
-
-                    // Medir tempo de decodificação
                     long decodeStart = System.currentTimeMillis();
                     Frame frame = grabber.grab();
                     long decodeTime = System.currentTimeMillis() - decodeStart;
@@ -3961,21 +4212,17 @@ private void switchSubtitleStream(int streamIndex) {
                         break;
                     }
 
-                    // Processar frame de vídeo
+                    // [Resto da lógica de vídeo mantida...]
                     if (frame.image != null) {
                         long renderStart = System.currentTimeMillis();
-
                         BufferedImage img = converter.convert(frame);
                         if (img != null) {
-                            // APLICAR FILTROS SE HABILITADOS
                             if (filtersEnabled) {
                                 img = applyImageFilters(img);
                             }
                             videoPanel.updateImage(img);
                         }
-
                         long renderTime = System.currentTimeMillis() - renderStart;
-
                         totalDecodeTime += decodeTime;
                         totalRenderTime += renderTime;
                         statsCounter++;
@@ -3983,7 +4230,7 @@ private void switchSubtitleStream(int streamIndex) {
                         if (statsCounter >= 100) {
                             long avgDecode = totalDecodeTime / statsCounter;
                             long avgRender = totalRenderTime / statsCounter;
-                            System.out.println("Performance - Decode: " + avgDecode + "ms, Render: " + avgRender + "ms, Total: " + (avgDecode + avgRender) + "ms, Target: " + frameDelay + "ms");
+                            System.out.println("Performance - Decode: " + avgDecode + "ms, Render: " + avgRender + "ms");
                             totalDecodeTime = 0;
                             totalRenderTime = 0;
                             statsCounter = 0;
@@ -3991,11 +4238,8 @@ private void switchSubtitleStream(int streamIndex) {
 
                         currentFrame++;
                         frameCount++;
-
-                        // Atualizar legenda
                         long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
                         updateSubtitle(currentTimeMs);
-
                         long timeSinceLastUpdate = frameStartTime - lastUpdateTime;
                         if (frameCount > 10) {
                             avgFrameTime = (avgFrameTime * 0.9) + (timeSinceLastUpdate * 0.1);
@@ -4019,155 +4263,267 @@ private void switchSubtitleStream(int streamIndex) {
                         if (sleepTime > 0) {
                             Thread.sleep(sleepTime);
                         } else if (sleepTime < -frameDelay * 3) {
-                            System.out.println("Sistema atrasado em " + (-sleepTime) + "ms, reajustando...");
                             startTime = currentTime - (long)(frameCount * frameDelay * 0.5);
                         }
                     }
 
-                    // Processar frame de áudio
                     if (frame.samples != null && audioLine != null) {
-                        try {
-                            ShortBuffer channelSamples = (ShortBuffer) frame.samples[0];
-                            channelSamples.rewind();
+                        // [Lógica de áudio para vídeo mantida...]
+                        processVideoAudioFrame(frame);
+                    }
+                }
+            }
 
-                            if (channelSamples.remaining() > 0) {
-                                ByteBuffer outBuffer;
+        } catch (Exception e) {
+            e.printStackTrace();
+            SwingUtilities.invokeLater(() -> {
+                isPlaying = false;
+                playPauseButton.setText("▶");
+            });
+        }
+    });
 
-                                if (audioChannels > 2) {
-                                    int totalSamples = channelSamples.remaining();
-                                    int framesCount = totalSamples / audioChannels;
-                                    outBuffer = ByteBuffer.allocate(framesCount * 2 * 2);
+    playbackThread.start();
+}
+    // Método auxiliar para processar samples de áudio (para áudio apenas)
+    private byte[] processAudioSamples(ShortBuffer channelSamples) {
+        try {
+            if (audioChannels > 2) {
+                // Downmix para estéreo
+                int totalSamples = channelSamples.remaining();
+                int framesCount = totalSamples / audioChannels;
+                byte[] audioBytes = new byte[framesCount * 2 * 2]; // 2 canais, 2 bytes por sample
 
-                                    for (int i = 0; i < framesCount; i++) {
-                                        int baseIndex = i * audioChannels;
-                                        float left = 0, right = 0;
+                for (int i = 0; i < framesCount; i++) {
+                    int baseIndex = i * audioChannels;
+                    float left = 0, right = 0;
 
-                                        if (audioChannels == 6) {
-                                            short fl = channelSamples.get(baseIndex + 0);
-                                            short fr = channelSamples.get(baseIndex + 1);
-                                            short center = channelSamples.get(baseIndex + 2);
-                                            short lfe = channelSamples.get(baseIndex + 3);
-                                            short rl = channelSamples.get(baseIndex + 4);
-                                            short rr = channelSamples.get(baseIndex + 5);
+                    if (audioChannels == 6) {
+                        short fl = channelSamples.get(baseIndex + 0);
+                        short fr = channelSamples.get(baseIndex + 1);
+                        short center = channelSamples.get(baseIndex + 2);
+                        short lfe = channelSamples.get(baseIndex + 3);
+                        short rl = channelSamples.get(baseIndex + 4);
+                        short rr = channelSamples.get(baseIndex + 5);
 
-                                            left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
-                                            right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
+                        left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
+                        right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
+                    } else {
+                        // Downmix genérico
+                        int leftSum = 0, rightSum = 0;
+                        int leftCount = 0, rightCount = 0;
 
-                                            float maxVal = Math.max(Math.abs(left), Math.abs(right));
-                                            if (maxVal > 32767) {
-                                                float scale = 32767.0f / maxVal;
-                                                left *= scale;
-                                                right *= scale;
-                                            }
+                        for (int ch = 0; ch < audioChannels; ch++) {
+                            short sample = channelSamples.get(baseIndex + ch);
+                            if (ch % 2 == 0) {
+                                leftSum += sample;
+                                leftCount++;
+                            } else {
+                                rightSum += sample;
+                                rightCount++;
+                            }
+                        }
 
-                                        } else if (audioChannels == 8) {
-                                            short fl = channelSamples.get(baseIndex + 0);
-                                            short fr = channelSamples.get(baseIndex + 1);
-                                            short center = channelSamples.get(baseIndex + 2);
-                                            short lfe = channelSamples.get(baseIndex + 3);
-                                            short rl = channelSamples.get(baseIndex + 4);
-                                            short rr = channelSamples.get(baseIndex + 5);
-                                            short sl = channelSamples.get(baseIndex + 6);
-                                            short sr = channelSamples.get(baseIndex + 7);
+                        left = (leftCount > 0 ? leftSum / leftCount : 0);
+                        right = (rightCount > 0 ? rightSum / rightCount : 0);
+                    }
 
-                                            left = fl + (center * 0.707f) + (rl * 0.5f) + (sl * 0.5f) + (lfe * 0.5f);
-                                            right = fr + (center * 0.707f) + (rr * 0.5f) + (sr * 0.5f) + (lfe * 0.5f);
+                    // Aplicar volume
+                    left *= volume;
+                    right *= volume;
 
-                                            float maxVal = Math.max(Math.abs(left), Math.abs(right));
-                                            if (maxVal > 32767) {
-                                                float scale = 32767.0f / maxVal;
-                                                left *= scale;
-                                                right *= scale;
-                                            }
+                    // Clamping
+                    left = Math.max(-32768, Math.min(32767, left));
+                    right = Math.max(-32768, Math.min(32767, right));
 
-                                        } else {
-                                            int leftSum = 0, rightSum = 0;
-                                            int leftCount = 0, rightCount = 0;
+                    // Converter para bytes (big-endian - CORRIGIDO)
+                    short leftShort = (short)left;
+                    short rightShort = (short)right;
 
-                                            for (int ch = 0; ch < audioChannels; ch++) {
-                                                short sample = channelSamples.get(baseIndex + ch);
-                                                if (ch % 2 == 0) {
-                                                    leftSum += sample;
-                                                    leftCount++;
-                                                } else {
-                                                    rightSum += sample;
-                                                    rightCount++;
-                                                }
-                                            }
+                    audioBytes[i * 4] = (byte)((leftShort >> 8) & 0xFF);
+                    audioBytes[i * 4 + 1] = (byte)(leftShort & 0xFF);
+                    audioBytes[i * 4 + 2] = (byte)((rightShort >> 8) & 0xFF);
+                    audioBytes[i * 4 + 3] = (byte)(rightShort & 0xFF);
+                }
 
-                                            left = (leftCount > 0 ? leftSum / leftCount : 0);
-                                            right = (rightCount > 0 ? rightSum / rightCount : 0);
-                                        }
+                return audioBytes;
 
-                                        left *= volume;
-                                        right *= volume;
+            } else {
+                // Mono ou estéreo - conversão direta
+                byte[] audioBytes = new byte[channelSamples.capacity() * 2];
+                for (int i = 0; i < channelSamples.capacity(); i++) {
+                    short s = channelSamples.get(i);
+                    s = (short)(s * volume);
+                    audioBytes[i * 2] = (byte)(s & 0xFF);
+                    audioBytes[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+                }
+                return audioBytes;
+            }
+        } catch (Exception e) {
+            System.err.println("Erro ao processar samples: " + e.getMessage());
+            return null;
+        }
+    }
 
-                                        left = Math.max(-32768, Math.min(32767, left));
-                                        right = Math.max(-32768, Math.min(32767, right));
 
-                                        outBuffer.putShort((short)left);
-                                        outBuffer.putShort((short)right);
-                                    }
+    // Método auxiliar para processar áudio de vídeo (mantém lógica original)
+    private void processVideoAudioFrame(Frame frame) {
+        if (frame.samples == null || audioLine == null) {
+            return;
+        }
+
+        try {
+            ShortBuffer channelSamples = (ShortBuffer) frame.samples[0];
+            channelSamples.rewind();
+
+            if (channelSamples.remaining() > 0) {
+                ByteBuffer outBuffer;
+
+                if (audioChannels > 2) {
+                    int totalSamples = channelSamples.remaining();
+                    int framesCount = totalSamples / audioChannels;
+                    outBuffer = ByteBuffer.allocate(framesCount * 2 * 2);
+
+                    for (int i = 0; i < framesCount; i++) {
+                        int baseIndex = i * audioChannels;
+                        float left = 0, right = 0;
+
+                        if (audioChannels == 6) {
+                            short fl = channelSamples.get(baseIndex + 0);
+                            short fr = channelSamples.get(baseIndex + 1);
+                            short center = channelSamples.get(baseIndex + 2);
+                            short lfe = channelSamples.get(baseIndex + 3);
+                            short rl = channelSamples.get(baseIndex + 4);
+                            short rr = channelSamples.get(baseIndex + 5);
+
+                            left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
+                            right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
+
+                            float maxVal = Math.max(Math.abs(left), Math.abs(right));
+                            if (maxVal > 32767) {
+                                float scale = 32767.0f / maxVal;
+                                left *= scale;
+                                right *= scale;
+                            }
+
+                        } else if (audioChannels == 8) {
+                            short fl = channelSamples.get(baseIndex + 0);
+                            short fr = channelSamples.get(baseIndex + 1);
+                            short center = channelSamples.get(baseIndex + 2);
+                            short lfe = channelSamples.get(baseIndex + 3);
+                            short rl = channelSamples.get(baseIndex + 4);
+                            short rr = channelSamples.get(baseIndex + 5);
+                            short sl = channelSamples.get(baseIndex + 6);
+                            short sr = channelSamples.get(baseIndex + 7);
+
+                            left = fl + (center * 0.707f) + (rl * 0.5f) + (sl * 0.5f) + (lfe * 0.5f);
+                            right = fr + (center * 0.707f) + (rr * 0.5f) + (sr * 0.5f) + (lfe * 0.5f);
+
+                            float maxVal = Math.max(Math.abs(left), Math.abs(right));
+                            if (maxVal > 32767) {
+                                float scale = 32767.0f / maxVal;
+                                left *= scale;
+                                right *= scale;
+                            }
+
+                        } else {
+                            int leftSum = 0, rightSum = 0;
+                            int leftCount = 0, rightCount = 0;
+
+                            for (int ch = 0; ch < audioChannels; ch++) {
+                                short sample = channelSamples.get(baseIndex + ch);
+                                if (ch % 2 == 0) {
+                                    leftSum += sample;
+                                    leftCount++;
                                 } else {
-                                    outBuffer = ByteBuffer.allocate(channelSamples.remaining() * 2);
-
-                                    while (channelSamples.hasRemaining()) {
-                                        short val = channelSamples.get();
-                                        val = (short)(val * volume);
-                                        outBuffer.putShort(val);
-                                    }
-                                }
-
-                                byte[] audioData = outBuffer.array();
-                                int bytesToWrite = outBuffer.position();
-                                int written = 0;
-                                int maxAttempts = 5;
-                                int attempts = 0;
-
-                                while (written < bytesToWrite && attempts < maxAttempts) {
-                                    int available = audioLine.available();
-                                    if (available > 0) {
-                                        int toWrite = Math.min(bytesToWrite - written, available);
-                                        int result = audioLine.write(audioData, written, toWrite);
-                                        written += result;
-                                    } else {
-                                        attempts++;
-                                        if (attempts < maxAttempts) {
-                                            Thread.sleep(1);
-                                        }
-                                    }
-                                }
-
-                                if (written < bytesToWrite) {
-                                    System.out.println("Buffer de áudio cheio, pulando samples");
+                                    rightSum += sample;
+                                    rightCount++;
                                 }
                             }
-                        } catch (Exception audioEx) {
-                            System.err.println("Erro ao processar áudio: " + audioEx.getMessage());
+
+                            left = (leftCount > 0 ? leftSum / leftCount : 0);
+                            right = (rightCount > 0 ? rightSum / rightCount : 0);
+                        }
+
+                        left *= volume;
+                        right *= volume;
+
+                        left = Math.max(-32768, Math.min(32767, left));
+                        right = Math.max(-32768, Math.min(32767, right));
+
+                        outBuffer.putShort((short)left);
+                        outBuffer.putShort((short)right);
+                    }
+                } else {
+                    outBuffer = ByteBuffer.allocate(channelSamples.remaining() * 2);
+
+                    while (channelSamples.hasRemaining()) {
+                        short val = channelSamples.get();
+                        val = (short)(val * volume);
+                        outBuffer.putShort(val);
+                    }
+                }
+
+                byte[] audioData = outBuffer.array();
+                int bytesToWrite = outBuffer.position();
+                int written = 0;
+                int maxAttempts = 5;
+                int attempts = 0;
+
+                while (written < bytesToWrite && attempts < maxAttempts) {
+                    int available = audioLine.available();
+                    if (available > 0) {
+                        int toWrite = Math.min(bytesToWrite - written, available);
+                        int result = audioLine.write(audioData, written, toWrite);
+                        written += result;
+                    } else {
+                        attempts++;
+                        if (attempts < maxAttempts) {
+                            Thread.sleep(1);
                         }
                     }
                 }
 
-            } catch (Exception e) {
-                e.printStackTrace();
-                SwingUtilities.invokeLater(() -> {
-                    isPlaying = false;
-                    playPauseButton.setText("▶");
-                });
+                if (written < bytesToWrite) {
+                    System.out.println("Buffer de áudio cheio, pulando samples");
+                }
             }
-        });
-
-        playbackThread.start();
-    }
-
-    private void pauseVideo() {
-        isPlaying = false;
-        playPauseButton.setText("▶");
-
-        if (audioLine != null && audioLine.isRunning()) {
-            audioLine.stop();
+        } catch (Exception audioEx) {
+            System.err.println("Erro ao processar áudio: " + audioEx.getMessage());
         }
     }
+
+
+private void pauseVideo() {
+    isPlaying = false;
+    isStopped = false; // NÃO marcar como stopped, apenas pausado
+    playPauseButton.setText("▶");
+
+    if (audioLine != null && audioLine.isRunning()) {
+        audioLine.stop();
+        audioLine.flush();
+    }
+
+    // Aguardar thread terminar para garantir que currentFrame está correto
+    if (playbackThread != null && playbackThread.isAlive()) {
+        try {
+            playbackThread.join(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Atualizar UI com a posição atual
+    SwingUtilities.invokeLater(() -> {
+        updateTimeLabel();
+        if (totalFrames > 0) {
+            int progress = (int)((currentFrame * 100) / totalFrames);
+            progressSlider.setValue(progress);
+        }
+    });
+
+    System.out.println("Áudio pausado no frame: " + currentFrame);
+}
 
     private void stopVideo() {
         isPlaying = false;
@@ -4187,6 +4543,7 @@ private void switchSubtitleStream(int streamIndex) {
             }
         }
 
+        // SEMPRE resetar para o início
         currentFrame = 0;
         progressSlider.setValue(0);
         currentSubtitleText = "";
@@ -4194,31 +4551,52 @@ private void switchSubtitleStream(int streamIndex) {
 
         if (grabber != null) {
             try {
-                grabber.setFrameNumber(0);
-                Frame firstFrame = grabber.grabImage();
-                if (firstFrame != null && firstFrame.image != null) {
-                    BufferedImage img = converter.convert(firstFrame);
-                    if (img != null) {
-                        videoPanel.updateImage(img);
+                if (isAudioOnly) {
+                    // Para áudio, resetar timestamp
+                    System.out.println("Resetando posição do áudio para o início");
+                    grabber.setTimestamp(0);
+                } else {
+                    // Para vídeo, resetar frame e mostrar primeiro frame
+                    grabber.setFrameNumber(0);
+                    Frame firstFrame = grabber.grabImage();
+                    if (firstFrame != null && firstFrame.image != null) {
+                        BufferedImage img = converter.convert(firstFrame);
+                        if (img != null) {
+                            videoPanel.updateImage(img);
+                        }
                     }
+                    grabber.setFrameNumber(0);
                 }
-                grabber.setFrameNumber(0);
             } catch (Exception e) {
+                System.err.println("Erro ao resetar posição: " + e.getMessage());
                 e.printStackTrace();
             }
         }
     }
 
-    private void seekToPosition(int percentage) {
-        if (grabber == null || totalFrames == 0) return;
+private void seekToPosition(int percentage) {
+    if (grabber == null || totalFrames == 0) return;
 
-        boolean wasPlaying = isPlaying;
-        if (wasPlaying) {
-            pauseVideo();
-        }
+    boolean wasPlaying = isPlaying;
+    if (wasPlaying) {
+        pauseVideo();
+    }
 
-        try {
-            long targetFrame = (totalFrames * percentage) / 100;
+    try {
+        long targetFrame = (totalFrames * percentage) / 100;
+        currentFrame = targetFrame;
+
+        if (isAudioOnly) {
+            // Para áudio, usar timestamp em microsegundos
+            long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
+            System.out.println("Seek áudio para frame: " + targetFrame + " (timestamp: " + targetTimestamp + "µs)");
+            grabber.setTimestamp(targetTimestamp);
+
+            if (audioLine != null) {
+                audioLine.flush();
+            }
+        } else {
+            // Para vídeo, usar frame number
             grabber.setFrameNumber((int)targetFrame);
 
             Frame frame = grabber.grabImage();
@@ -4227,29 +4605,31 @@ private void switchSubtitleStream(int streamIndex) {
                 if (img != null) {
                     videoPanel.updateImage(img);
                 }
-                currentFrame = targetFrame;
-
-                // Atualizar legenda para nova posição
-                long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-                updateSubtitle(currentTimeMs);
             }
+
+            // Atualizar legenda para nova posição
+            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+            updateSubtitle(currentTimeMs);
 
             if (audioLine != null) {
                 audioLine.flush();
             }
-
-            updateTimeLabel();
-
-            if (wasPlaying) {
-                Thread.sleep(100);
-                playVideo();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
-    }
 
+        // Atualizar UI
+        updateTimeLabel();
+        progressSlider.setValue(percentage);
+
+        if (wasPlaying) {
+            Thread.sleep(100);
+            playVideo();
+        }
+
+    } catch (Exception e) {
+        System.err.println("Erro ao fazer seek: " + e.getMessage());
+        e.printStackTrace();
+    }
+}
     private void updateTimeLabel() {
         if (grabber == null || frameRate == 0) return;
 
