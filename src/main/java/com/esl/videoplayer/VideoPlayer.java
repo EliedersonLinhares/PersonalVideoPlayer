@@ -131,12 +131,32 @@ public class VideoPlayer extends JFrame {
     private float[] spectrumData = new float[64]; // 64 barras de frequência
     private final Object spectrumLock = new Object();
 
+    // Variaveis para o cover art
+    private BufferedImage audioCoverArt = null;
+
+    private int screenWidth;
+    private int screenHeight;
+
 
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
     setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-    setSize(800, 600);
+    setSize(600, 300);
     setLocationRelativeTo(null);
+
+
+        // Get the default toolkit
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+
+        // Get the screen dimensions
+        Dimension screenSize = toolkit.getScreenSize();
+
+        // Extract width and height
+        screenWidth = screenSize.width;
+        screenHeight = screenSize.height;
+
+        // Print the screen resolution
+        System.out.println("Screen Resolution: " + screenWidth + "x" + screenHeight);
 
     converter = new Java2DFrameConverter();
     initComponents();
@@ -1191,6 +1211,7 @@ private void parseAudioStreamsFromJson(String json) {
     class VideoPanel extends JPanel {
         private BufferedImage currentImage;
         private AudioSpectrumPanel spectrumPanel;
+        private BufferedImage coverArt; // NOVO: Cover art do áudio
 
         public BufferedImage getCurrentImage() {
             return currentImage;
@@ -1681,18 +1702,22 @@ private void parseAudioStreamsFromJson(String json) {
     }
 }
 
-//        public void updateImage(BufferedImage img) {
-//            this.currentImage = img;
-//            repaint();
-//        }
-public void updateImage(BufferedImage img) {
-    this.currentImage = img;
-    // Quando há imagem de vídeo, esconder spectrum
-    if (spectrumPanel != null) {
-        spectrumPanel.setVisible(false);
-    }
-    repaint();
-}
+
+        public void updateImage(BufferedImage img) {
+         this.currentImage = img;
+            this.coverArt = null; // Limpar cover art ao mostrar vídeo
+          // Quando há imagem de vídeo, esconder spectrum
+         if (spectrumPanel != null) {
+         spectrumPanel.setVisible(false);
+          }
+          repaint();
+        }
+        // Na classe VideoPanel, adicionar:
+        public void setCoverOpacity(float opacity) {
+            if (spectrumPanel != null) {
+                spectrumPanel.setCoverOpacity(opacity);
+            }
+        }
         // NOVO: Método para mostrar spectrum analyzer
         public void showSpectrum() {
             this.currentImage = null;
@@ -1734,6 +1759,14 @@ public void updateImage(BufferedImage img) {
         public void setSpectrumReflectionAlpha(int alpha) {
             if (spectrumPanel != null) {
                 spectrumPanel.setReflectionAlpha(alpha);
+            }
+        }
+
+        // NOVO: Método para definir cover art
+        public void setCoverArt(BufferedImage cover) {
+            this.coverArt = cover;
+            if (spectrumPanel != null) {
+                spectrumPanel.setCoverArt(cover);
             }
         }
 
@@ -2639,6 +2672,9 @@ private void captureFrame() {
                 // Marcar como áudio apenas
                 isAudioOnly = true;
 
+                System.out.println("11. Tentando extrair cover art...");
+                extractCoverArt(filepath);
+
                 System.out.println("6. Obtendo informações do áudio...");
                 audioChannels = grabber.getAudioChannels();
                 sampleRate = grabber.getSampleRate();
@@ -2676,6 +2712,7 @@ private void captureFrame() {
                         int bufferSize = sampleRate * outputChannels * 2;
                         audioLine.open(audioFormat, bufferSize);
                         System.out.println("10. AudioLine configurado com sucesso");
+
                     } catch (Exception audioEx) {
                         System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
                         audioLine = null;
@@ -2687,9 +2724,9 @@ private void captureFrame() {
                 SwingUtilities.invokeLater(() -> {
 
                     // Redimensionar e centralizar a janela
-                    setSize(800, 600);
+                    setSize(650, 500);
                     setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
-
+                    setResizable(false);// Desabilta maximizar a janela
                     System.out.println("12. SwingUtilities.invokeLater EXECUTANDO");
                     playPauseButton.setEnabled(true);
                     stopButton.setEnabled(true);
@@ -2724,6 +2761,17 @@ private void captureFrame() {
                     videoPanel.setSpectrumReflectionAlpha(180); // Mais transparente
 
                     videoPanel.showSpectrum();
+
+                    // Ajustar opacidade da capa (0.0 = invisível, 1.0 = opaco)
+                    videoPanel.setCoverOpacity(0.5f); // 30% de opacidade (padrão)
+
+                   // Para capa mais visível
+                   // videoPanel.setCoverOpacity(0.5f);
+
+                   // Para capa mais discreta
+                   // videoPanel.setCoverOpacity(0.2f);
+
+
                     setTitle("Video Player - " + new java.io.File(filepath).getName());
 
                     playVideo();
@@ -3018,7 +3066,16 @@ private void captureFrame() {
 
                 // Redimensionar e centralizar a janela
                 setSize(finalWidth, finalHeight);
+
+                //Se a resolução do video for igual ou maior que a resolução da tela maximizar, para evitar
+                //que parte do video fique de fora tela
+                if(finalWidth >= screenWidth || finalHeight >= screenHeight ){
+                    System.out.println("Excedeu ou é igual, maximizando ");
+                    setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+                }
                 setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
+                setResizable(true);// Pode maximizar a janela
 
                 System.out.println("22. SwingUtilities.invokeLater EXECUTANDO");
                 playPauseButton.setEnabled(true);
@@ -4948,164 +5005,83 @@ private void seekToPosition(int percentage) {
             return String.format("%02d:%02d", minutes, secs);
         }
     }
-//    // ==================== CLASSE INTERNA: AudioSpectrumPanel ====================
-//
-//    class AudioSpectrumPanel extends JPanel {
-//        private float[] spectrum = new float[64];
-//        private float[] smoothedSpectrum = new float[64];
-//        private Color[] barColors = new Color[64];
-//        private static final float SMOOTHING_FACTOR = 0.25f;
-//        private static final float GRAVITY = 0.92f;
-//        private Timer animationTimer;
-//
-//        public AudioSpectrumPanel() {
-//            setBackground(Color.BLACK);
-//            setOpaque(true);
-//
-//            // Inicializar cores do gradiente (verde -> amarelo -> vermelho)
-//            for (int i = 0; i < 64; i++) {
-//                float ratio = i / 63.0f;
-//                if (ratio < 0.5f) {
-//                    // Verde para amarelo
-//                    float localRatio = ratio * 2.0f;
-//                    barColors[i] = new Color(
-//                            (int)(255 * localRatio),
-//                            255,
-//                            0
-//                    );
-//                } else {
-//                    // Amarelo para vermelho
-//                    float localRatio = (ratio - 0.5f) * 2.0f;
-//                    barColors[i] = new Color(
-//                            255,
-//                            (int)(255 * (1 - localRatio)),
-//                            0
-//                    );
-//                }
-//            }
-//
-//            // Timer para animação suave
-//            animationTimer = new Timer(16, e -> { // ~60 FPS
-//                for (int i = 0; i < spectrum.length; i++) {
-//                    // Suavização exponencial
-//                    smoothedSpectrum[i] = smoothedSpectrum[i] * (1 - SMOOTHING_FACTOR) +
-//                            spectrum[i] * SMOOTHING_FACTOR;
-//
-//                    // Aplicar gravidade (queda suave)
-//                    smoothedSpectrum[i] *= GRAVITY;
-//                }
-//                repaint();
-//            });
-//            animationTimer.start();
-//        }
-//
-//        public void updateSpectrum(float[] newSpectrum) {
-//            if (newSpectrum != null && newSpectrum.length == spectrum.length) {
-//                System.arraycopy(newSpectrum, 0, spectrum, 0, spectrum.length);
-//            }
-//        }
-//
-//        @Override
-//        protected void paintComponent(Graphics g) {
-//            super.paintComponent(g);
-//            Graphics2D g2d = (Graphics2D) g;
-//            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-//
-//            int width = getWidth();
-//            int height = getHeight();
-//            int barCount = smoothedSpectrum.length;
-//            int barWidth = Math.max(1, (width - (barCount + 1) * 2) / barCount);
-//            int spacing = 2;
-//
-//            // Desenhar título
-//            g2d.setColor(new Color(255, 255, 255, 100));
-//            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
-//            String title = "🎵 Audio Spectrum Analyzer";
-//            FontMetrics fm = g2d.getFontMetrics();
-//            int titleWidth = fm.stringWidth(title);
-//            g2d.drawString(title, (width - titleWidth) / 2, 50);
-//
-//            int maxBarHeight = height - 100;
-//
-//            // Desenhar barras
-//            for (int i = 0; i < barCount; i++) {
-//                int x = spacing + i * (barWidth + spacing);
-//                int barHeight = (int)(smoothedSpectrum[i] * maxBarHeight);
-//                barHeight = Math.max(2, barHeight); // Altura mínima
-//                int y = height - barHeight - 20;
-//
-//                // Definir cores do gradiente FIXO para toda a altura disponível
-//                // Base (embaixo): Verde
-//                Color baseColor = new Color(0, 255, 0);
-//                // Meio: Amarelo
-//                Color middleColor = new Color(255, 255, 0);
-//                // Topo: Vermelho
-//                Color topColor = new Color(255, 0, 0);
-//
-//                // Criar gradiente multi-paradas (verde->amarelo->vermelho)
-//                // Como Java não tem multi-stop gradient nativo, vamos desenhar em segmentos
-//
-//                int segmentHeight = barHeight / 3;
-//
-//                if (barHeight > 6) {
-//                    // Segmento inferior: Verde -> Amarelo
-//                    GradientPaint gradientBottom = new GradientPaint(
-//                            x, y + barHeight, baseColor,
-//                            x, y + barHeight - segmentHeight, middleColor
-//                    );
-//                    g2d.setPaint(gradientBottom);
-//                    g2d.fillRoundRect(x, y + barHeight - segmentHeight, barWidth, segmentHeight, 4, 4);
-//
-//                    // Segmento médio: Amarelo
-//                    g2d.setColor(middleColor);
-//                    g2d.fillRect(x, y + segmentHeight, barWidth, barHeight - 2 * segmentHeight);
-//
-//                    // Segmento superior: Amarelo -> Vermelho
-//                    GradientPaint gradientTop = new GradientPaint(
-//                            x, y + segmentHeight, middleColor,
-//                            x, y, topColor
-//                    );
-//                    g2d.setPaint(gradientTop);
-//                    g2d.fillRoundRect(x, y, barWidth, segmentHeight, 4, 4);
-//                } else {
-//                    // Para barras muito pequenas, usar gradiente simples
-//                    GradientPaint gradient = new GradientPaint(
-//                            x, y + barHeight, baseColor,
-//                            x, y, topColor
-//                    );
-//                    g2d.setPaint(gradient);
-//                    g2d.fillRoundRect(x, y, barWidth, barHeight, 4, 4);
-//                }
-//
-//                // Adicionar brilho no topo
-//                if (barHeight > 5) {
-//                    // Cor do brilho baseada na posição da barra
-//                    float topRatio = (float)y / maxBarHeight;
-//                    if (topRatio < 0.33f) {
-//                        g2d.setColor(new Color(255, 100, 0, 200)); // Laranja/vermelho
-//                    } else if (topRatio < 0.66f) {
-//                        g2d.setColor(new Color(255, 255, 100, 180)); // Amarelo
-//                    } else {
-//                        g2d.setColor(new Color(200, 255, 200, 150)); // Verde claro
-//                    }
-//                    g2d.fillRoundRect(x, y, barWidth, 3, 4, 4);
-//                }
-//
-//                // Desenhar reflexo embaixo com cor verde
-//                GradientPaint reflection = new GradientPaint(
-//                        x, height - 18, new Color(0, 255, 0, 80),
-//                        x, height - 5, new Color(0, 255, 0, 0)
-//                );
-//                g2d.setPaint(reflection);
-//                int reflectionHeight = Math.min(barHeight / 3, 13);
-//                g2d.fillRoundRect(x, height - 18, barWidth, reflectionHeight, 4, 4);
-//            }
-//
-//            // Desenhar linha de base
-//            g2d.setColor(new Color(255, 255, 255, 50));
-//            g2d.fillRect(0, height - 20, width, 2);
-//        }
-//    }
+    private void extractCoverArt(String audioFilePath) {
+        System.out.println("=== Tentando extrair cover art ===");
+
+        // Resetar cover anterior
+        audioCoverArt = null;
+
+        new Thread(() -> {
+            try {
+                // Criar arquivo temporário para a capa
+                File tempCover = File.createTempFile("cover_", ".jpg");
+                tempCover.deleteOnExit();
+
+                System.out.println("Extraindo cover art para: " + tempCover.getAbsolutePath());
+                System.out.println("Comando: ffmpeg -i \"" + audioFilePath + "\" -an -vcodec copy \"" + tempCover.getAbsolutePath() + "\"");
+
+                ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-i", audioFilePath,
+                        "-an",              // Sem áudio
+                        "-vcodec", "copy",  // Copiar stream de vídeo (capa) sem recodificar
+                        "-y",
+                        tempCover.getAbsolutePath()
+                );
+
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String line;
+                boolean hasAttachedPic = false;
+
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("FFmpeg: " + line);
+
+                    // Detectar se tem attached pic
+                    if (line.contains("attached pic") || line.contains("Video:")) {
+                        hasAttachedPic = true;
+                    }
+                }
+
+                int exitCode = process.waitFor();
+
+                System.out.println("FFmpeg terminou com código: " + exitCode);
+                System.out.println("Arquivo existe: " + tempCover.exists());
+                System.out.println("Tamanho do arquivo: " + tempCover.length() + " bytes");
+
+                if (exitCode == 0 && tempCover.exists() && tempCover.length() > 0) {
+                    System.out.println("Cover art extraída com sucesso!");
+
+                    // Carregar imagem
+                    BufferedImage coverImage = ImageIO.read(tempCover);
+
+                    if (coverImage != null) {
+                        audioCoverArt = coverImage;
+
+                        SwingUtilities.invokeLater(() -> {
+                            // Atualizar painel para mostrar a capa
+                            videoPanel.setCoverArt(audioCoverArt);
+                            videoPanel.repaint();
+                            System.out.println("Cover art carregada: " + coverImage.getWidth() + "x" + coverImage.getHeight());
+                        });
+                    } else {
+                        System.out.println("Não foi possível decodificar a imagem da capa");
+                    }
+
+                } else if (!hasAttachedPic) {
+                    System.out.println("Este arquivo não possui cover art (attached pic)");
+                } else {
+                    System.out.println("Falha ao extrair cover art (código: " + exitCode + ")");
+                }
+
+            } catch (Exception e) {
+                System.err.println("Erro ao extrair cover art: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }, "CoverArtExtractor").start();
+    }
 
     // ==================== CLASSE INTERNA: AudioSpectrumPanel ====================
 
@@ -5113,6 +5089,9 @@ private void seekToPosition(int percentage) {
         private float[] spectrum;
         private float[] smoothedSpectrum;
         private float[] peakLevels;
+        // NOVO: Cover art
+        private BufferedImage coverArt;
+        private float coverOpacity = 0.3f; // Opacidade da capa (0.0 a 1.0)
 
         private static final float SMOOTHING_FACTOR = 0.25f;
         private static final float GRAVITY = 0.92f;
@@ -5141,6 +5120,19 @@ private void seekToPosition(int percentage) {
         private boolean showReflection = true;
         private float reflectionHeight = 0.5f; // Altura do reflexo (0.0 a 1.0)
         private int reflectionAlpha = 100; // Transparência do reflexo (0 a 255)
+
+
+        // NOVO: Método para definir cover art
+        public void setCoverArt(BufferedImage cover) {
+            this.coverArt = cover;
+            repaint();
+        }
+
+        // NOVO: Método para ajustar opacidade da capa
+        public void setCoverOpacity(float opacity) {
+            this.coverOpacity = Math.max(0.0f, Math.min(1.0f, opacity));
+            repaint();
+        }
 
         // Métodos para controlar o reflexo
         public void setShowReflection(boolean show) {
@@ -5223,14 +5215,6 @@ private void seekToPosition(int percentage) {
             this.columnSpacing = Math.max(0, spacing);
         }
 
-//        /** Define largura e altura do painel (método dinâmico) */
-//        public void setPanelSize(int width, int height) {
-//            this.panelWidth = Math.max(100, width);
-//            this.panelHeight = Math.max(100, height);
-//            setPreferredSize(new Dimension(panelWidth, panelHeight));
-//            revalidate();  // atualiza o layout
-//            repaint();
-//        }
         /** Define largura e altura do painel (método dinâmico) */
         public void setPanelSize(int width, int height) {
             this.panelWidth = Math.max(100, width);
@@ -5260,95 +5244,6 @@ private void seekToPosition(int percentage) {
             }
         }
 
-//        // ==================== DESENHO ====================
-//        @Override
-//        protected void paintComponent(Graphics g) {
-//            super.paintComponent(g);
-//            Graphics2D g2d = (Graphics2D) g.create();
-//            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-//
-//            int width = getWidth();
-//            int height = getHeight();
-//            int barWidth = Math.max(1, (int) (((width - (barCount + 1) * columnSpacing) / (float) barCount) * barWidthFactor));
-//            int maxBarHeight = height - 100;
-//
-//            // ===== Título =====
-//            g2d.setColor(new Color(255, 255, 255, 100));
-//            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
-//            String title = "🎵 Audio Spectrum Analyzer";
-//            FontMetrics fm = g2d.getFontMetrics();
-//            int titleWidth = fm.stringWidth(title);
-//            g2d.drawString(title, (width - titleWidth) / 2, 50);
-//
-//            // ===== Barras =====
-//            for (int i = 0; i < barCount; i++) {
-//                int x = columnSpacing + i * (barWidth + columnSpacing);
-//                int barHeight = (int) (smoothedSpectrum[i] * maxBarHeight);
-//                barHeight = Math.max(squareSize, barHeight);
-//
-//                int adjustedSquareHeight = (int) (squareSize * squareHeightMultiplier);
-//                int numSquares = barHeight / (adjustedSquareHeight + spacingY);
-//                if (numSquares < 1) numSquares = 1;
-//
-//                int startY = height - 20 - (numSquares * (adjustedSquareHeight + spacingY));
-//                float intensity = Math.min(1.0f, smoothedSpectrum[i] * 1.5f);
-//
-//                // === Glow com cor adaptada à altura ===
-//                float avgPos = (float) barHeight / maxBarHeight;
-//                Color glowColor = getColorForPosition(avgPos);
-//
-//                // === Brilho difuso ===
-//                for (int glow = glowRadius; glow > 0; glow--) {
-//                    float alpha = (float) glow / glowRadius;
-//                    int glowAlpha = (int) (40 * alpha * intensity);
-//                    g2d.setColor(new Color(
-//                            glowColor.getRed(),
-//                            glowColor.getGreen(),
-//                            glowColor.getBlue(),
-//                            Math.max(0, glowAlpha)
-//                    ));
-//                    g2d.fillRoundRect(x - glow / 2, height - 20 - barHeight - glow / 2,
-//                            barWidth + glow, barHeight + glow, 6, 6);
-//                }
-//
-//                // === Quadradinhos ===
-//                for (int j = 0; j < numSquares; j++) {
-//                    int y = startY + j * (adjustedSquareHeight + spacingY);
-//                    float posRatio = (float) (numSquares - 1 - j) / (float) (numSquares - 1);
-//                    Color baseColor = getColorForPosition(posRatio);
-//
-//                    int r = Math.min(255, (int) (baseColor.getRed() * (0.6f + 0.4f * intensity)));
-//                    int gC = Math.min(255, (int) (baseColor.getGreen() * (0.6f + 0.4f * intensity)));
-//                    int b = Math.min(255, (int) (baseColor.getBlue() * (0.6f + 0.4f * intensity)));
-//                    int alpha = Math.min(255, (int) (200 + 55 * intensity));
-//
-//                    g2d.setColor(new Color(r, gC, b, alpha));
-//                    g2d.fillRect(x, y, barWidth, adjustedSquareHeight);
-//
-//                    // borda sutil
-//                    g2d.setColor(new Color(0, 0, 0, 60));
-//                    g2d.drawRect(x, y, barWidth, adjustedSquareHeight);
-//                }
-//
-//                // === Marcador de pico ===
-//                int peakY = height - 20 - (int) (peakLevels[i] * maxBarHeight)
-//                        - adjustedSquareHeight - spacingY;
-//                peakY = Math.max(10, Math.min(height - 20 - adjustedSquareHeight, peakY));
-//
-//                g2d.setColor(new Color(255, 80, 80, (int) (180 + 60 * intensity)));
-//                g2d.fillRect(x, peakY, barWidth, adjustedSquareHeight);
-//                g2d.setColor(new Color(0, 0, 0, 80));
-//                g2d.drawRect(x, peakY, barWidth, adjustedSquareHeight);
-//            }
-//
-//            // ===== Linha de base =====
-//            g2d.setColor(new Color(255, 255, 255, 50));
-//            g2d.fillRect(0, height - 20, width, 2);
-//
-//            g2d.dispose();
-//        }
-// ==================== MODIFICAR O MÉTODO paintComponent ====================
-
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
@@ -5357,6 +5252,12 @@ private void seekToPosition(int percentage) {
 
             int width = getWidth();
             int height = getHeight();
+
+            // ===== DESENHAR COVER ART NO FUNDO (SE EXISTIR) =====
+            if (coverArt != null) {
+                drawCoverArt(g2d, width, height);
+            }
+
             int barWidth = Math.max(1, (int) (((width - (barCount + 1) * columnSpacing) / (float) barCount) * barWidthFactor));
 
             // Dividir altura: metade para spectrum original, metade para reflexo
@@ -5366,8 +5267,8 @@ private void seekToPosition(int percentage) {
 
             // ===== Título =====
             g2d.setColor(new Color(255, 255, 255, 100));
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
-            String title = "🎵 Audio Spectrum Analyzer";
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            String title = "Audio Spectrum Analyzer";
             FontMetrics fm = g2d.getFontMetrics();
             int titleWidth = fm.stringWidth(title);
             g2d.drawString(title, (width - titleWidth) / 2, 50);
@@ -5517,6 +5418,53 @@ private void seekToPosition(int percentage) {
                 float localRatio = (posRatio - 0.5f) * 2.0f;
                 return new Color(255, (int) (255 * (1 - localRatio)), 0);
             }
+        }
+
+
+        // NOVO: Método para desenhar cover art no fundo
+        private void drawCoverArt(Graphics2D g2d, int panelWidth, int panelHeight) {
+            if (coverArt == null) return;
+
+            // Salvar composição original
+            Composite originalComposite = g2d.getComposite();
+
+            // Calcular dimensões mantendo aspect ratio e centralizando
+            int imgWidth = coverArt.getWidth();
+            int imgHeight = coverArt.getHeight();
+
+            double scaleX = (double) panelWidth / imgWidth;
+            double scaleY = (double) panelHeight / imgHeight;
+            double scale = Math.min(scaleX, scaleY);
+
+            int scaledWidth = (int) (imgWidth * scale);
+            int scaledHeight = (int) (imgHeight * scale);
+            int x = (panelWidth - scaledWidth) / 2;
+            int y = (panelHeight - scaledHeight) / 2;
+
+            // Aplicar opacidade
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, coverOpacity));
+
+            // Desenhar cover art
+            g2d.drawImage(coverArt, x, y, scaledWidth, scaledHeight, null);
+
+            // Opcional: Adicionar blur/desfoque nas bordas para efeito mais suave
+            // Desenhar gradiente escuro nas bordas para destacar o spectrum
+            GradientPaint topGradient = new GradientPaint(
+                    0, 0, new Color(0, 0, 0, 180),
+                    0, panelHeight / 4, new Color(0, 0, 0, 0)
+            );
+            g2d.setPaint(topGradient);
+            g2d.fillRect(0, 0, panelWidth, panelHeight / 4);
+
+            GradientPaint bottomGradient = new GradientPaint(
+                    0, panelHeight * 3 / 4, new Color(0, 0, 0, 0),
+                    0, panelHeight, new Color(0, 0, 0, 180)
+            );
+            g2d.setPaint(bottomGradient);
+            g2d.fillRect(0, panelHeight * 3 / 4, panelWidth, panelHeight / 4);
+
+            // Restaurar composição
+            g2d.setComposite(originalComposite);
         }
     }
 
