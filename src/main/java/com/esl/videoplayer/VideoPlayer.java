@@ -127,6 +127,11 @@ public class VideoPlayer extends JFrame {
     // Adicionar variável de instância para controlar se é áudio ou vídeo
     private boolean isAudioOnly = false;
 
+    // Variáveis para spectrum analyzer
+    private float[] spectrumData = new float[64]; // 64 barras de frequência
+    private final Object spectrumLock = new Object();
+
+
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
     setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -1185,6 +1190,7 @@ private void parseAudioStreamsFromJson(String json) {
     // Painel customizado com double buffering e legendas
     class VideoPanel extends JPanel {
         private BufferedImage currentImage;
+        private AudioSpectrumPanel spectrumPanel;
 
         public BufferedImage getCurrentImage() {
             return currentImage;
@@ -1192,12 +1198,42 @@ private void parseAudioStreamsFromJson(String json) {
 
 
         public VideoPanel() {
+
             setBackground(Color.BLACK);
             setDoubleBuffered(true);
-            setupContextMenu();
-        }
 
-private void setupContextMenu() {
+//            setLayout(new BorderLayout());
+
+            // NÃO usar BorderLayout aqui, usar null layout para controle manual
+            setLayout(null);
+
+            // Criar spectrum panel (inicialmente invisível)
+            spectrumPanel = new AudioSpectrumPanel();
+            spectrumPanel.setVisible(false);
+
+            add(spectrumPanel, BorderLayout.CENTER);
+
+            setupContextMenu();
+
+            // Listener para redimensionar spectrum quando o VideoPanel mudar
+            addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (spectrumPanel.isVisible()) {
+                        centerSpectrumPanel();
+                    }
+                }
+            });
+        }
+        // NOVO: Método para centralizar o spectrum panel
+        private void centerSpectrumPanel() {
+            int panelWidth = spectrumPanel.getPanelWidth();
+            int panelHeight = spectrumPanel.getPanelHeight();
+            int x = (getWidth() - panelWidth) / 2;
+            int y = (getHeight() - panelHeight) / 2;
+            spectrumPanel.setBounds(x, y, panelWidth, panelHeight);
+        }
+       private void setupContextMenu() {
     JPopupMenu contextMenu = new JPopupMenu();
 
     // Menu de áudio
@@ -1597,8 +1633,8 @@ private void setupContextMenu() {
         }
 
 
-// Modificar o método updateContextMenus:
-private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
+       // Modificar o método updateContextMenus:
+       private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
     // Atualizar menu de áudio
     audioMenu.removeAll();
     if (totalAudioStreams > 1) {
@@ -1645,61 +1681,117 @@ private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
     }
 }
 
-        public void updateImage(BufferedImage img) {
-            this.currentImage = img;
+//        public void updateImage(BufferedImage img) {
+//            this.currentImage = img;
+//            repaint();
+//        }
+public void updateImage(BufferedImage img) {
+    this.currentImage = img;
+    // Quando há imagem de vídeo, esconder spectrum
+    if (spectrumPanel != null) {
+        spectrumPanel.setVisible(false);
+    }
+    repaint();
+}
+        // NOVO: Método para mostrar spectrum analyzer
+        public void showSpectrum() {
+            this.currentImage = null;
+            if (spectrumPanel != null) {
+                spectrumPanel.setVisible(true);
+                centerSpectrumPanel(); // Centralizar ao mostrar
+            }
             repaint();
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-
-            if (currentImage == null) {
-                g.setColor(Color.WHITE);
-                g.setFont(new Font("Arial", Font.BOLD, 16));
-                String msg = "Clique em 'Abrir Vídeo' para começar";
-                FontMetrics fm = g.getFontMetrics();
-                int x = (getWidth() - fm.stringWidth(msg)) / 2;
-                int y = getHeight() / 2;
-                g.drawString(msg, x, y);
-                return;
+        // NOVO: Método para atualizar dados do spectrum
+        public void updateSpectrum(float[] spectrum) {
+            if (spectrumPanel != null) {
+                spectrumPanel.updateSpectrum(spectrum);
             }
-
-            // Calcular dimensões mantendo aspect ratio
-            int panelWidth = getWidth();
-            int panelHeight = getHeight();
-            int imgWidth = currentImage.getWidth();
-            int imgHeight = currentImage.getHeight();
-
-            double panelRatio = (double) panelWidth / panelHeight;
-            double imgRatio = (double) imgWidth / imgHeight;
-
-            int drawWidth, drawHeight, x, y;
-
-            if (panelRatio > imgRatio) {
-                drawHeight = panelHeight;
-                drawWidth = (int) (imgWidth * ((double) panelHeight / imgHeight));
-                x = (panelWidth - drawWidth) / 2;
-                y = 0;
-            } else {
-                drawWidth = panelWidth;
-                drawHeight = (int) (imgHeight * ((double) panelWidth / imgWidth));
-                x = 0;
-                y = (panelHeight - drawHeight) / 2;
+        }
+        // NOVO: Método público para alterar tamanho do spectrum
+        public void setSpectrumSize(int width, int height) {
+            if (spectrumPanel != null) {
+                spectrumPanel.setPanelSize(width, height);
+                if (spectrumPanel.isVisible()) {
+                    centerSpectrumPanel();
+                }
             }
-
-            Graphics2D g2d = (Graphics2D) g;
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
-
-            g2d.drawImage(currentImage, x, y, drawWidth, drawHeight, null);
-
-            // Desenhar legendas
-            if (!currentSubtitleText.isEmpty()) {
-                drawSubtitles(g2d, panelWidth, panelHeight);
+        }
+        // Na classe VideoPanel, adicionar:
+        public void setSpectrumReflection(boolean show) {
+            if (spectrumPanel != null) {
+                spectrumPanel.setShowReflection(show);
             }
         }
 
+        public void setSpectrumReflectionHeight(float height) {
+            if (spectrumPanel != null) {
+                spectrumPanel.setReflectionHeight(height);
+            }
+        }
+
+        public void setSpectrumReflectionAlpha(int alpha) {
+            if (spectrumPanel != null) {
+                spectrumPanel.setReflectionAlpha(alpha);
+            }
+        }
+
+   @Override
+   protected void paintComponent(Graphics g) {
+    super.paintComponent(g);
+
+    // Se spectrum estiver visível, ele se desenha sozinho
+    if (spectrumPanel != null && spectrumPanel.isVisible()) {
+        return;
+    }
+
+    if (currentImage == null) {
+        // Mensagem padrão quando não há vídeo nem áudio
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Arial", Font.BOLD, 16));
+        String msg = "Clique em 'Abrir Vídeo' para começar";
+        FontMetrics fm = g.getFontMetrics();
+        int x = (getWidth() - fm.stringWidth(msg)) / 2;
+        int y = getHeight() / 2;
+        g.drawString(msg, x, y);
+        return;
+    }
+
+    // Calcular dimensões mantendo aspect ratio
+    int panelWidth = getWidth();
+    int panelHeight = getHeight();
+    int imgWidth = currentImage.getWidth();
+    int imgHeight = currentImage.getHeight();
+
+    double panelRatio = (double) panelWidth / panelHeight;
+    double imgRatio = (double) imgWidth / imgHeight;
+
+    int drawWidth, drawHeight, x, y;
+
+    if (panelRatio > imgRatio) {
+        drawHeight = panelHeight;
+        drawWidth = (int) (imgWidth * ((double) panelHeight / imgHeight));
+        x = (panelWidth - drawWidth) / 2;
+        y = 0;
+    } else {
+        drawWidth = panelWidth;
+        drawHeight = (int) (imgHeight * ((double) panelWidth / imgWidth));
+        x = 0;
+        y = (panelHeight - drawHeight) / 2;
+    }
+
+    Graphics2D g2d = (Graphics2D) g;
+    g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+    g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+
+    g2d.drawImage(currentImage, x, y, drawWidth, drawHeight, null);
+
+    // Desenhar legendas
+    if (!currentSubtitleText.isEmpty()) {
+        drawSubtitles(g2d, panelWidth, panelHeight);
+    }
+}
         // Modificar o método drawSubtitles()
         private void drawSubtitles(Graphics2D g2d, int panelWidth, int panelHeight) {
             g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -2575,7 +2667,7 @@ private void captureFrame() {
                                 16,                    // 16-bit samples
                                 outputChannels,        // stereo ou mono
                                 true,                  // signed
-                                false                   // big-endian (Para audio tem que ser false)
+                                true                   // big-endian (Para audio tem que ser false)
                         );
 
                         DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
@@ -2616,9 +2708,22 @@ private void captureFrame() {
                     updateTimeLabel();
 
                     // Limpar painel de vídeo e mostrar mensagem
-                    videoPanel.updateImage(null);
-                    videoPanel.repaint();
+//                    videoPanel.updateImage(null);
+//                    videoPanel.repaint();
+                  // Mostrar spectrum analyzer
 
+                    // USAR O MÉTODO PÚBLICO EM VEZ DE ACESSAR spectrumPanel DIRETAMENTE
+                    videoPanel.setSpectrumSize(600, 300);
+                    // Ativar reflexo
+                    videoPanel.setSpectrumReflection(true);
+
+                   // Ajustar altura do reflexo (0.0 a 1.0)
+                    videoPanel.setSpectrumReflectionHeight(1f); // 50% da altura original
+
+                    // Ajustar transparência do reflexo (0 a 255)
+                    videoPanel.setSpectrumReflectionAlpha(180); // Mais transparente
+
+                    videoPanel.showSpectrum();
                     setTitle("Video Player - " + new java.io.File(filepath).getName());
 
                     playVideo();
@@ -4058,9 +4163,8 @@ private void switchSubtitleStream(int streamIndex) {
             SwingUtilities.invokeLater(() -> {
                 JOptionPane.showMessageDialog(this,
                         "Não foi possível carregar a legenda embutida.\n" +
-                                "Verifique o console para mais detalhes.\n\n" +
                                 "Possíveis causas:\n" +
-                                "- FFmpeg não está instalado ou não está no PATH\n" +
+                                "- FFmpeg não está na pasta lib app\n" +
                                 "- Stream de legenda incompatível\n" +
                                 "- Formato de legenda não suportado\n\n" +
                                 "Erro: " + e.getMessage(),
@@ -4110,6 +4214,7 @@ private void playVideo() {
 
     if (audioLine != null && !audioLine.isRunning()) {
         audioLine.start();
+        videoPanel.spectrumPanel.setPaused(false);
     }
 
     playbackThread = new Thread(() -> {
@@ -4285,14 +4390,113 @@ private void playVideo() {
 
     playbackThread.start();
 }
-    // Método auxiliar para processar samples de áudio (para áudio apenas)
+//    // Método auxiliar para processar samples de áudio (para áudio apenas)
+//    private byte[] processAudioSamples(ShortBuffer channelSamples) {
+//        try {
+//            if (audioChannels > 2) {
+//                // Downmix para estéreo
+//                int totalSamples = channelSamples.remaining();
+//                int framesCount = totalSamples / audioChannels;
+//                byte[] audioBytes = new byte[framesCount * 2 * 2]; // 2 canais, 2 bytes por sample
+//
+//                for (int i = 0; i < framesCount; i++) {
+//                    int baseIndex = i * audioChannels;
+//                    float left = 0, right = 0;
+//
+//                    if (audioChannels == 6) {
+//                        short fl = channelSamples.get(baseIndex + 0);
+//                        short fr = channelSamples.get(baseIndex + 1);
+//                        short center = channelSamples.get(baseIndex + 2);
+//                        short lfe = channelSamples.get(baseIndex + 3);
+//                        short rl = channelSamples.get(baseIndex + 4);
+//                        short rr = channelSamples.get(baseIndex + 5);
+//
+//                        left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
+//                        right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
+//                    } else {
+//                        // Downmix genérico
+//                        int leftSum = 0, rightSum = 0;
+//                        int leftCount = 0, rightCount = 0;
+//
+//                        for (int ch = 0; ch < audioChannels; ch++) {
+//                            short sample = channelSamples.get(baseIndex + ch);
+//                            if (ch % 2 == 0) {
+//                                leftSum += sample;
+//                                leftCount++;
+//                            } else {
+//                                rightSum += sample;
+//                                rightCount++;
+//                            }
+//                        }
+//
+//                        left = (leftCount > 0 ? leftSum / leftCount : 0);
+//                        right = (rightCount > 0 ? rightSum / rightCount : 0);
+//                    }
+//
+//                    // Aplicar volume
+//                    left *= volume;
+//                    right *= volume;
+//
+//                    // Clamping
+//                    left = Math.max(-32768, Math.min(32767, left));
+//                    right = Math.max(-32768, Math.min(32767, right));
+//
+//                    // Converter para bytes (big-endian - CORRIGIDO)
+//                    short leftShort = (short)left;
+//                    short rightShort = (short)right;
+//
+//                    audioBytes[i * 4] = (byte)((leftShort >> 8) & 0xFF);
+//                    audioBytes[i * 4 + 1] = (byte)(leftShort & 0xFF);
+//                    audioBytes[i * 4 + 2] = (byte)((rightShort >> 8) & 0xFF);
+//                    audioBytes[i * 4 + 3] = (byte)(rightShort & 0xFF);
+//                }
+//
+//                return audioBytes;
+//
+//            } else {
+//                // Mono ou estéreo - conversão direta
+//                byte[] audioBytes = new byte[channelSamples.capacity() * 2];
+//                for (int i = 0; i < channelSamples.capacity(); i++) {
+//                    short s = channelSamples.get(i);
+//                    s = (short)(s * volume);
+//                    audioBytes[i * 2] = (byte)(s & 0xFF);
+//                    audioBytes[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+//                }
+//                return audioBytes;
+//            }
+//        } catch (Exception e) {
+//            System.err.println("Erro ao processar samples: " + e.getMessage());
+//            return null;
+//        }
+//    }
+// ==================== MODIFICAR: processAudioSamples ====================
+
     private byte[] processAudioSamples(ShortBuffer channelSamples) {
         try {
+            // Copiar samples para array para FFT
+            short[] audioSamplesForFFT = new short[channelSamples.remaining()];
+            channelSamples.mark();
+            channelSamples.get(audioSamplesForFFT);
+            channelSamples.reset();
+
+            // Calcular spectrum em thread separada para não travar
+            if (isAudioOnly) {
+                float[] spectrum = calculateFFT(audioSamplesForFFT, audioSamplesForFFT.length);
+                synchronized (spectrumLock) {
+                    spectrumData = spectrum;
+                }
+
+                // Atualizar UI
+                SwingUtilities.invokeLater(() -> {
+                    videoPanel.updateSpectrum(spectrumData);
+                });
+            }
+
+            // Resto do código existente de processamento...
             if (audioChannels > 2) {
-                // Downmix para estéreo
                 int totalSamples = channelSamples.remaining();
                 int framesCount = totalSamples / audioChannels;
-                byte[] audioBytes = new byte[framesCount * 2 * 2]; // 2 canais, 2 bytes por sample
+                byte[] audioBytes = new byte[framesCount * 2 * 2];
 
                 for (int i = 0; i < framesCount; i++) {
                     int baseIndex = i * audioChannels;
@@ -4309,7 +4513,6 @@ private void playVideo() {
                         left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
                         right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
                     } else {
-                        // Downmix genérico
                         int leftSum = 0, rightSum = 0;
                         int leftCount = 0, rightCount = 0;
 
@@ -4328,15 +4531,11 @@ private void playVideo() {
                         right = (rightCount > 0 ? rightSum / rightCount : 0);
                     }
 
-                    // Aplicar volume
                     left *= volume;
                     right *= volume;
-
-                    // Clamping
                     left = Math.max(-32768, Math.min(32767, left));
                     right = Math.max(-32768, Math.min(32767, right));
 
-                    // Converter para bytes (big-endian - CORRIGIDO)
                     short leftShort = (short)left;
                     short rightShort = (short)right;
 
@@ -4349,13 +4548,12 @@ private void playVideo() {
                 return audioBytes;
 
             } else {
-                // Mono ou estéreo - conversão direta
                 byte[] audioBytes = new byte[channelSamples.capacity() * 2];
                 for (int i = 0; i < channelSamples.capacity(); i++) {
                     short s = channelSamples.get(i);
                     s = (short)(s * volume);
-                    audioBytes[i * 2] = (byte)(s & 0xFF);
-                    audioBytes[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+                    audioBytes[i * 2] = (byte)((s >> 8) & 0xFF);
+                    audioBytes[i * 2 + 1] = (byte)(s & 0xFF);
                 }
                 return audioBytes;
             }
@@ -4364,8 +4562,102 @@ private void playVideo() {
             return null;
         }
     }
+// ==================== MÉTODO: Calcular FFT ====================
 
+    private float[] calculateFFT(short[] audioSamples, int sampleCount) {
+        // Usar apenas potência de 2 para FFT
+        int fftSize = 512;
+        if (sampleCount < fftSize) {
+            fftSize = 256;
+        }
 
+        // Preparar dados para FFT
+        float[] real = new float[fftSize];
+        float[] imag = new float[fftSize];
+
+        // Copiar samples e aplicar janela de Hamming
+        for (int i = 0; i < Math.min(sampleCount, fftSize); i++) {
+            float hamming = (float)(0.54 - 0.46 * Math.cos(2 * Math.PI * i / (fftSize - 1)));
+            real[i] = audioSamples[i] * hamming;
+            imag[i] = 0;
+        }
+
+        // FFT simples (Cooley-Tukey)
+        fft(real, imag);
+
+        // Calcular magnitudes e agrupar em 64 barras
+        float[] spectrum = new float[64];
+        int samplesPerBar = (fftSize / 2) / 64;
+
+        for (int i = 0; i < 64; i++) {
+            float sum = 0;
+            for (int j = 0; j < samplesPerBar; j++) {
+                int index = i * samplesPerBar + j;
+                if (index < fftSize / 2) {
+                    float magnitude = (float)Math.sqrt(real[index] * real[index] + imag[index] * imag[index]);
+                    sum += magnitude;
+                }
+            }
+
+            // Normalizar e aplicar escala logarítmica
+            float avg = sum / samplesPerBar;
+            spectrum[i] = (float)(Math.log10(1 + avg) / 5.0); // Escala log
+            spectrum[i] = Math.min(1.0f, spectrum[i]); // Limitar a 1.0
+        }
+
+        return spectrum;
+    }
+
+    // FFT Cooley-Tukey (in-place)
+    private void fft(float[] real, float[] imag) {
+        int n = real.length;
+
+        // Bit reversal
+        int j = 0;
+        for (int i = 0; i < n - 1; i++) {
+            if (i < j) {
+                float tempR = real[i];
+                float tempI = imag[i];
+                real[i] = real[j];
+                imag[i] = imag[j];
+                real[j] = tempR;
+                imag[j] = tempI;
+            }
+            int k = n / 2;
+            while (k <= j) {
+                j -= k;
+                k /= 2;
+            }
+            j += k;
+        }
+
+        // Butterfly computations
+        for (int len = 2; len <= n; len *= 2) {
+            float angle = (float) (-2 * Math.PI / len);
+            float wlenR = (float) Math.cos(angle);
+            float wlenI = (float) Math.sin(angle);
+
+            for (int i = 0; i < n; i += len) {
+                float wR = 1.0f;
+                float wI = 0.0f;
+
+                for (int h = 0; h < len / 2; h++) {
+                    float uR = real[i + h];
+                    float uI = imag[i + h];
+                    float tR = wR * real[i + h + len / 2] - wI * imag[i + h + len / 2];
+                    float tI = wR * imag[i + h + len / 2] + wI * real[i + h + len / 2];
+
+                    real[i + h] = uR + tR;
+                    imag[i + h] = uI + tI;
+                    real[i + h + len / 2] = uR - tR;
+                    imag[i + h + len / 2] = uI - tI;
+
+                    float tempR = wR;
+                    wR = wR * wlenR - wI * wlenI;
+                    wI = tempR * wlenI + wI * wlenR;
+                }
+            }
+        }}
     // Método auxiliar para processar áudio de vídeo (mantém lógica original)
     private void processVideoAudioFrame(Frame frame) {
         if (frame.samples == null || audioLine == null) {
@@ -4502,6 +4794,7 @@ private void pauseVideo() {
     if (audioLine != null && audioLine.isRunning()) {
         audioLine.stop();
         audioLine.flush();
+        videoPanel.spectrumPanel.setPaused(true);
     }
 
     // Aguardar thread terminar para garantir que currentFrame está correto
@@ -4533,6 +4826,7 @@ private void pauseVideo() {
         if (audioLine != null && audioLine.isRunning()) {
             audioLine.stop();
             audioLine.flush();
+            videoPanel.spectrumPanel.setPaused(true);
         }
 
         if (playbackThread != null) {
@@ -4654,6 +4948,578 @@ private void seekToPosition(int percentage) {
             return String.format("%02d:%02d", minutes, secs);
         }
     }
+//    // ==================== CLASSE INTERNA: AudioSpectrumPanel ====================
+//
+//    class AudioSpectrumPanel extends JPanel {
+//        private float[] spectrum = new float[64];
+//        private float[] smoothedSpectrum = new float[64];
+//        private Color[] barColors = new Color[64];
+//        private static final float SMOOTHING_FACTOR = 0.25f;
+//        private static final float GRAVITY = 0.92f;
+//        private Timer animationTimer;
+//
+//        public AudioSpectrumPanel() {
+//            setBackground(Color.BLACK);
+//            setOpaque(true);
+//
+//            // Inicializar cores do gradiente (verde -> amarelo -> vermelho)
+//            for (int i = 0; i < 64; i++) {
+//                float ratio = i / 63.0f;
+//                if (ratio < 0.5f) {
+//                    // Verde para amarelo
+//                    float localRatio = ratio * 2.0f;
+//                    barColors[i] = new Color(
+//                            (int)(255 * localRatio),
+//                            255,
+//                            0
+//                    );
+//                } else {
+//                    // Amarelo para vermelho
+//                    float localRatio = (ratio - 0.5f) * 2.0f;
+//                    barColors[i] = new Color(
+//                            255,
+//                            (int)(255 * (1 - localRatio)),
+//                            0
+//                    );
+//                }
+//            }
+//
+//            // Timer para animação suave
+//            animationTimer = new Timer(16, e -> { // ~60 FPS
+//                for (int i = 0; i < spectrum.length; i++) {
+//                    // Suavização exponencial
+//                    smoothedSpectrum[i] = smoothedSpectrum[i] * (1 - SMOOTHING_FACTOR) +
+//                            spectrum[i] * SMOOTHING_FACTOR;
+//
+//                    // Aplicar gravidade (queda suave)
+//                    smoothedSpectrum[i] *= GRAVITY;
+//                }
+//                repaint();
+//            });
+//            animationTimer.start();
+//        }
+//
+//        public void updateSpectrum(float[] newSpectrum) {
+//            if (newSpectrum != null && newSpectrum.length == spectrum.length) {
+//                System.arraycopy(newSpectrum, 0, spectrum, 0, spectrum.length);
+//            }
+//        }
+//
+//        @Override
+//        protected void paintComponent(Graphics g) {
+//            super.paintComponent(g);
+//            Graphics2D g2d = (Graphics2D) g;
+//            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+//
+//            int width = getWidth();
+//            int height = getHeight();
+//            int barCount = smoothedSpectrum.length;
+//            int barWidth = Math.max(1, (width - (barCount + 1) * 2) / barCount);
+//            int spacing = 2;
+//
+//            // Desenhar título
+//            g2d.setColor(new Color(255, 255, 255, 100));
+//            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
+//            String title = "🎵 Audio Spectrum Analyzer";
+//            FontMetrics fm = g2d.getFontMetrics();
+//            int titleWidth = fm.stringWidth(title);
+//            g2d.drawString(title, (width - titleWidth) / 2, 50);
+//
+//            int maxBarHeight = height - 100;
+//
+//            // Desenhar barras
+//            for (int i = 0; i < barCount; i++) {
+//                int x = spacing + i * (barWidth + spacing);
+//                int barHeight = (int)(smoothedSpectrum[i] * maxBarHeight);
+//                barHeight = Math.max(2, barHeight); // Altura mínima
+//                int y = height - barHeight - 20;
+//
+//                // Definir cores do gradiente FIXO para toda a altura disponível
+//                // Base (embaixo): Verde
+//                Color baseColor = new Color(0, 255, 0);
+//                // Meio: Amarelo
+//                Color middleColor = new Color(255, 255, 0);
+//                // Topo: Vermelho
+//                Color topColor = new Color(255, 0, 0);
+//
+//                // Criar gradiente multi-paradas (verde->amarelo->vermelho)
+//                // Como Java não tem multi-stop gradient nativo, vamos desenhar em segmentos
+//
+//                int segmentHeight = barHeight / 3;
+//
+//                if (barHeight > 6) {
+//                    // Segmento inferior: Verde -> Amarelo
+//                    GradientPaint gradientBottom = new GradientPaint(
+//                            x, y + barHeight, baseColor,
+//                            x, y + barHeight - segmentHeight, middleColor
+//                    );
+//                    g2d.setPaint(gradientBottom);
+//                    g2d.fillRoundRect(x, y + barHeight - segmentHeight, barWidth, segmentHeight, 4, 4);
+//
+//                    // Segmento médio: Amarelo
+//                    g2d.setColor(middleColor);
+//                    g2d.fillRect(x, y + segmentHeight, barWidth, barHeight - 2 * segmentHeight);
+//
+//                    // Segmento superior: Amarelo -> Vermelho
+//                    GradientPaint gradientTop = new GradientPaint(
+//                            x, y + segmentHeight, middleColor,
+//                            x, y, topColor
+//                    );
+//                    g2d.setPaint(gradientTop);
+//                    g2d.fillRoundRect(x, y, barWidth, segmentHeight, 4, 4);
+//                } else {
+//                    // Para barras muito pequenas, usar gradiente simples
+//                    GradientPaint gradient = new GradientPaint(
+//                            x, y + barHeight, baseColor,
+//                            x, y, topColor
+//                    );
+//                    g2d.setPaint(gradient);
+//                    g2d.fillRoundRect(x, y, barWidth, barHeight, 4, 4);
+//                }
+//
+//                // Adicionar brilho no topo
+//                if (barHeight > 5) {
+//                    // Cor do brilho baseada na posição da barra
+//                    float topRatio = (float)y / maxBarHeight;
+//                    if (topRatio < 0.33f) {
+//                        g2d.setColor(new Color(255, 100, 0, 200)); // Laranja/vermelho
+//                    } else if (topRatio < 0.66f) {
+//                        g2d.setColor(new Color(255, 255, 100, 180)); // Amarelo
+//                    } else {
+//                        g2d.setColor(new Color(200, 255, 200, 150)); // Verde claro
+//                    }
+//                    g2d.fillRoundRect(x, y, barWidth, 3, 4, 4);
+//                }
+//
+//                // Desenhar reflexo embaixo com cor verde
+//                GradientPaint reflection = new GradientPaint(
+//                        x, height - 18, new Color(0, 255, 0, 80),
+//                        x, height - 5, new Color(0, 255, 0, 0)
+//                );
+//                g2d.setPaint(reflection);
+//                int reflectionHeight = Math.min(barHeight / 3, 13);
+//                g2d.fillRoundRect(x, height - 18, barWidth, reflectionHeight, 4, 4);
+//            }
+//
+//            // Desenhar linha de base
+//            g2d.setColor(new Color(255, 255, 255, 50));
+//            g2d.fillRect(0, height - 20, width, 2);
+//        }
+//    }
+
+    // ==================== CLASSE INTERNA: AudioSpectrumPanel ====================
+
+    class AudioSpectrumPanel extends JPanel {
+        private float[] spectrum;
+        private float[] smoothedSpectrum;
+        private float[] peakLevels;
+
+        private static final float SMOOTHING_FACTOR = 0.25f;
+        private static final float GRAVITY = 0.92f;
+        private static final float PEAK_DECAY = 0.02f;
+
+        private Timer animationTimer;
+
+        // Controle de pausa e picos
+        private boolean paused = false;
+        private boolean lockPeaksOnPause = true;
+
+        // Parâmetros visuais ajustáveis
+        private int squareSize = 6;              // altura base dos quadrados
+        private int spacingY = 2;                // espaçamento vertical entre quadrados
+        private int glowRadius = 3;             // raio do brilho difuso
+        private float squareHeightMultiplier = 1.0f;
+        private float barWidthFactor = 1.3f;
+        private int barCount = 50;               // número de colunas
+        private int columnSpacing = 4;           // espaçamento entre colunas
+
+        // Dimensões ajustáveis do painel
+        private int panelWidth = 600;
+        private int panelHeight = 300;
+
+        // Controle de reflexo
+        private boolean showReflection = true;
+        private float reflectionHeight = 0.5f; // Altura do reflexo (0.0 a 1.0)
+        private int reflectionAlpha = 100; // Transparência do reflexo (0 a 255)
+
+        // Métodos para controlar o reflexo
+        public void setShowReflection(boolean show) {
+            this.showReflection = show;
+        }
+
+        public void setReflectionHeight(float height) {
+            this.reflectionHeight = Math.max(0.0f, Math.min(1.0f, height));
+        }
+
+        public void setReflectionAlpha(int alpha) {
+            this.reflectionAlpha = Math.max(0, Math.min(255, alpha));
+        }
+
+        public AudioSpectrumPanel() {
+            initArrays(barCount);
+
+            setBackground(Color.BLACK);
+            setOpaque(true);
+            setPreferredSize(new Dimension(panelWidth, panelHeight));
+
+            // Atualização ~60 FPS
+            animationTimer = new Timer(16, e -> {
+                for (int i = 0; i < spectrum.length; i++) {
+                    // suavização + gravidade
+                    smoothedSpectrum[i] = smoothedSpectrum[i] * (1 - SMOOTHING_FACTOR)
+                            + spectrum[i] * SMOOTHING_FACTOR;
+                    smoothedSpectrum[i] *= GRAVITY;
+
+                    // pico (peak hold)
+                    if (smoothedSpectrum[i] > peakLevels[i]) {
+                        peakLevels[i] = smoothedSpectrum[i];
+                    } else if (!(paused && lockPeaksOnPause)) {
+                        peakLevels[i] = Math.max(0f, peakLevels[i] - PEAK_DECAY);
+                    }
+                }
+                repaint();
+            });
+            animationTimer.start();
+        }
+
+        // ==================== MÉTODOS DE CONFIGURAÇÃO ====================
+
+        private void initArrays(int count) {
+            spectrum = new float[count];
+            smoothedSpectrum = new float[count];
+            peakLevels = new float[count];
+        }
+
+        public void setBarCount(int count) {
+            this.barCount = Math.max(8, count);
+            initArrays(this.barCount);
+        }
+
+        public void setPaused(boolean paused) {
+            this.paused = paused;
+        }
+
+        public void setLockPeaksOnPause(boolean lock) {
+            this.lockPeaksOnPause = lock;
+        }
+
+        public void setSquareSize(int size) {
+            this.squareSize = Math.max(2, size);
+        }
+
+        public void setSquareHeightMultiplier(float multiplier) {
+            this.squareHeightMultiplier = Math.max(0.5f, multiplier);
+        }
+
+        public void setBarWidthFactor(float factor) {
+            this.barWidthFactor = Math.max(0.5f, factor);
+        }
+
+        public void setGlowRadius(int radius) {
+            this.glowRadius = Math.max(0, radius);
+        }
+
+        public void setColumnSpacing(int spacing) {
+            this.columnSpacing = Math.max(0, spacing);
+        }
+
+//        /** Define largura e altura do painel (método dinâmico) */
+//        public void setPanelSize(int width, int height) {
+//            this.panelWidth = Math.max(100, width);
+//            this.panelHeight = Math.max(100, height);
+//            setPreferredSize(new Dimension(panelWidth, panelHeight));
+//            revalidate();  // atualiza o layout
+//            repaint();
+//        }
+        /** Define largura e altura do painel (método dinâmico) */
+        public void setPanelSize(int width, int height) {
+            this.panelWidth = Math.max(100, width);
+            this.panelHeight = Math.max(100, height);
+
+            // Definir bounds diretamente (funciona com null layout)
+            setBounds(getX(), getY(), panelWidth, panelHeight);
+
+            System.out.println("Spectrum size alterado para: " + panelWidth + "x" + panelHeight);
+            repaint();
+        }
+
+        /** Retorna a largura atual configurada */
+        public int getPanelWidth() {
+            return panelWidth;
+        }
+
+        /** Retorna a altura atual configurada */
+        public int getPanelHeight() {
+            return panelHeight;
+        }
+
+        public void updateSpectrum(float[] newSpectrum) {
+            if (newSpectrum != null) {
+                int len = Math.min(newSpectrum.length, spectrum.length);
+                System.arraycopy(newSpectrum, 0, spectrum, 0, len);
+            }
+        }
+
+//        // ==================== DESENHO ====================
+//        @Override
+//        protected void paintComponent(Graphics g) {
+//            super.paintComponent(g);
+//            Graphics2D g2d = (Graphics2D) g.create();
+//            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+//
+//            int width = getWidth();
+//            int height = getHeight();
+//            int barWidth = Math.max(1, (int) (((width - (barCount + 1) * columnSpacing) / (float) barCount) * barWidthFactor));
+//            int maxBarHeight = height - 100;
+//
+//            // ===== Título =====
+//            g2d.setColor(new Color(255, 255, 255, 100));
+//            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
+//            String title = "🎵 Audio Spectrum Analyzer";
+//            FontMetrics fm = g2d.getFontMetrics();
+//            int titleWidth = fm.stringWidth(title);
+//            g2d.drawString(title, (width - titleWidth) / 2, 50);
+//
+//            // ===== Barras =====
+//            for (int i = 0; i < barCount; i++) {
+//                int x = columnSpacing + i * (barWidth + columnSpacing);
+//                int barHeight = (int) (smoothedSpectrum[i] * maxBarHeight);
+//                barHeight = Math.max(squareSize, barHeight);
+//
+//                int adjustedSquareHeight = (int) (squareSize * squareHeightMultiplier);
+//                int numSquares = barHeight / (adjustedSquareHeight + spacingY);
+//                if (numSquares < 1) numSquares = 1;
+//
+//                int startY = height - 20 - (numSquares * (adjustedSquareHeight + spacingY));
+//                float intensity = Math.min(1.0f, smoothedSpectrum[i] * 1.5f);
+//
+//                // === Glow com cor adaptada à altura ===
+//                float avgPos = (float) barHeight / maxBarHeight;
+//                Color glowColor = getColorForPosition(avgPos);
+//
+//                // === Brilho difuso ===
+//                for (int glow = glowRadius; glow > 0; glow--) {
+//                    float alpha = (float) glow / glowRadius;
+//                    int glowAlpha = (int) (40 * alpha * intensity);
+//                    g2d.setColor(new Color(
+//                            glowColor.getRed(),
+//                            glowColor.getGreen(),
+//                            glowColor.getBlue(),
+//                            Math.max(0, glowAlpha)
+//                    ));
+//                    g2d.fillRoundRect(x - glow / 2, height - 20 - barHeight - glow / 2,
+//                            barWidth + glow, barHeight + glow, 6, 6);
+//                }
+//
+//                // === Quadradinhos ===
+//                for (int j = 0; j < numSquares; j++) {
+//                    int y = startY + j * (adjustedSquareHeight + spacingY);
+//                    float posRatio = (float) (numSquares - 1 - j) / (float) (numSquares - 1);
+//                    Color baseColor = getColorForPosition(posRatio);
+//
+//                    int r = Math.min(255, (int) (baseColor.getRed() * (0.6f + 0.4f * intensity)));
+//                    int gC = Math.min(255, (int) (baseColor.getGreen() * (0.6f + 0.4f * intensity)));
+//                    int b = Math.min(255, (int) (baseColor.getBlue() * (0.6f + 0.4f * intensity)));
+//                    int alpha = Math.min(255, (int) (200 + 55 * intensity));
+//
+//                    g2d.setColor(new Color(r, gC, b, alpha));
+//                    g2d.fillRect(x, y, barWidth, adjustedSquareHeight);
+//
+//                    // borda sutil
+//                    g2d.setColor(new Color(0, 0, 0, 60));
+//                    g2d.drawRect(x, y, barWidth, adjustedSquareHeight);
+//                }
+//
+//                // === Marcador de pico ===
+//                int peakY = height - 20 - (int) (peakLevels[i] * maxBarHeight)
+//                        - adjustedSquareHeight - spacingY;
+//                peakY = Math.max(10, Math.min(height - 20 - adjustedSquareHeight, peakY));
+//
+//                g2d.setColor(new Color(255, 80, 80, (int) (180 + 60 * intensity)));
+//                g2d.fillRect(x, peakY, barWidth, adjustedSquareHeight);
+//                g2d.setColor(new Color(0, 0, 0, 80));
+//                g2d.drawRect(x, peakY, barWidth, adjustedSquareHeight);
+//            }
+//
+//            // ===== Linha de base =====
+//            g2d.setColor(new Color(255, 255, 255, 50));
+//            g2d.fillRect(0, height - 20, width, 2);
+//
+//            g2d.dispose();
+//        }
+// ==================== MODIFICAR O MÉTODO paintComponent ====================
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int width = getWidth();
+            int height = getHeight();
+            int barWidth = Math.max(1, (int) (((width - (barCount + 1) * columnSpacing) / (float) barCount) * barWidthFactor));
+
+            // Dividir altura: metade para spectrum original, metade para reflexo
+            int titleHeight = 80;
+            int baseLineY = showReflection ? (height - titleHeight) / 2 + titleHeight : height - 20;
+            int maxBarHeight = baseLineY - titleHeight - 20;
+
+            // ===== Título =====
+            g2d.setColor(new Color(255, 255, 255, 100));
+            g2d.setFont(new Font("Segoe UI", Font.BOLD, 32));
+            String title = "🎵 Audio Spectrum Analyzer";
+            FontMetrics fm = g2d.getFontMetrics();
+            int titleWidth = fm.stringWidth(title);
+            g2d.drawString(title, (width - titleWidth) / 2, 50);
+
+            // ===== Desenhar Barras ORIGINAIS =====
+            drawBars(g2d, width, barWidth, maxBarHeight, baseLineY, false);
+
+            // ===== Linha de base (linha d'água) =====
+            if (showReflection) {
+                // Linha mais destacada quando há reflexo
+                g2d.setColor(new Color(100, 150, 255, 120));
+                g2d.fillRect(0, baseLineY, width, 3);
+
+                // Efeito de brilho na linha d'água
+                GradientPaint waterGlow = new GradientPaint(
+                        0, baseLineY - 10, new Color(100, 150, 255, 0),
+                        0, baseLineY, new Color(100, 150, 255, 80)
+                );
+                g2d.setPaint(waterGlow);
+                g2d.fillRect(0, baseLineY - 10, width, 10);
+            } else {
+                g2d.setColor(new Color(255, 255, 255, 50));
+                g2d.fillRect(0, baseLineY, width, 2);
+            }
+
+            // ===== Desenhar REFLEXO =====
+            if (showReflection) {
+                drawReflection(g2d, width, barWidth, maxBarHeight, baseLineY);
+            }
+
+            g2d.dispose();
+        }
+
+        // ===== NOVO MÉTODO: Desenhar as barras =====
+        private void drawBars(Graphics2D g2d, int width, int barWidth, int maxBarHeight, int baseY, boolean isReflection) {
+            for (int i = 0; i < barCount; i++) {
+                int x = columnSpacing + i * (barWidth + columnSpacing);
+                int barHeight = (int) (smoothedSpectrum[i] * maxBarHeight);
+                barHeight = Math.max(squareSize, barHeight);
+
+                int adjustedSquareHeight = (int) (squareSize * squareHeightMultiplier);
+                int numSquares = barHeight / (adjustedSquareHeight + spacingY);
+                if (numSquares < 1) numSquares = 1;
+
+                int startY = isReflection ?
+                        baseY + 3 : // Reflexo começa após a linha d'água
+                        baseY - (numSquares * (adjustedSquareHeight + spacingY)); // Original
+
+                float intensity = Math.min(1.0f, smoothedSpectrum[i] * 1.5f);
+
+                // === Cor adaptada à altura ===
+                float avgPos = (float) barHeight / maxBarHeight;
+                Color glowColor = getColorForPosition(avgPos);
+
+                // Transparência para reflexo
+                float alphaMultiplier = isReflection ? (reflectionAlpha / 255.0f) : 1.0f;
+
+                // === Brilho difuso ===
+                for (int glow = glowRadius; glow > 0; glow--) {
+                    float alpha = (float) glow / glowRadius;
+                    int glowAlpha = (int) (40 * alpha * intensity * alphaMultiplier);
+                    g2d.setColor(new Color(
+                            glowColor.getRed(),
+                            glowColor.getGreen(),
+                            glowColor.getBlue(),
+                            Math.max(0, glowAlpha)
+                    ));
+
+                    int yPos = isReflection ? startY - glow / 2 : baseY - barHeight - glow / 2;
+                    g2d.fillRoundRect(x - glow / 2, yPos, barWidth + glow, barHeight + glow, 6, 6);
+                }
+
+                // === Quadradinhos ===
+                int reflectionSquares = isReflection ? (int)(numSquares * reflectionHeight) : numSquares;
+
+                for (int j = 0; j < reflectionSquares; j++) {
+                    int y = startY + j * (adjustedSquareHeight + spacingY);
+
+                    // Para reflexo: inverter gradiente e adicionar fade gradual
+                    float posRatio;
+                    if (isReflection) {
+                        posRatio = (float) j / (float) (reflectionSquares - 1);
+                        // Fade adicional: mais transparente quanto mais longe da linha d'água
+                        alphaMultiplier *= (1.0f - (j / (float)reflectionSquares) * 0.6f);
+                    } else {
+                        posRatio = (float) (numSquares - 1 - j) / (float) (numSquares - 1);
+                    }
+
+                    Color baseColor = getColorForPosition(posRatio);
+
+                    int r = Math.min(255, (int) (baseColor.getRed() * (0.6f + 0.4f * intensity)));
+                    int gC = Math.min(255, (int) (baseColor.getGreen() * (0.6f + 0.4f * intensity)));
+                    int b = Math.min(255, (int) (baseColor.getBlue() * (0.6f + 0.4f * intensity)));
+                    int alpha = Math.min(255, (int) ((200 + 55 * intensity) * alphaMultiplier));
+
+                    g2d.setColor(new Color(r, gC, b, alpha));
+                    g2d.fillRect(x, y, barWidth, adjustedSquareHeight);
+
+                    // borda sutil
+                    g2d.setColor(new Color(0, 0, 0, (int)(60 * alphaMultiplier)));
+                    g2d.drawRect(x, y, barWidth, adjustedSquareHeight);
+                }
+
+                // === Marcador de pico (apenas no original, não no reflexo) ===
+                if (!isReflection) {
+                    int adjustedSquareHeightForPeak = (int) (squareSize * squareHeightMultiplier);
+                    int peakY = baseY - (int) (peakLevels[i] * maxBarHeight) - adjustedSquareHeightForPeak - spacingY;
+                    peakY = Math.max(10, Math.min(baseY - adjustedSquareHeightForPeak, peakY));
+
+                    g2d.setColor(new Color(255, 80, 80, (int) (180 + 60 * intensity)));
+                    g2d.fillRect(x, peakY, barWidth, adjustedSquareHeightForPeak);
+                    g2d.setColor(new Color(0, 0, 0, 80));
+                    g2d.drawRect(x, peakY, barWidth, adjustedSquareHeightForPeak);
+                }
+            }
+        }
+
+        // ===== NOVO MÉTODO: Desenhar reflexo =====
+        private void drawReflection(Graphics2D g2d, int width, int barWidth, int maxBarHeight, int baseY) {
+            // Criar composição para efeito de água
+            Composite originalComposite = g2d.getComposite();
+
+            // Efeito de ondulação sutil (opcional)
+            // g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
+
+            // Desenhar barras refletidas
+            drawBars(g2d, width, barWidth, (int)(maxBarHeight * reflectionHeight), baseY, true);
+
+            // Gradiente de fade de cima para baixo no reflexo
+            int reflectionAreaHeight = (int)(maxBarHeight * reflectionHeight) + 50;
+            GradientPaint fadeGradient = new GradientPaint(
+                    0, baseY + 3, new Color(0, 0, 0, 0),
+                    0, baseY + reflectionAreaHeight, new Color(0, 0, 0, 150)
+            );
+            g2d.setPaint(fadeGradient);
+            g2d.fillRect(0, baseY + 3, width, reflectionAreaHeight);
+
+            g2d.setComposite(originalComposite);
+        }
+        /** Gradiente verde→amarelo→vermelho (0 = base, 1 = topo) */
+        private Color getColorForPosition(float posRatio) {
+            posRatio = Math.max(0, Math.min(1, posRatio));
+            if (posRatio < 0.5f) {
+                float localRatio = posRatio * 2.0f;
+                return new Color((int) (255 * localRatio), 255, 0);
+            } else {
+                float localRatio = (posRatio - 0.5f) * 2.0f;
+                return new Color(255, (int) (255 * (1 - localRatio)), 0);
+            }
+        }
+    }
+
 
     @Override
     public void dispose() {
