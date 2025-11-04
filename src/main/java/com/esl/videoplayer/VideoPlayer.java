@@ -1,6 +1,7 @@
 package com.esl.videoplayer;
 
 
+import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
 import org.bytedeco.javacv.*;
@@ -10,14 +11,13 @@ import java.nio.ByteBuffer;
 import javax.imageio.ImageIO;
 import javax.sound.sampled.*;
 import javax.swing.*;
+import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.ShortBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.text.SimpleDateFormat;
-import java.util.Date;
 
 
 public class VideoPlayer extends JFrame {
@@ -134,9 +133,28 @@ public class VideoPlayer extends JFrame {
     // Variaveis para o cover art
     private BufferedImage audioCoverArt = null;
 
+    //Variaveis para exiber a resoluçao atual da tela
     private int screenWidth;
     private int screenHeight;
 
+    // Variaveis para uso no sistema de normalização de volume em audios
+    private boolean audioNormalizationEnabled = false; // DESATIVADO por padrão
+    private float targetLoudness = -24.0f; // MAIS BAIXO: -18 LUFS (era -14)
+    private float normalizationGain = 1.0f; // Ganho calculado para normalização
+    private float maxPeakLevel = 0.0f; // Pico máximo detectado
+    private float averageRMS = 0.0f; // RMS médio
+    private int normalizationSampleCount = 0;
+    private final int NORMALIZATION_ANALYSIS_SAMPLES = 100; // Amostras antes de aplicar
+    private boolean normalizationCalculated = false;
+
+    // Buffer circular para análise contínua
+    private float[] rmsHistory = new float[50];
+    private int rmsHistoryIndex = 0;
+
+    // NOVO: Ganho global adicional para controle fino
+    private float globalAudioGain = 0.5f; // 50% do volume (ajustável de 0.1 a 1.0)
+
+    private AudioLoudnessAnalyzer loudnessAnalyzer = new AudioLoudnessAnalyzer();
 
     public VideoPlayer() {
     setTitle("Video Player - JavaCV");
@@ -2647,6 +2665,17 @@ private void captureFrame() {
 
         System.out.println("Iniciando thread de carregamento de áudio...");
 
+        // Resetar normalização
+        normalizationCalculated = false;
+        normalizationSampleCount = 0;
+        normalizationGain = 1.0f;
+        maxPeakLevel = 0.0f;
+        averageRMS = 0.0f;
+        rmsHistoryIndex = 0;
+        Arrays.fill(rmsHistory, 0.0f);
+        loudnessAnalyzer.reset();
+
+
         // Carregar áudio em thread separada
         Thread loaderThread = new Thread(() -> {
             System.out.println("Thread de carregamento de áudio INICIADA");
@@ -2712,6 +2741,11 @@ private void captureFrame() {
                         int bufferSize = sampleRate * outputChannels * 2;
                         audioLine.open(audioFormat, bufferSize);
                         System.out.println("10. AudioLine configurado com sucesso");
+
+                        // 4. Combinação (melhor opção):
+                        setGlobalAudioGain(0.16f);          // 40% do volume
+                        setTargetLoudness(-18.0f);         // Target mais baixo
+                        setAudioNormalizationEnabled(true); // Manter normalização ativa
 
                     } catch (Exception audioEx) {
                         System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
@@ -4447,110 +4481,95 @@ private void playVideo() {
 
     playbackThread.start();
 }
-//    // Método auxiliar para processar samples de áudio (para áudio apenas)
-//    private byte[] processAudioSamples(ShortBuffer channelSamples) {
-//        try {
-//            if (audioChannels > 2) {
-//                // Downmix para estéreo
-//                int totalSamples = channelSamples.remaining();
-//                int framesCount = totalSamples / audioChannels;
-//                byte[] audioBytes = new byte[framesCount * 2 * 2]; // 2 canais, 2 bytes por sample
-//
-//                for (int i = 0; i < framesCount; i++) {
-//                    int baseIndex = i * audioChannels;
-//                    float left = 0, right = 0;
-//
-//                    if (audioChannels == 6) {
-//                        short fl = channelSamples.get(baseIndex + 0);
-//                        short fr = channelSamples.get(baseIndex + 1);
-//                        short center = channelSamples.get(baseIndex + 2);
-//                        short lfe = channelSamples.get(baseIndex + 3);
-//                        short rl = channelSamples.get(baseIndex + 4);
-//                        short rr = channelSamples.get(baseIndex + 5);
-//
-//                        left = fl + (center * 0.707f) + (rl * 0.707f) + (lfe * 0.5f);
-//                        right = fr + (center * 0.707f) + (rr * 0.707f) + (lfe * 0.5f);
-//                    } else {
-//                        // Downmix genérico
-//                        int leftSum = 0, rightSum = 0;
-//                        int leftCount = 0, rightCount = 0;
-//
-//                        for (int ch = 0; ch < audioChannels; ch++) {
-//                            short sample = channelSamples.get(baseIndex + ch);
-//                            if (ch % 2 == 0) {
-//                                leftSum += sample;
-//                                leftCount++;
-//                            } else {
-//                                rightSum += sample;
-//                                rightCount++;
-//                            }
-//                        }
-//
-//                        left = (leftCount > 0 ? leftSum / leftCount : 0);
-//                        right = (rightCount > 0 ? rightSum / rightCount : 0);
-//                    }
-//
-//                    // Aplicar volume
-//                    left *= volume;
-//                    right *= volume;
-//
-//                    // Clamping
-//                    left = Math.max(-32768, Math.min(32767, left));
-//                    right = Math.max(-32768, Math.min(32767, right));
-//
-//                    // Converter para bytes (big-endian - CORRIGIDO)
-//                    short leftShort = (short)left;
-//                    short rightShort = (short)right;
-//
-//                    audioBytes[i * 4] = (byte)((leftShort >> 8) & 0xFF);
-//                    audioBytes[i * 4 + 1] = (byte)(leftShort & 0xFF);
-//                    audioBytes[i * 4 + 2] = (byte)((rightShort >> 8) & 0xFF);
-//                    audioBytes[i * 4 + 3] = (byte)(rightShort & 0xFF);
-//                }
-//
-//                return audioBytes;
-//
-//            } else {
-//                // Mono ou estéreo - conversão direta
-//                byte[] audioBytes = new byte[channelSamples.capacity() * 2];
-//                for (int i = 0; i < channelSamples.capacity(); i++) {
-//                    short s = channelSamples.get(i);
-//                    s = (short)(s * volume);
-//                    audioBytes[i * 2] = (byte)(s & 0xFF);
-//                    audioBytes[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
-//                }
-//                return audioBytes;
-//            }
-//        } catch (Exception e) {
-//            System.err.println("Erro ao processar samples: " + e.getMessage());
-//            return null;
-//        }
-//    }
-// ==================== MODIFICAR: processAudioSamples ====================
-
+    // Método auxiliar para processar samples de áudio (para áudio apenas)
     private byte[] processAudioSamples(ShortBuffer channelSamples) {
         try {
-            // Copiar samples para array para FFT
-            short[] audioSamplesForFFT = new short[channelSamples.remaining()];
+            // Copiar samples para array
+            short[] audioSamplesArray = new short[channelSamples.remaining()];
             channelSamples.mark();
-            channelSamples.get(audioSamplesForFFT);
+            channelSamples.get(audioSamplesArray);
             channelSamples.reset();
 
-            // Calcular spectrum em thread separada para não travar
+            // ===== ANÁLISE E NORMALIZAÇÃO =====
+            if (audioNormalizationEnabled && isAudioOnly) {
+                // Fase 1: Análise inicial (primeiros N samples)
+                if (!normalizationCalculated && normalizationSampleCount < NORMALIZATION_ANALYSIS_SAMPLES) {
+                    loudnessAnalyzer.analyzeSamples(audioSamplesArray);
+                    normalizationSampleCount++;
+
+                    // IMPORTANTE: APLICAR globalAudioGain MESMO DURANTE ANÁLISE
+                    audioSamplesArray = applySimpleGain(audioSamplesArray, globalAudioGain);
+
+                    // Após análise inicial, calcular ganho
+                    if (normalizationSampleCount >= NORMALIZATION_ANALYSIS_SAMPLES) {
+                        float currentDbFS = loudnessAnalyzer.getDbFS();
+                        maxPeakLevel = loudnessAnalyzer.getPeakLevel();
+
+                        System.out.println("=== Análise de Áudio Concluída ===");
+                        System.out.println("RMS médio: " + currentDbFS + " dBFS");
+                        System.out.println("Pico máximo: " + (20 * Math.log10(maxPeakLevel)) + " dBFS");
+
+                        // Calcular ganho de normalização
+                        normalizationGain = calculateNormalizationGain(currentDbFS, targetLoudness);
+
+                        System.out.println("Ganho de normalização: " + (20 * Math.log10(normalizationGain)) + " dB");
+                        System.out.println("Fator multiplicador: " + normalizationGain);
+                        System.out.println("==================================");
+
+                        normalizationCalculated = true;
+                        loudnessAnalyzer.reset();
+                    }
+                }
+
+                // Fase 2: Aplicar normalização (com ajuste dinâmico contínuo)
+                else if (normalizationCalculated) {
+                    // Análise contínua para ajuste dinâmico
+                    loudnessAnalyzer.analyzeSamples(audioSamplesArray);
+
+                    // Atualizar histórico RMS
+                    rmsHistory[rmsHistoryIndex] = loudnessAnalyzer.getRMS();
+                    rmsHistoryIndex = (rmsHistoryIndex + 1) % rmsHistory.length;
+
+                    // Calcular RMS médio do histórico
+                    float sumRMS = 0.0f;
+                    for (float rms : rmsHistory) {
+                        sumRMS += rms;
+                    }
+                    averageRMS = sumRMS / rmsHistory.length;
+
+                    // Ajuste dinâmico suave do ganho (evita mudanças bruscas)
+                    float currentDbFS = loudnessAnalyzer.getDbFS();
+                    float targetGain = calculateNormalizationGain(currentDbFS, targetLoudness);
+
+                    // Interpolação suave (70% antigo, 30% novo)
+                    normalizationGain = normalizationGain * 0.7f + targetGain * 0.3f;
+
+                    loudnessAnalyzer.reset();
+
+                    // Aplicar normalização aos samples
+                    audioSamplesArray = applyNormalization(audioSamplesArray, normalizationGain);
+                }
+            } else {
+                // SE NORMALIZAÇÃO DESATIVADA, APLICAR globalAudioGain DIRETAMENTE
+                audioSamplesArray = applySimpleGain(audioSamplesArray, globalAudioGain);
+            }
+
+            // ===== CALCULAR SPECTRUM (usando samples normalizados) =====
             if (isAudioOnly) {
-                float[] spectrum = calculateFFT(audioSamplesForFFT, audioSamplesForFFT.length);
+                float[] spectrum = calculateFFT(audioSamplesArray, audioSamplesArray.length);
                 synchronized (spectrumLock) {
                     spectrumData = spectrum;
                 }
 
-                // Atualizar UI
                 SwingUtilities.invokeLater(() -> {
                     videoPanel.updateSpectrum(spectrumData);
                 });
             }
 
-            // Resto do código existente de processamento...
+            // ===== PROCESSAR PARA REPRODUÇÃO =====
             if (audioChannels > 2) {
+                // Downmix multicanal
+                channelSamples.rewind();
                 int totalSamples = channelSamples.remaining();
                 int framesCount = totalSamples / audioChannels;
                 byte[] audioBytes = new byte[framesCount * 2 * 2];
@@ -4588,6 +4607,7 @@ private void playVideo() {
                         right = (rightCount > 0 ? rightSum / rightCount : 0);
                     }
 
+                    // APENAS volume do slider (globalAudioGain já aplicado acima)
                     left *= volume;
                     right *= volume;
                     left = Math.max(-32768, Math.min(32767, left));
@@ -4605,10 +4625,11 @@ private void playVideo() {
                 return audioBytes;
 
             } else {
-                byte[] audioBytes = new byte[channelSamples.capacity() * 2];
-                for (int i = 0; i < channelSamples.capacity(); i++) {
-                    short s = channelSamples.get(i);
-                    s = (short)(s * volume);
+                // Mono/Stereo (usar samples já normalizados com globalAudioGain)
+                byte[] audioBytes = new byte[audioSamplesArray.length * 2];
+                for (int i = 0; i < audioSamplesArray.length; i++) {
+                    // APENAS volume do slider (globalAudioGain já aplicado acima)
+                    short s = (short)(audioSamplesArray[i] * volume);
                     audioBytes[i * 2] = (byte)((s >> 8) & 0xFF);
                     audioBytes[i * 2 + 1] = (byte)(s & 0xFF);
                 }
@@ -4619,6 +4640,25 @@ private void playVideo() {
             return null;
         }
     }
+
+    // NOVO MÉTODO: Aplicar ganho simples sem normalização
+    private short[] applySimpleGain(short[] samples, float gain) {
+        short[] adjusted = new short[samples.length];
+
+        for (int i = 0; i < samples.length; i++) {
+            float sample = samples[i] * gain;
+
+            // Soft clipping para evitar distorção
+            if (Math.abs(sample) > 32767) {
+                sample = softClip(sample);
+            }
+
+            adjusted[i] = (short) Math.max(-32768, Math.min(32767, sample));
+        }
+
+        return adjusted;
+    }
+
 // ==================== MÉTODO: Calcular FFT ====================
 
     private float[] calculateFFT(short[] audioSamples, int sampleCount) {
@@ -5093,6 +5133,12 @@ private void seekToPosition(int percentage) {
         private BufferedImage coverArt;
         private float coverOpacity = 0.3f; // Opacidade da capa (0.0 a 1.0)
 
+        public enum ColorMode {
+            GRADIENT, CUSTOM, PALETTE
+        }
+
+
+
         private static final float SMOOTHING_FACTOR = 0.25f;
         private static final float GRAVITY = 0.92f;
         private static final float PEAK_DECAY = 0.02f;
@@ -5392,7 +5438,7 @@ private void seekToPosition(int percentage) {
             Composite originalComposite = g2d.getComposite();
 
             // Efeito de ondulação sutil (opcional)
-            // g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
+             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
 
             // Desenhar barras refletidas
             drawBars(g2d, width, barWidth, (int)(maxBarHeight * reflectionHeight), baseY, true);
@@ -5467,7 +5513,182 @@ private void seekToPosition(int percentage) {
             g2d.setComposite(originalComposite);
         }
     }
+// ==================== CLASSE PARA ANÁLISE DE LOUDNESS ====================
 
+    class AudioLoudnessAnalyzer {
+        private float runningSum = 0.0f;
+        private int sampleCount = 0;
+        private float peakLevel = 0.0f;
+
+        public void analyzeSamples(short[] samples) {
+            float sum = 0.0f;
+            float peak = 0.0f;
+
+            for (short sample : samples) {
+                float normalized = sample / 32768.0f; // Normalizar para -1.0 a 1.0
+                sum += normalized * normalized; // RMS
+                peak = Math.max(peak, Math.abs(normalized));
+            }
+
+            runningSum += sum;
+            sampleCount += samples.length;
+            peakLevel = Math.max(peakLevel, peak);
+        }
+
+        public float getRMS() {
+            if (sampleCount == 0) return 0.0f;
+            return (float) Math.sqrt(runningSum / sampleCount);
+        }
+
+        public float getPeakLevel() {
+            return peakLevel;
+        }
+
+        public float getDbFS() {
+            float rms = getRMS();
+            if (rms <= 0.0f) return -100.0f;
+            return 20.0f * (float) Math.log10(rms);
+        }
+
+        public void reset() {
+            runningSum = 0.0f;
+            sampleCount = 0;
+            peakLevel = 0.0f;
+        }
+    }
+// ==================== MÉTODO PARA CALCULAR GANHO DE NORMALIZAÇÃO ====================
+
+    private float calculateNormalizationGain(float currentDbFS, float targetDbFS) {
+        // Calcular diferença em dB
+        float dbDifference = targetDbFS - currentDbFS;
+
+        // Converter dB para ganho linear
+        float gain = (float) Math.pow(10.0, dbDifference / 20.0);
+
+        // LIMITES MAIS CONSERVADORES para evitar volume alto
+        // Máximo +6dB de ganho, mínimo -30dB de atenuação
+        gain = Math.max(0.03f, Math.min(2.0f, gain));
+
+        // APLICAR GANHO GLOBAL ADICIONAL
+        gain *= globalAudioGain;
+
+        return gain;
+    }
+    // ==================== MÉTODO PARA APLICAR NORMALIZAÇÃO ====================
+
+    private short[] applyNormalization(short[] samples, float gain) {
+        short[] normalized = new short[samples.length];
+
+        for (int i = 0; i < samples.length; i++) {
+            float sample = samples[i] * gain;
+
+            // Soft clipping para evitar distorção severa
+            if (Math.abs(sample) > 32767) {
+                sample = softClip(sample);
+            }
+
+            normalized[i] = (short) Math.max(-32768, Math.min(32767, sample));
+        }
+
+        return normalized;
+    }
+
+    // Soft clipping suave para evitar distorção
+    private float softClip(float sample) {
+        float threshold = 32767 * 0.9f; // 90% do máximo
+
+        if (Math.abs(sample) <= threshold) {
+            return sample;
+        }
+
+        // Aplicar função de clipping suave (tanh)
+        float sign = Math.signum(sample);
+        float abs = Math.abs(sample);
+        float normalized = abs / 32768.0f;
+        float clipped = (float) Math.tanh(normalized * 1.5) * 32767;
+
+        return sign * clipped;
+    }
+
+// ==================== MÉTODOS PÚBLICOS PARA CONTROLE ====================
+
+    public void setAudioNormalizationEnabled(boolean enabled) {
+        this.audioNormalizationEnabled = enabled;
+        System.out.println("Normalização de áudio: " + (enabled ? "ATIVADA" : "DESATIVADA"));
+
+        if (!enabled) {
+            normalizationGain = 1.0f;
+        }
+    }
+
+    public void setTargetLoudness(float targetDbFS) {
+        this.targetLoudness = Math.max(-30.0f, Math.min(0.0f, targetDbFS));
+        System.out.println("Target loudness definido: " + this.targetLoudness + " dBFS");
+
+        // Recalcular ganho se já analisado
+        if (normalizationCalculated) {
+            float currentDbFS = loudnessAnalyzer.getDbFS();
+            normalizationGain = calculateNormalizationGain(currentDbFS, this.targetLoudness);
+        }
+    }
+
+    public boolean isAudioNormalizationEnabled() {
+        return audioNormalizationEnabled;
+    }
+
+    public float getCurrentNormalizationGain() {
+        return normalizationGain;
+    }
+
+    public String getNormalizationInfo() {
+        if (!audioNormalizationEnabled) {
+            return "Normalização: Desativada | Volume: " + (int)(globalAudioGain * 100) + "%";
+        }
+
+        if (!normalizationCalculated) {
+            return "Normalização: Analisando... (" + normalizationSampleCount + "/" + NORMALIZATION_ANALYSIS_SAMPLES + ")";
+        }
+
+        float gainDb = 20.0f * (float) Math.log10(normalizationGain);
+        return String.format("Normalização: %.1f dB | Volume: %d%% | Pico: %.1f dBFS",
+                gainDb,
+                (int)(globalAudioGain * 100),
+                20 * Math.log10(maxPeakLevel));
+    }
+    // ==================== PRESETS DE LOUDNESS ====================
+
+    public enum LoudnessPreset {
+        STREAMING(-14.0f, "Streaming (Spotify/YouTube)"),
+        BROADCAST(-23.0f, "Broadcast TV/Radio"),
+        CINEMA(-11.0f, "Cinema"),
+        LOUD(-11.0f, "Loud (Club/Party)"),
+        QUIET(-18.0f, "Quiet (Background)");
+
+        private final float dbFS;
+        private final String description;
+
+        LoudnessPreset(float dbFS, String description) {
+            this.dbFS = dbFS;
+            this.description = description;
+        }
+
+        public float getDbFS() { return dbFS; }
+        public String getDescription() { return description; }
+    }
+
+    // Aplicar preset
+    public void applyLoudnessPreset(LoudnessPreset preset) {
+        setTargetLoudness(preset.getDbFS());
+        System.out.println("Preset aplicado: " + preset.getDescription());
+    }
+    // NOVO: Controle de ganho global (volume master do áudio)
+    public void setGlobalAudioGain(float gain) {
+        this.globalAudioGain = Math.max(0.01f, Math.min(1.0f, gain));
+        System.out.println("Ganho global de áudio: " + (int)(this.globalAudioGain * 100) + "%");
+    }
+    public float getGlobalAudioGain() {
+        return globalAudioGain;
+    }
 
     @Override
     public void dispose() {
@@ -5492,6 +5713,7 @@ private void seekToPosition(int percentage) {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             FlatDraculaIJTheme.setup();
+            FlatDarkFlatIJTheme.setup();
             UIManager.put( "Button.arc", 999 );
             VideoPlayer player = new VideoPlayer();
             player.setVisible(true);

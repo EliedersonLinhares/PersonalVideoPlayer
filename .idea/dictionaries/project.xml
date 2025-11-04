@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>ffprobe</w>
+      <w>fmpeg</w>
     </words>
   </dictionary>
 </component>
