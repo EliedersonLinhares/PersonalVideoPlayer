@@ -23,6 +23,7 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 🔆 Can apply filters on video, but with limited resolutions(Brightness)
 - ✅ 🎵 Support to audio (mp3)
 - ✅ 🌈 Advanced audio spectrum animation 
+- ✅ 🌈 You can personalize the colors, and other options.
 - ✅ 🎨 Show image cover if the audio have on
 - ✅ 🎧 Volume normalization for audio files
  
