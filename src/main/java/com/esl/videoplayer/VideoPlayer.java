@@ -1,35 +1,53 @@
 package com.esl.videoplayer;
 
 
+import com.esl.videoplayer.playlist.PlaylistDialog;
+import com.esl.videoplayer.playlist.PlaylistItem;
+import com.esl.videoplayer.playlist.PlaylistManager;
 import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
+import org.bytedeco.ffmpeg.global.avcodec;
+import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
-import java.nio.ByteBuffer;
+import org.bytedeco.opencv.opencv_core.Mat;
 
 import javax.imageio.ImageIO;
-import javax.sound.sampled.*;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.SourceDataLine;
 import javax.swing.*;
 import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.nio.ShortBuffer;
-import java.util.*;
-
+import java.awt.image.DataBufferByte;
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.text.SimpleDateFormat;
+import java.util.concurrent.*;
 
+import static org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_AV1;
+import static org.bytedeco.ffmpeg.global.avutil.AV_LOG_INFO;
+import static org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P;
 
 public class VideoPlayer extends JFrame {
+
+
+    private PlaylistManager playlistManager;
+    private PlaylistDialog playlistDialog;
+
     private VideoPanel videoPanel;
     private JButton playPauseButton;
     private JButton stopButton;
@@ -40,6 +58,7 @@ public class VideoPlayer extends JFrame {
     private JLabel volumeLabel;
     private JButton openButton;
     private JButton volumeButton;
+    private JButton loadPlaylistButton;
 
     private FFmpegFrameGrabber grabber;
     private Java2DFrameConverter converter;
@@ -156,13 +175,36 @@ public class VideoPlayer extends JFrame {
 
     private AudioLoudnessAnalyzer loudnessAnalyzer = new AudioLoudnessAnalyzer();
 
-    public VideoPlayer() {
-    setTitle("Video Player - JavaCV");
-    setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-    setResizable(false);
-    setSize(600, 300);
-    setLocationRelativeTo(null);
+    // Variáveis de instância
+    private boolean autoPlayNext = true; // Tocar próxima automaticamente
 
+    public VideoPlayer() {
+        setTitle("Video Player - JavaCV");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setResizable(false);
+        setSize(600, 300);
+        setLocationRelativeTo(null);
+
+        // CRIAR PLAYLIST MANAGER E DIALOG ANTES DE initComponents
+        playlistManager = new PlaylistManager();
+        // Criar o PlaylistDialog com callback
+        playlistDialog = new PlaylistDialog(this, playlistManager, new PlaylistDialog.PlaylistCallback() {
+            @Override
+            public void onPlayTrack(String filePath) {
+                playFromPlaylist(filePath);
+            }
+
+            @Override
+            public void onAutoPlayRequested() {
+                // Equivalente ao código: videoPanel.autoPlayItem.isSelected()
+                if (videoPanel != null && videoPanel.autoPlayItem != null) {
+                    if (videoPanel.autoPlayItem.isSelected()) {
+                        System.out.println("====Reativando o autoplay");
+                        autoPlayNext = true;
+                    }
+                }
+            }
+        });
 
         // Get the default toolkit
         Toolkit toolkit = Toolkit.getDefaultToolkit();
@@ -177,132 +219,248 @@ public class VideoPlayer extends JFrame {
         // Print the screen resolution
         System.out.println("Screen Resolution: " + screenWidth + "x" + screenHeight);
 
-    converter = new Java2DFrameConverter();
-    initComponents();
+        converter = new Java2DFrameConverter();
+        initComponents();
 
-    // NOVO: Adicionar KeyEventDispatcher global para capturar teclas em qualquer lugar
-    KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
-        @Override
-        public boolean dispatchKeyEvent(KeyEvent e) {
-            // Só processar quando a tecla for pressionada (não released)
-            if (e.getID() != KeyEvent.KEY_PRESSED) {
-                return false;
+        // NOVO: Adicionar KeyEventDispatcher global para capturar teclas em qualquer lugar
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
+            @Override
+            public boolean dispatchKeyEvent(KeyEvent e) {
+                // Só processar quando a tecla for pressionada (não released)
+                if (e.getID() != KeyEvent.KEY_PRESSED) {
+                    return false;
+                }
+
+                // Não processar se estiver digitando em um campo de texto
+                Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                if (focusOwner instanceof JTextField || focusOwner instanceof JTextArea) {
+                    return false;
+                }
+
+                // Processar atalhos globais
+                switch (e.getKeyCode()) {
+                    case KeyEvent.VK_ESCAPE:
+                        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+                        if (gd.getFullScreenWindow() == VideoPlayer.this) {
+                            exitFullScreen();
+                            return true; // Consumir evento
+                        }
+                        break;
+
+                    case KeyEvent.VK_F11:
+                        toggleFullScreen();
+                        return true;
+
+                    case KeyEvent.VK_SPACE:
+                        if (grabber != null) {
+                            togglePlayPause();
+                            return true;
+                        }
+                        break;
+
+                    case KeyEvent.VK_LEFT:
+                        if (grabber != null) {
+                            rewind10Seconds();
+                            return true;
+                        }
+                        break;
+
+                    case KeyEvent.VK_RIGHT:
+                        if (grabber != null) {
+                            forward10Seconds();
+                            return true;
+                        }
+                        break;
+
+                    case KeyEvent.VK_X:
+                        if (grabber != null) {
+                            nextFrame();
+                            return true;
+                        }
+                        break;
+
+                    case KeyEvent.VK_S:
+                        if (grabber != null) {
+                            stopVideo();
+                            return true;
+                        }
+                        break;
+                    case KeyEvent.VK_C:
+                        if (grabber != null) {
+                            captureFrame();
+                            return true;
+                        }
+                        break;
+                    case KeyEvent.VK_V:
+                        if (grabber != null) {
+                            batchCaptureFrames();
+                            return true;
+                        }
+                        break;
+                }
+                return false; // Não consumir o evento se não for um dos nossos atalhos
             }
+        });
 
-            // Não processar se estiver digitando em um campo de texto
-            Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-            if (focusOwner instanceof JTextField || focusOwner instanceof JTextArea) {
-                return false;
-            }
-
-            // Processar atalhos globais
-            switch (e.getKeyCode()) {
-                case KeyEvent.VK_ESCAPE:
+        // Adicionar listener de teclado no painel de vídeo (mantido como backup)
+        videoPanel.setFocusable(true);
+        videoPanel.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                     if (gd.getFullScreenWindow() == VideoPlayer.this) {
                         exitFullScreen();
-                        return true; // Consumir evento
                     }
-                    break;
-
-                case KeyEvent.VK_F11:
+                } else if (e.getKeyCode() == KeyEvent.VK_F11) {
                     toggleFullScreen();
-                    return true;
-
-                case KeyEvent.VK_SPACE:
-                    if (grabber != null) {
-                        togglePlayPause();
-                        return true;
-                    }
-                    break;
-
-                case KeyEvent.VK_LEFT:
-                    if (grabber != null) {
-                        rewind10Seconds();
-                        return true;
-                    }
-                    break;
-
-                case KeyEvent.VK_RIGHT:
-                    if (grabber != null) {
-                        forward10Seconds();
-                        return true;
-                    }
-                    break;
-
-                case KeyEvent.VK_X:
-                    if (grabber != null) {
-                        nextFrame();
-                        return true;
-                    }
-                    break;
-
-                case KeyEvent.VK_S:
-                    if (grabber != null) {
-                        stopVideo();
-                        return true;
-                    }
-                    break;
-                case KeyEvent.VK_C:
-                    if (grabber != null) {
-                        captureFrame();
-                        return true;
-                    }
-                    break;
-                case KeyEvent.VK_V:
-                    if (grabber != null) {
-                        batchCaptureFrames();
-                        return true;
-                    }
-                    break;
-            }
-            return false; // Não consumir o evento se não for um dos nossos atalhos
-        }
-    });
-
-    // Adicionar listener de teclado no painel de vídeo (mantido como backup)
-    videoPanel.setFocusable(true);
-    videoPanel.addKeyListener(new KeyAdapter() {
-        @Override
-        public void keyPressed(KeyEvent e) {
-            if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
-                GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-                if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                    exitFullScreen();
-                }
-            } else if (e.getKeyCode() == KeyEvent.VK_F11) {
-                toggleFullScreen();
-            } else if (e.getKeyCode() == KeyEvent.VK_SPACE) {
-                togglePlayPause();
-            } else if (e.getKeyCode() == KeyEvent.VK_LEFT) {
-                rewind10Seconds();
-            } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
-                forward10Seconds();
-            } else if (e.getKeyCode() == KeyEvent.VK_X) {
-                nextFrame();
-            } else if (e.getKeyCode() == KeyEvent.VK_S) {
-                stopVideo();
-            }else if (e.getKeyCode() == KeyEvent.VK_C) {
-                captureFrame();
-            }else if (e.getKeyCode() == KeyEvent.VK_V) {
-                batchCaptureFrames();
-            }
-        }
-    });
-
-    // Click esquerdo para pausar/continuar
-    videoPanel.addMouseListener(new MouseAdapter() {
-        @Override
-        public void mouseClicked(MouseEvent e) {
-            if (SwingUtilities.isLeftMouseButton(e)) {
-                if (grabber != null && (isPlaying || !isStopped)) {
+                } else if (e.getKeyCode() == KeyEvent.VK_SPACE) {
                     togglePlayPause();
+                } else if (e.getKeyCode() == KeyEvent.VK_LEFT) {
+                    rewind10Seconds();
+                } else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
+                    forward10Seconds();
+                } else if (e.getKeyCode() == KeyEvent.VK_X) {
+                    nextFrame();
+                } else if (e.getKeyCode() == KeyEvent.VK_S) {
+                    stopVideo();
+                } else if (e.getKeyCode() == KeyEvent.VK_C) {
+                    captureFrame();
+                } else if (e.getKeyCode() == KeyEvent.VK_V) {
+                    batchCaptureFrames();
                 }
             }
-            videoPanel.requestFocusInWindow();
+        });
+
+        // Click esquerdo para pausar/continuar
+        videoPanel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    if (grabber != null && (isPlaying || !isStopped)) {
+                        togglePlayPause();
+                    }
+                }
+                videoPanel.requestFocusInWindow();
+            }
+        });
+    }
+
+    // Método para abrir dialog de playlist
+    private void showPlaylistDialog() {
+        if (playlistDialog == null) {
+            playlistDialog.setVisible(false);
         }
-    });
-}
+
+        if (!playlistDialog.isVisible()) {
+            playlistDialog.setVisible(true);
+        } else {
+            playlistDialog.toFront();
+        }
+    }
+
+
+    // NOVO: Método para carregar e iniciar playlist direto
+    public void loadAndPlayPlaylist() {
+
+
+        JnaFileChooser fc = new JnaFileChooser();
+        fc.addFilter("M3U Playlist", "m3u");
+        if(videoPanel.autoPlayItem.isSelected()){
+            System.out.println("====Reativando o autoplay");
+            autoPlayNext = true;
+        }
+        // Atualiza o dialog SEMPRE (mesmo invisível)
+        SwingUtilities.invokeLater(() -> {
+            playlistDialog.refreshPlaylist();
+        });
+
+        if (fc.showOpenDialog(this)) {
+            File file = fc.getSelectedFile();
+            try {
+                playlistManager.loadM3U(file.getAbsolutePath());
+
+                // Atualizar dialog se estiver aberto
+                if (playlistDialog != null && playlistDialog.isVisible()) {
+                    playlistDialog.refreshPlaylist();
+
+                }
+
+                // Tocar primeira música automaticamente
+                if (playlistManager.size() > 0) {
+                    playlistManager.setCurrentIndex(0);
+                    PlaylistItem firstItem = playlistManager.getCurrentItem();
+
+                    if (firstItem != null) {
+                        System.out.println("Iniciando playlist: " + file.getName());
+                        System.out.println("Primeira música: " + firstItem.getDisplayName());
+                        playFromPlaylist(firstItem.getFilePath());
+
+                        // Atualizar dialog se estiver aberto
+                        if (playlistDialog != null && playlistDialog.isVisible()) {
+                            playlistDialog.refreshPlaylist();
+                        }
+                    }
+
+                    JOptionPane.showMessageDialog(this,
+                            "Playlist carregada: " + playlistManager.size() + " música(s)\n" +
+                                    "Reproduzindo: " + firstItem.getDisplayName(),
+                            "Playlist Carregada",
+                            JOptionPane.INFORMATION_MESSAGE);
+
+                    playlistDialog.setVisible(true);
+                } else {
+                    JOptionPane.showMessageDialog(this,
+                            "A playlist está vazia!",
+                            "Aviso",
+                            JOptionPane.WARNING_MESSAGE);
+                }
+
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this,
+                        "Erro ao carregar playlist:\n" + e.getMessage(),
+                        "Erro",
+                        JOptionPane.ERROR_MESSAGE);
+                e.printStackTrace();
+            }
+        }
+    }
+
+// Método para tocar do playlist (NÃO limpa playlist)
+    public void playFromPlaylist(String filePath) {
+        // IMPORTANTE: Não chamar clearPlaylistAndCloseDialog() aqui
+        // Este método é usado pela playlist, então deve manter ela ativa
+
+        if (filePath.toLowerCase().endsWith(".mp3") ||
+                filePath.toLowerCase().endsWith(".wav") ||
+                filePath.toLowerCase().endsWith(".flac") ||
+                filePath.toLowerCase().endsWith(".ogg") ||
+                filePath.toLowerCase().endsWith(".m4a") ||
+                filePath.toLowerCase().endsWith(".aac")) {
+            loadAudioFromPlaylist(filePath); // Usar método especial
+        } else {
+            loadVideoFromPlaylist(filePath); // Usar método especial
+        }
+    }
+
+    // No VideoPlayer, adicionar método público:
+    public void clearPlaylistAndCloseDialog() {
+        // Limpar playlist
+        if (playlistManager != null) {
+            playlistManager.clear();
+            playlistDialog.refreshPlaylist();
+            System.out.println("Playlist limpa");
+        }
+
+        // Fechar dialog se estiver aberto
+        if (playlistDialog != null && playlistDialog.isVisible()) {
+            playlistDialog.setVisible(false);
+            System.out.println("Dialog de playlist fechado");
+        }
+
+        // Desabilitar auto-play
+        autoPlayNext = false;
+    }
 
     private void toggleFullScreen() {
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
@@ -564,7 +722,7 @@ public class VideoPlayer extends JFrame {
                     value = 255.0 * Math.pow(value / 255.0, 1.0 / gamma);
                 }
 
-                brightnessContrastLUT[i] = (int)Math.max(0, Math.min(255, value));
+                brightnessContrastLUT[i] = (int) Math.max(0, Math.min(255, value));
             }
         }
 
@@ -587,9 +745,9 @@ public class VideoPlayer extends JFrame {
 
                 // Aplicar saturação
                 float gray = r * 0.299f + g * 0.587f + b * 0.114f;
-                r = clamp((int)(gray + saturation * (r - gray)), 0, 255);
-                g = clamp((int)(gray + saturation * (g - gray)), 0, 255);
-                b = clamp((int)(gray + saturation * (b - gray)), 0, 255);
+                r = clamp((int) (gray + saturation * (r - gray)), 0, 255);
+                g = clamp((int) (gray + saturation * (g - gray)), 0, 255);
+                b = clamp((int) (gray + saturation * (b - gray)), 0, 255);
 
                 dstPixels[i] = (r << 16) | (g << 8) | b;
             }
@@ -669,13 +827,12 @@ public class VideoPlayer extends JFrame {
         JLabel valueLabel = new JLabel(String.format("Valor: %.2f", brightness), SwingConstants.CENTER);
         valueLabel.setFont(new Font("Arial", Font.BOLD, 14));
 
-        JSlider slider = new JSlider(-100, 100, (int)(brightness * 100));
+        JSlider slider = new JSlider(-100, 100, (int) (brightness * 100));
         slider.setPreferredSize(new Dimension(100, 20));
         slider.setMajorTickSpacing(50);
         slider.setMinorTickSpacing(10);
-       // slider.setPaintTicks(true);
+        // slider.setPaintTicks(true);
         //slider.setPaintLabels(true);
-
 
 
         // Criar labels personalizados
@@ -750,368 +907,368 @@ public class VideoPlayer extends JFrame {
     }
 
 
- private void saveVideoState() {
-    if (videoFilePath != null) {
-        currentVideoPath = videoFilePath;
-        savedFramePosition = currentFrame;
-        savedPlayingState = isPlaying;
+    private void saveVideoState() {
+        if (videoFilePath != null) {
+            currentVideoPath = videoFilePath;
+            savedFramePosition = currentFrame;
+            savedPlayingState = isPlaying;
 
-        // Salvar legendas
-        savedSubtitles = new ArrayList<>(subtitles);
-        savedSubtitleText = currentSubtitleText;
-        savedSubtitleStream = currentSubtitleStream;
+            // Salvar legendas
+            savedSubtitles = new ArrayList<>(subtitles);
+            savedSubtitleText = currentSubtitleText;
+            savedSubtitleStream = currentSubtitleStream;
 
-        // Salvar stream de áudio e SEMPRE salvar nomes e total
-        savedAudioStream = currentAudioStream;
-        savedAudioStreamNames = new HashMap<>(audioStreamNames);
-        savedSubtitleStreamNames = new HashMap<>(subtitleStreamNames);
+            // Salvar stream de áudio e SEMPRE salvar nomes e total
+            savedAudioStream = currentAudioStream;
+            savedAudioStreamNames = new HashMap<>(audioStreamNames);
+            savedSubtitleStreamNames = new HashMap<>(subtitleStreamNames);
 
-        // IMPORTANTE: Salvar totalAudioStreams também
-        int savedTotal = totalAudioStreams;
+            // IMPORTANTE: Salvar totalAudioStreams também
+            int savedTotal = totalAudioStreams;
 
-        System.out.println("Estado salvo - Vídeo: " + currentVideoPath);
-        System.out.println("Frame: " + savedFramePosition + ", Tocando: " + savedPlayingState);
-        System.out.println("Legendas: " + savedSubtitles.size() + " entradas, Stream: " + savedSubtitleStream);
-        System.out.println("Áudio Stream: " + savedAudioStream);
-        System.out.println("Total Audio Streams: " + savedTotal);
-        System.out.println("Streams de áudio salvas: " + savedAudioStreamNames.size());
+            System.out.println("Estado salvo - Vídeo: " + currentVideoPath);
+            System.out.println("Frame: " + savedFramePosition + ", Tocando: " + savedPlayingState);
+            System.out.println("Legendas: " + savedSubtitles.size() + " entradas, Stream: " + savedSubtitleStream);
+            System.out.println("Áudio Stream: " + savedAudioStream);
+            System.out.println("Total Audio Streams: " + savedTotal);
+            System.out.println("Streams de áudio salvas: " + savedAudioStreamNames.size());
 
-        // Se não tem nomes salvos, criar nomes padrão baseado no total
-        if (savedAudioStreamNames.isEmpty() && savedTotal > 0) {
-            for (int i = 0; i < savedTotal; i++) {
-                savedAudioStreamNames.put(i, "Faixa de Áudio " + (i + 1));
-            }
-            System.out.println("Nomes de áudio criados automaticamente: " + savedAudioStreamNames.size());
-        }
-    }
-}
-
-private void restoreVideoState() {
-    if (currentVideoPath == null) {
-        System.out.println("Nenhum vídeo para restaurar");
-        return;
-    }
-
-    System.out.println("Restaurando vídeo: " + currentVideoPath);
-    System.out.println("Posição: frame " + savedFramePosition);
-    System.out.println("Stream de áudio: " + savedAudioStream);
-
-    // Recarregar vídeo com stream de áudio salva
-    loadVideoWithAudioStream(currentVideoPath, savedAudioStream);
-
-    // Aguardar carregamento e então buscar posição
-    new Thread(() -> {
-        try {
-            // Aguardar até o vídeo estar carregado
-            int attempts = 0;
-            while (grabber == null && attempts < 50) {
-                Thread.sleep(100);
-                attempts++;
-            }
-
-            if (grabber == null) {
-                System.err.println("Timeout ao aguardar carregamento do vídeo");
-                return;
-            }
-
-            System.out.println("Vídeo carregado, restaurando estado...");
-
-            // Restaurar legendas primeiro
-            if (savedSubtitles != null && !savedSubtitles.isEmpty()) {
-                subtitles = new ArrayList<>(savedSubtitles);
-                currentSubtitleStream = savedSubtitleStream;
-                System.out.println("Legendas restauradas: " + subtitles.size() + " entradas");
-            }
-
-            // Restaurar nomes das streams
-            if (!savedAudioStreamNames.isEmpty()) {
-                audioStreamNames = new HashMap<>(savedAudioStreamNames);
-                System.out.println("Nomes de streams de áudio restaurados: " + audioStreamNames.size());
-            }
-
-            if (!savedSubtitleStreamNames.isEmpty()) {
-                subtitleStreamNames = new HashMap<>(savedSubtitleStreamNames);
-                totalSubtitleStreams = subtitleStreamNames.size();
-                System.out.println("Nomes de streams de legendas restaurados: " + subtitleStreamNames.size());
-                System.out.println("totalSubtitleStreams definido: " + totalSubtitleStreams);
-            }
-
-            // Restaurar stream de áudio
-            currentAudioStream = savedAudioStream;
-            System.out.println("Stream de áudio restaurada: " + savedAudioStream);
-
-            // Buscar posição salva
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    if (savedFramePosition > 0 && totalFrames > 0) {
-                        // Ir para o frame salvo
-                        grabber.setFrameNumber((int)savedFramePosition);
-                        currentFrame = savedFramePosition;
-
-                        // Capturar e exibir frame atual
-                        Frame frame = grabber.grabImage();
-                        if (frame != null && frame.image != null) {
-                            BufferedImage img = converter.convert(frame);
-                            if (img != null) {
-                                videoPanel.updateImage(img);
-                            }
-                        }
-
-                        // Resetar para posição correta (após grab)
-                        grabber.setFrameNumber((int)savedFramePosition);
-                        currentFrame = savedFramePosition;
-
-                        // Atualizar slider de progresso
-                        int progress = (int)((savedFramePosition * 100) / totalFrames);
-                        progressSlider.setValue(progress);
-
-                        // Atualizar label de tempo
-                        updateTimeLabel();
-
-                        // Atualizar legenda para o tempo atual
-                        long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-                        updateSubtitle(currentTimeMs);
-
-                        System.out.println("Posição restaurada: frame " + savedFramePosition);
-                        System.out.println("Slider atualizado para: " + progress + "%");
-                        System.out.println("Estado completamente restaurado:");
-                        System.out.println("  - totalAudioStreams: " + totalAudioStreams);
-                        System.out.println("  - currentAudioStream: " + currentAudioStream);
-                        System.out.println("  - audioStreamNames size: " + audioStreamNames.size());
-                        System.out.println("  - totalSubtitleStreams: " + totalSubtitleStreams);
-                        System.out.println("  - subtitleStreamNames size: " + subtitleStreamNames.size());
-
-                        // Retomar reprodução se estava tocando
-                        if (savedPlayingState) {
-                            new Thread(() -> {
-                                try {
-                                    Thread.sleep(300); // Delay para estabilizar
-                                    SwingUtilities.invokeLater(() -> {
-                                        playVideo();
-                                        System.out.println("Reprodução retomada");
-                                    });
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-                            }).start();
-                        }
-
-                    } else if (savedPlayingState) {
-                        // Se estava tocando do início
-                        playVideo();
-                    }
-
-                } catch (Exception e) {
-                    System.err.println("Erro ao restaurar posição: " + e.getMessage());
-                    e.printStackTrace();
+            // Se não tem nomes salvos, criar nomes padrão baseado no total
+            if (savedAudioStreamNames.isEmpty() && savedTotal > 0) {
+                for (int i = 0; i < savedTotal; i++) {
+                    savedAudioStreamNames.put(i, "Faixa de Áudio " + (i + 1));
                 }
-            });
-
-        } catch (Exception e) {
-            System.err.println("Erro ao restaurar estado: " + e.getMessage());
-            e.printStackTrace();
+                System.out.println("Nomes de áudio criados automaticamente: " + savedAudioStreamNames.size());
+            }
         }
-    }, "VideoStateRestorer").start();
-}
-
-private void loadVideoWithAudioStream(String filepath, int audioStream) {
-    // Salvar informações das streams ANTES de fechar
-    int savedTotalAudioStreams = totalAudioStreams;
-    Map<Integer, String> savedAudioNames = new HashMap<>(audioStreamNames);
-    Map<Integer, String> savedSubtitleNames = new HashMap<>(subtitleStreamNames);
-    int savedTotalSubtitleStreams = totalSubtitleStreams;
-    Map<Integer, Integer> savedAudioMapping = new HashMap<>(logicalToPhysicalAudioStream); // NOVO
-
-    // Fechar recursos atuais
-    if (grabber != null) {
-        try {
-            grabber.stop();
-            grabber.release();
-        } catch (Exception e) {
-            System.out.println("Erro ao fechar grabber anterior: " + e.getMessage());
-        }
-        grabber = null;
     }
 
-    if (audioLine != null && audioLine.isOpen()) {
-        audioLine.close();
-        audioLine = null;
-    }
+    private void restoreVideoState() {
+        if (currentVideoPath == null) {
+            System.out.println("Nenhum vídeo para restaurar");
+            return;
+        }
 
-    // Limpar estado (mas preservar informações de streams)
-    subtitles.clear();
-    currentSubtitleText = "";
-    currentSubtitleStream = -1;
-    currentFrame = 0;
+        System.out.println("Restaurando vídeo: " + currentVideoPath);
+        System.out.println("Posição: frame " + savedFramePosition);
+        System.out.println("Stream de áudio: " + savedAudioStream);
 
-    // Desabilitar controles durante carregamento
-    playPauseButton.setEnabled(false);
-    stopButton.setEnabled(false);
-    progressSlider.setEnabled(false);
-    openButton.setEnabled(false);
-    volumeButton.setEnabled(false);
+        // Recarregar vídeo com stream de áudio salva
+        loadVideoWithAudioStream(currentVideoPath, savedAudioStream);
 
-    setTitle("Video Player - Carregando...");
-
-    // Carregar vídeo em thread separada
-    new Thread(() -> {
-        try {
-            videoFilePath = filepath;
-            currentVideoPath = filepath;
-
-            System.out.println("Abrindo arquivo com stream de áudio lógico " + audioStream + ": " + filepath);
-
-            grabber = new FFmpegFrameGrabber(filepath);
-
-            // Converter índice lógico para físico
-            int physicalStreamIndex = savedAudioMapping.getOrDefault(audioStream, audioStream);
-
-            // IMPORTANTE: SEMPRE definir stream de áudio usando índice físico
-            grabber.setAudioStream(physicalStreamIndex);
-            System.out.println("Stream de áudio selecionada: lógico=" + audioStream + ", físico=" + physicalStreamIndex);
-
-            String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
-
-            if (hardwareAccelerationEnabled) {
-                tryEnableHardwareAcceleration(grabber);
-            }
-
-            if (extension.equals("wmv")) {
-                try {
-                    grabber.setOption("threads", "auto");
-                    grabber.setOption("fflags", "nobuffer");
-                    grabber.setOption("flags", "low_delay");
-                } catch (Exception e) {
-                    System.out.println("Não foi possível aplicar opções WMV: " + e.getMessage());
-                }
-            }
-
+        // Aguardar carregamento e então buscar posição
+        new Thread(() -> {
             try {
-                grabber.setOption("analyzeduration", "2000000");
-                grabber.setOption("probesize", "2000000");
-                grabber.setOption("fflags", "+genpts");
-            } catch (Exception e) {
-                System.out.println("Não foi possível aplicar opções de análise rápida");
-            }
-
-            System.out.println("Iniciando grabber...");
-            grabber.start();
-            System.out.println("Grabber iniciado com sucesso!");
-
-            // IMPORTANTE: Usar total de streams salvo (não re-detectar)
-            totalAudioStreams = savedTotalAudioStreams;
-            currentAudioStream = audioStream;
-
-            // Restaurar mapeamento
-            logicalToPhysicalAudioStream = new HashMap<>(savedAudioMapping);
-            System.out.println("Mapeamento de áudio restaurado: " + logicalToPhysicalAudioStream);
-
-            // Restaurar nomes das streams
-            audioStreamNames = new HashMap<>(savedAudioNames);
-            subtitleStreamNames = new HashMap<>(savedSubtitleNames);
-            totalSubtitleStreams = savedTotalSubtitleStreams;
-
-            System.out.println("Total de faixas de áudio (restaurado): " + totalAudioStreams);
-            System.out.println("Stream de áudio atual: " + currentAudioStream);
-            System.out.println("Nomes de áudio restaurados: " + audioStreamNames.size());
-            System.out.println("Nomes de legendas restaurados: " + subtitleStreamNames.size());
-            System.out.println("Total de legendas: " + totalSubtitleStreams);
-
-            // Só detectar legendas se ainda não temos informação
-            if (subtitleStreamNames.isEmpty()) {
-                new Thread(() -> {
-                    try {
-                        detectEmbeddedSubtitles(filepath);
-                    } catch (Exception e) {
-                        System.out.println("Não foi possível detectar legendas embutidas: " + e.getMessage());
-                    }
-                }, "SubtitleDetector").start();
-            }
-
-            totalFrames = grabber.getLengthInVideoFrames();
-            frameRate = grabber.getVideoFrameRate();
-            currentFrame = 0;
-
-            System.out.println("Total frames bruto: " + totalFrames + ", FPS bruto: " + frameRate);
-
-            if (frameRate > 120 || frameRate < 1) {
-                System.out.println("FPS inválido, corrigindo para 30");
-                frameRate = 30.0;
-            }
-
-            System.out.println("Configurando áudio...");
-            audioChannels = grabber.getAudioChannels();
-            sampleRate = grabber.getSampleRate();
-            System.out.println("Canais: " + audioChannels + ", SampleRate: " + sampleRate);
-
-            if (audioChannels > 0 && sampleRate > 0 && !extension.equals("gif")) {
-                System.out.println("Criando audioLine...");
-                try {
-                    int outputChannels = audioChannels > 2 ? 2 : audioChannels;
-
-                    AudioFormat audioFormat = new AudioFormat(sampleRate, 16, outputChannels, true, true);
-                    DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
-                    audioLine = (SourceDataLine) AudioSystem.getLine(info);
-
-                    int bufferSize = sampleRate * outputChannels * 2;
-                    if (extension.equals("wmv")) bufferSize *= 4;
-
-                    audioLine.open(audioFormat, bufferSize);
-                    System.out.println("AudioLine configurado com sucesso");
-                } catch (Exception audioEx) {
-                    System.err.println("Erro ao configurar áudio: " + audioEx.getMessage());
-                    audioLine = null;
+                // Aguardar até o vídeo estar carregado
+                int attempts = 0;
+                while (grabber == null && attempts < 50) {
+                    Thread.sleep(100);
+                    attempts++;
                 }
-            } else {
-                System.out.println("Sem áudio");
+
+                if (grabber == null) {
+                    System.err.println("Timeout ao aguardar carregamento do vídeo");
+                    return;
+                }
+
+                System.out.println("Vídeo carregado, restaurando estado...");
+
+                // Restaurar legendas primeiro
+                if (savedSubtitles != null && !savedSubtitles.isEmpty()) {
+                    subtitles = new ArrayList<>(savedSubtitles);
+                    currentSubtitleStream = savedSubtitleStream;
+                    System.out.println("Legendas restauradas: " + subtitles.size() + " entradas");
+                }
+
+                // Restaurar nomes das streams
+                if (!savedAudioStreamNames.isEmpty()) {
+                    audioStreamNames = new HashMap<>(savedAudioStreamNames);
+                    System.out.println("Nomes de streams de áudio restaurados: " + audioStreamNames.size());
+                }
+
+                if (!savedSubtitleStreamNames.isEmpty()) {
+                    subtitleStreamNames = new HashMap<>(savedSubtitleStreamNames);
+                    totalSubtitleStreams = subtitleStreamNames.size();
+                    System.out.println("Nomes de streams de legendas restaurados: " + subtitleStreamNames.size());
+                    System.out.println("totalSubtitleStreams definido: " + totalSubtitleStreams);
+                }
+
+                // Restaurar stream de áudio
+                currentAudioStream = savedAudioStream;
+                System.out.println("Stream de áudio restaurada: " + savedAudioStream);
+
+                // Buscar posição salva
+                SwingUtilities.invokeLater(() -> {
+                    try {
+                        if (savedFramePosition > 0 && totalFrames > 0) {
+                            // Ir para o frame salvo
+                            grabber.setFrameNumber((int) savedFramePosition);
+                            currentFrame = savedFramePosition;
+
+                            // Capturar e exibir frame atual
+                            Frame frame = grabber.grabImage();
+                            if (frame != null && frame.image != null) {
+                                BufferedImage img = converter.convert(frame);
+                                if (img != null) {
+                                    videoPanel.updateImage(img);
+                                }
+                            }
+
+                            // Resetar para posição correta (após grab)
+                            grabber.setFrameNumber((int) savedFramePosition);
+                            currentFrame = savedFramePosition;
+
+                            // Atualizar slider de progresso
+                            int progress = (int) ((savedFramePosition * 100) / totalFrames);
+                            progressSlider.setValue(progress);
+
+                            // Atualizar label de tempo
+                            updateTimeLabel();
+
+                            // Atualizar legenda para o tempo atual
+                            long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
+                            updateSubtitle(currentTimeMs);
+
+                            System.out.println("Posição restaurada: frame " + savedFramePosition);
+                            System.out.println("Slider atualizado para: " + progress + "%");
+                            System.out.println("Estado completamente restaurado:");
+                            System.out.println("  - totalAudioStreams: " + totalAudioStreams);
+                            System.out.println("  - currentAudioStream: " + currentAudioStream);
+                            System.out.println("  - audioStreamNames size: " + audioStreamNames.size());
+                            System.out.println("  - totalSubtitleStreams: " + totalSubtitleStreams);
+                            System.out.println("  - subtitleStreamNames size: " + subtitleStreamNames.size());
+
+                            // Retomar reprodução se estava tocando
+                            if (savedPlayingState) {
+                                new Thread(() -> {
+                                    try {
+                                        Thread.sleep(300); // Delay para estabilizar
+                                        SwingUtilities.invokeLater(() -> {
+                                            playVideo();
+                                            System.out.println("Reprodução retomada");
+                                        });
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                }).start();
+                            }
+
+                        } else if (savedPlayingState) {
+                            // Se estava tocando do início
+                            playVideo();
+                        }
+
+                    } catch (Exception e) {
+                        System.err.println("Erro ao restaurar posição: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                });
+
+            } catch (Exception e) {
+                System.err.println("Erro ao restaurar estado: " + e.getMessage());
+                e.printStackTrace();
             }
+        }, "VideoStateRestorer").start();
+    }
 
-            System.out.println("Procurando legendas externas...");
-            searchExternalSubtitles(filepath);
-            System.out.println("Busca de legendas concluída");
+    private void loadVideoWithAudioStream(String filepath, int audioStream) {
+        // Salvar informações das streams ANTES de fechar
+        int savedTotalAudioStreams = totalAudioStreams;
+        Map<Integer, String> savedAudioNames = new HashMap<>(audioStreamNames);
+        Map<Integer, String> savedSubtitleNames = new HashMap<>(subtitleStreamNames);
+        int savedTotalSubtitleStreams = totalSubtitleStreams;
+        Map<Integer, Integer> savedAudioMapping = new HashMap<>(logicalToPhysicalAudioStream); // NOVO
 
-            System.out.println("Vídeo carregado! Habilitando UI...");
-
-            SwingUtilities.invokeLater(() -> {
-                playPauseButton.setEnabled(true);
-                stopButton.setEnabled(true);
-                progressSlider.setEnabled(true);
-                progressSlider.setValue(0);
-                openButton.setEnabled(true);
-                volumeButton.setEnabled(true);
-
-                updateTimeLabel();
-
-                setTitle("Video Player - " + new java.io.File(filepath).getName());
-
-                System.out.println("UI HABILITADA - Pronto para reproduzir!");
-                System.out.println("Estado final:");
-                System.out.println("  totalAudioStreams: " + totalAudioStreams);
-                System.out.println("  currentAudioStream: " + currentAudioStream);
-                System.out.println("  audioStreamNames: " + audioStreamNames);
-                System.out.println("  logicalToPhysicalAudioStream: " + logicalToPhysicalAudioStream);
-                System.out.println("  totalSubtitleStreams: " + totalSubtitleStreams);
-                System.out.println("  subtitleStreamNames: " + subtitleStreamNames);
-            });
-
-        } catch (Exception e) {
-            System.err.println("ERRO ao carregar vídeo:");
-            e.printStackTrace();
-
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(this,
-                        "Erro ao abrir vídeo:\n" + e.getMessage(),
-                        "Erro", JOptionPane.ERROR_MESSAGE);
-
-                openButton.setEnabled(true);
-                playPauseButton.setEnabled(false);
-                stopButton.setEnabled(false);
-                volumeButton.setEnabled(false);
-                setTitle("Video Player - JavaCV");
-            });
+        // Fechar recursos atuais
+        if (grabber != null) {
+            try {
+                grabber.stop();
+                grabber.release();
+            } catch (Exception e) {
+                System.out.println("Erro ao fechar grabber anterior: " + e.getMessage());
+            }
+            grabber = null;
         }
-    }, "VideoLoader").start();
-}
+
+        if (audioLine != null && audioLine.isOpen()) {
+            audioLine.close();
+            audioLine = null;
+        }
+
+        // Limpar estado (mas preservar informações de streams)
+        subtitles.clear();
+        currentSubtitleText = "";
+        currentSubtitleStream = -1;
+        currentFrame = 0;
+
+        // Desabilitar controles durante carregamento
+        playPauseButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        progressSlider.setEnabled(false);
+        openButton.setEnabled(false);
+        volumeButton.setEnabled(false);
+
+        setTitle("Video Player - Carregando...");
+
+        // Carregar vídeo em thread separada
+        new Thread(() -> {
+            try {
+                videoFilePath = filepath;
+                currentVideoPath = filepath;
+
+                System.out.println("Abrindo arquivo com stream de áudio lógico " + audioStream + ": " + filepath);
+
+                grabber = new FFmpegFrameGrabber(filepath);
+
+                // Converter índice lógico para físico
+                int physicalStreamIndex = savedAudioMapping.getOrDefault(audioStream, audioStream);
+
+                // IMPORTANTE: SEMPRE definir stream de áudio usando índice físico
+                grabber.setAudioStream(physicalStreamIndex);
+                System.out.println("Stream de áudio selecionada: lógico=" + audioStream + ", físico=" + physicalStreamIndex);
+
+                String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
+
+                if (hardwareAccelerationEnabled) {
+                    tryEnableHardwareAcceleration(grabber);
+                }
+
+                if (extension.equals("wmv")) {
+                    try {
+                       // grabber.setOption("threads", "auto");
+                        grabber.setOption("fflags", "nobuffer");
+                       // grabber.setOption("flags", "low_delay");
+                    } catch (Exception e) {
+                        System.out.println("Não foi possível aplicar opções WMV: " + e.getMessage());
+                    }
+                }
+
+                try {
+                    grabber.setOption("analyzeduration", "2000000");
+                    grabber.setOption("probesize", "2000000");
+                    grabber.setOption("fflags", "+genpts");
+                } catch (Exception e) {
+                    System.out.println("Não foi possível aplicar opções de análise rápida");
+                }
+
+                System.out.println("Iniciando grabber...");
+                grabber.start();
+                System.out.println("Grabber iniciado com sucesso!");
+
+                // IMPORTANTE: Usar total de streams salvo (não re-detectar)
+                totalAudioStreams = savedTotalAudioStreams;
+                currentAudioStream = audioStream;
+
+                // Restaurar mapeamento
+                logicalToPhysicalAudioStream = new HashMap<>(savedAudioMapping);
+                System.out.println("Mapeamento de áudio restaurado: " + logicalToPhysicalAudioStream);
+
+                // Restaurar nomes das streams
+                audioStreamNames = new HashMap<>(savedAudioNames);
+                subtitleStreamNames = new HashMap<>(savedSubtitleNames);
+                totalSubtitleStreams = savedTotalSubtitleStreams;
+
+                System.out.println("Total de faixas de áudio (restaurado): " + totalAudioStreams);
+                System.out.println("Stream de áudio atual: " + currentAudioStream);
+                System.out.println("Nomes de áudio restaurados: " + audioStreamNames.size());
+                System.out.println("Nomes de legendas restaurados: " + subtitleStreamNames.size());
+                System.out.println("Total de legendas: " + totalSubtitleStreams);
+
+                // Só detectar legendas se ainda não temos informação
+                if (subtitleStreamNames.isEmpty()) {
+                    new Thread(() -> {
+                        try {
+                            detectEmbeddedSubtitles(filepath);
+                        } catch (Exception e) {
+                            System.out.println("Não foi possível detectar legendas embutidas: " + e.getMessage());
+                        }
+                    }, "SubtitleDetector").start();
+                }
+
+                totalFrames = grabber.getLengthInVideoFrames();
+                frameRate = grabber.getVideoFrameRate();
+                currentFrame = 0;
+
+                System.out.println("Total frames bruto: " + totalFrames + ", FPS bruto: " + frameRate);
+
+                if (frameRate > 120 || frameRate < 1) {
+                    System.out.println("FPS inválido, corrigindo para 30");
+                    frameRate = 30.0;
+                }
+
+                System.out.println("Configurando áudio...");
+                audioChannels = grabber.getAudioChannels();
+                sampleRate = grabber.getSampleRate();
+                System.out.println("Canais: " + audioChannels + ", SampleRate: " + sampleRate);
+
+                if (audioChannels > 0 && sampleRate > 0 && !extension.equals("gif")) {
+                    System.out.println("Criando audioLine...");
+                    try {
+                        int outputChannels = audioChannels > 2 ? 2 : audioChannels;
+
+                        AudioFormat audioFormat = new AudioFormat(sampleRate, 16, outputChannels, true, true);
+                        DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
+                        audioLine = (SourceDataLine) AudioSystem.getLine(info);
+
+                        int bufferSize = sampleRate * outputChannels * 2;
+                        if (extension.equals("wmv")) bufferSize *= 4;
+
+                        audioLine.open(audioFormat, bufferSize);
+                        System.out.println("AudioLine configurado com sucesso");
+                    } catch (Exception audioEx) {
+                        System.err.println("Erro ao configurar áudio: " + audioEx.getMessage());
+                        audioLine = null;
+                    }
+                } else {
+                    System.out.println("Sem áudio");
+                }
+
+                System.out.println("Procurando legendas externas...");
+                searchExternalSubtitles(filepath);
+                System.out.println("Busca de legendas concluída");
+
+                System.out.println("Vídeo carregado! Habilitando UI...");
+
+                SwingUtilities.invokeLater(() -> {
+                    playPauseButton.setEnabled(true);
+                    stopButton.setEnabled(true);
+                    progressSlider.setEnabled(true);
+                    progressSlider.setValue(0);
+                    openButton.setEnabled(true);
+                    volumeButton.setEnabled(true);
+
+                    updateTimeLabel();
+
+                    setTitle("Video Player - " + new java.io.File(filepath).getName());
+
+                    System.out.println("UI HABILITADA - Pronto para reproduzir!");
+                    System.out.println("Estado final:");
+                    System.out.println("  totalAudioStreams: " + totalAudioStreams);
+                    System.out.println("  currentAudioStream: " + currentAudioStream);
+                    System.out.println("  audioStreamNames: " + audioStreamNames);
+                    System.out.println("  logicalToPhysicalAudioStream: " + logicalToPhysicalAudioStream);
+                    System.out.println("  totalSubtitleStreams: " + totalSubtitleStreams);
+                    System.out.println("  subtitleStreamNames: " + subtitleStreamNames);
+                });
+
+            } catch (Exception e) {
+                System.err.println("ERRO ao carregar vídeo:");
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao abrir vídeo:\n" + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Video Player - JavaCV");
+                });
+            }
+        }, "VideoLoader").start();
+    }
 
 
     // Modificar o método detectAudioStreamNames
@@ -1153,65 +1310,65 @@ private void loadVideoWithAudioStream(String filepath, int audioStream) {
     }
 
 
-private void parseAudioStreamsFromJson(String json) {
-    int audioLogicalIndex = 0;
+    private void parseAudioStreamsFromJson(String json) {
+        int audioLogicalIndex = 0;
 
-    Pattern indexPattern = Pattern.compile("\"index\"\\s*:\\s*(\\d+)");
-    Pattern langPattern = Pattern.compile("\"(?:language|TAG:language)\"\\s*:\\s*\"([^\"]+)\"");
-    Pattern titlePattern = Pattern.compile("\"(?:TAG:)?title\"\\s*:\\s*\"([^\"]+)\"");
-    Pattern codecPattern = Pattern.compile("\"codec_type\"\\s*:\\s*\"audio\"");
+        Pattern indexPattern = Pattern.compile("\"index\"\\s*:\\s*(\\d+)");
+        Pattern langPattern = Pattern.compile("\"(?:language|TAG:language)\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern titlePattern = Pattern.compile("\"(?:TAG:)?title\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern codecPattern = Pattern.compile("\"codec_type\"\\s*:\\s*\"audio\"");
 
-    Matcher codecMatcher = codecPattern.matcher(json);
+        Matcher codecMatcher = codecPattern.matcher(json);
 
-    while (codecMatcher.find()) {
-        int matchStart = codecMatcher.start();
-        int streamStart = json.lastIndexOf("{", matchStart);
-        int streamEnd = findMatchingBrace(json, streamStart);
+        while (codecMatcher.find()) {
+            int matchStart = codecMatcher.start();
+            int streamStart = json.lastIndexOf("{", matchStart);
+            int streamEnd = findMatchingBrace(json, streamStart);
 
-        if (streamStart != -1 && streamEnd > streamStart) {
-            String streamData = json.substring(streamStart, streamEnd);
+            if (streamStart != -1 && streamEnd > streamStart) {
+                String streamData = json.substring(streamStart, streamEnd);
 
-            // Extrair índice físico da stream no container
-            int physicalIndex = audioLogicalIndex; // Default
-            Matcher indexMatcher = indexPattern.matcher(streamData);
-            if (indexMatcher.find()) {
-                physicalIndex = Integer.parseInt(indexMatcher.group(1));
+                // Extrair índice físico da stream no container
+                int physicalIndex = audioLogicalIndex; // Default
+                Matcher indexMatcher = indexPattern.matcher(streamData);
+                if (indexMatcher.find()) {
+                    physicalIndex = Integer.parseInt(indexMatcher.group(1));
+                }
+
+                // Mapear índice lógico (0, 1, 2...) para físico (pode ser 1, 2, 3... no MKV)
+                logicalToPhysicalAudioStream.put(audioLogicalIndex, physicalIndex);
+
+                // Extrair idioma
+                String lang = null;
+                Matcher langMatcher = langPattern.matcher(streamData);
+                if (langMatcher.find()) {
+                    lang = langMatcher.group(1);
+                }
+
+                // Extrair título
+                String title = null;
+                Matcher titleMatcher = titlePattern.matcher(streamData);
+                if (titleMatcher.find()) {
+                    title = titleMatcher.group(1);
+                }
+
+                // Criar nome do stream
+                String streamName;
+                if (title != null && !title.isEmpty()) {
+                    streamName = title;
+                } else if (lang != null && !lang.isEmpty()) {
+                    streamName = "Áudio " + lang.toUpperCase();
+                } else {
+                    streamName = "Faixa de Áudio " + (audioLogicalIndex + 1);
+                }
+
+                audioStreamNames.put(audioLogicalIndex, streamName);
+                System.out.println("Stream lógico " + audioLogicalIndex + " → físico " + physicalIndex + ": " + streamName);
+
+                audioLogicalIndex++;
             }
-
-            // Mapear índice lógico (0, 1, 2...) para físico (pode ser 1, 2, 3... no MKV)
-            logicalToPhysicalAudioStream.put(audioLogicalIndex, physicalIndex);
-
-            // Extrair idioma
-            String lang = null;
-            Matcher langMatcher = langPattern.matcher(streamData);
-            if (langMatcher.find()) {
-                lang = langMatcher.group(1);
-            }
-
-            // Extrair título
-            String title = null;
-            Matcher titleMatcher = titlePattern.matcher(streamData);
-            if (titleMatcher.find()) {
-                title = titleMatcher.group(1);
-            }
-
-            // Criar nome do stream
-            String streamName;
-            if (title != null && !title.isEmpty()) {
-                streamName = title;
-            } else if (lang != null && !lang.isEmpty()) {
-                streamName = "Áudio " + lang.toUpperCase();
-            } else {
-                streamName = "Faixa de Áudio " + (audioLogicalIndex + 1);
-            }
-
-            audioStreamNames.put(audioLogicalIndex, streamName);
-            System.out.println("Stream lógico " + audioLogicalIndex + " → físico " + physicalIndex + ": " + streamName);
-
-            audioLogicalIndex++;
         }
     }
-}
 
     // Entrada de legenda
     class SubtitleEntry {
@@ -1231,6 +1388,7 @@ private void parseAudioStreamsFromJson(String json) {
         private BufferedImage currentImage;
         private AudioSpectrumPanel spectrumPanel;
         private BufferedImage coverArt; // NOVO: Cover art do áudio
+        JCheckBoxMenuItem autoPlayItem;
 
         public BufferedImage getCurrentImage() {
             return currentImage;
@@ -1270,6 +1428,7 @@ private void parseAudioStreamsFromJson(String json) {
                 spectrumPanel.setCoverArtVisible(visible);
             }
         }
+
         public VideoPanel() {
 
             setBackground(Color.BLACK);
@@ -1286,15 +1445,9 @@ private void parseAudioStreamsFromJson(String json) {
 
             add(spectrumPanel, BorderLayout.CENTER);
 
-//            setupContextMenu();
-//            System.out.println("É somete audio? " + isAudioOnly);
-//            if(isAudioOnly){
-//                System.out.println("AUDIO");
-//                setupAudioContextMenu();
-//            }else {
-//                System.out.println("VIDEO");
-//                setupVideoContextMenu();
-//            }
+            if (grabber == null) {
+                setupContextMenu();
+            }
 
             // Listener para redimensionar spectrum quando o VideoPanel mudar
             addComponentListener(new ComponentAdapter() {
@@ -1306,6 +1459,7 @@ private void parseAudioStreamsFromJson(String json) {
                 }
             });
         }
+
         // NOVO: Método para centralizar o spectrum panel
         private void centerSpectrumPanel() {
             int panelWidth = spectrumPanel.getPanelWidth();
@@ -1316,938 +1470,375 @@ private void parseAudioStreamsFromJson(String json) {
         }
 
 
-//        private void setupContextMenu() {
-//    JPopupMenu contextMenu = new JPopupMenu();
-//
-//    // Menu de áudio
-//    JMenu audioMenu = new JMenu("Faixa de Áudio");
-//    contextMenu.add(audioMenu);
-//
-//    // Menu de legendas
-//    JMenu subtitleMenu = new JMenu("Legendas");
-//    JMenuItem noSubtitle = new JMenuItem("Desabilitado");
-//    noSubtitle.addActionListener(e -> {
-//        currentSubtitleStream = -1;
-//        currentSubtitleText = "";
-//        repaint();
-//    });
-//    subtitleMenu.add(noSubtitle);
-//
-//    JMenuItem loadExternal = new JMenuItem("Carregar arquivo externo...");
-//    loadExternal.addActionListener(e -> loadExternalSubtitle());
-//    subtitleMenu.add(loadExternal);
-//
-//    contextMenu.add(subtitleMenu);
-//
-//    // Menu de configurações de legenda
-//    JMenu subtitleSettingsMenu = new JMenu("Configurações de Legenda");
-//
-//    // Submenu de tamanho
-//    JMenu sizeMenu = new JMenu("Tamanho da Fonte");
-//    int[] sizes = {16, 20, 24, 28, 32, 36, 40, 48, 56, 64};
-//    ButtonGroup sizeGroup = new ButtonGroup();
-//
-//    for (int size : sizes) {
-//        JRadioButtonMenuItem sizeItem = new JRadioButtonMenuItem(size + "px");
-//        sizeItem.setSelected(size == baseSubtitleFontSize);
-//        sizeItem.addActionListener(e -> {
-//            baseSubtitleFontSize = size;
-//            System.out.println("Tamanho base da legenda alterado para: " + size);
-//            repaint();
-//        });
-//        sizeGroup.add(sizeItem);
-//        sizeMenu.add(sizeItem);
-//    }
-//
-//    subtitleSettingsMenu.add(sizeMenu);
-//
-//    // Submenu de cor
-//    JMenu colorMenu = new JMenu("Cor da Legenda");
-//    ButtonGroup colorGroup = new ButtonGroup();
-//
-//    JRadioButtonMenuItem whiteColor = new JRadioButtonMenuItem("Branco");
-//    whiteColor.setSelected(subtitleColor.equals(Color.WHITE));
-//    whiteColor.addActionListener(e -> {
-//        subtitleColor = Color.WHITE;
-//        System.out.println("Cor da legenda alterada para: Branco");
-//        repaint();
-//    });
-//    colorGroup.add(whiteColor);
-//    colorMenu.add(whiteColor);
-//
-//    JRadioButtonMenuItem yellowColor = new JRadioButtonMenuItem("Amarelo");
-//    yellowColor.setSelected(subtitleColor.equals(Color.YELLOW));
-//    yellowColor.addActionListener(e -> {
-//        subtitleColor = Color.YELLOW;
-//        System.out.println("Cor da legenda alterada para: Amarelo");
-//        repaint();
-//    });
-//    colorGroup.add(yellowColor);
-//    colorMenu.add(yellowColor);
-//
-//    subtitleSettingsMenu.add(colorMenu);
-//
-//    contextMenu.add(subtitleSettingsMenu);
-//
-//    // NOVO: Menu de Performance
-//    JMenu performanceMenu = new JMenu("Performance");
-//
-//    JCheckBoxMenuItem hwAccelItem = new JCheckBoxMenuItem("Aceleração GPU");
-//    hwAccelItem.setSelected(hardwareAccelerationEnabled);
-//    hwAccelItem.addActionListener(e -> {
-//        hardwareAccelerationEnabled = hwAccelItem.isSelected();
-//        System.out.println("Aceleração GPU: " + (hardwareAccelerationEnabled ? "Habilitada" : "Desabilitada"));
-//
-//        if (grabber != null) {
-//            JOptionPane.showMessageDialog(VideoPlayer.this,
-//                    "A aceleração GPU será aplicada ao recarregar o vídeo.",
-//                    "Aviso", JOptionPane.INFORMATION_MESSAGE);
-//        }
-//    });
-//
-//    performanceMenu.add(hwAccelItem);
-//
-//// NOVO: Submenu para configurar quantidade de frames
-//    performanceMenu.addSeparator();
-//    JMenu frameSkipMenu = new JMenu("Frames por Avanço");
-//
-//    ButtonGroup frameSkipGroup = new ButtonGroup();
-//    int[] skipValues = {1, 2, 3, 5, 10, 15, 30};
-//
-//    for (int skipValue : skipValues) {
-//        JRadioButtonMenuItem skipItem = new JRadioButtonMenuItem(skipValue + " frame" + (skipValue > 1 ? "s" : ""));
-//        skipItem.setSelected(skipValue == framesToSkip);
-//
-//        final int value = skipValue;
-//        skipItem.addActionListener(e -> {
-//            framesToSkip = value;
-//            System.out.println("Frames por avanço alterado para: " + framesToSkip);
-//
-//            // Atualizar tooltip do botão nextFrame
-//            if (nextFrameButton != null) {
-//                nextFrameButton.setToolTipText("Avançar " + framesToSkip + " frame" + (framesToSkip > 1 ? "s" : ""));
-//            }
-//        });
-//
-//        frameSkipGroup.add(skipItem);
-//        frameSkipMenu.add(skipItem);
-//    }
-//
-//    performanceMenu.add(frameSkipMenu);
-//
-//    contextMenu.add(performanceMenu);
-//
-//    // ========== NOVO: Menu de Captura ==========
-//    JMenu captureMenu = new JMenu("Captura");
-//
-//    // Opção de captura silenciosa
-//    JCheckBoxMenuItem silentCaptureItem = new JCheckBoxMenuItem("Captura Silenciosa");
-//    silentCaptureItem.setSelected(silentCapture);
-//    silentCaptureItem.addActionListener(e -> {
-//        silentCapture = silentCaptureItem.isSelected();
-//        System.out.println("Captura silenciosa: " + (silentCapture ? "Ativada" : "Desativada"));
-//    });
-//    captureMenu.add(silentCaptureItem);
-//
-//    captureMenu.addSeparator();
-//
-//    // Opção de definir pasta personalizada
-//    JMenuItem selectFolderItem = new JMenuItem("Definir Pasta...");
-//    selectFolderItem.addActionListener(e -> selectCaptureFolder());
-//    captureMenu.add(selectFolderItem);
-//
-//    // Opção de resetar para pasta padrão
-//    JMenuItem resetFolderItem = new JMenuItem("Usar Pasta do Vídeo");
-//    resetFolderItem.addActionListener(e -> resetCaptureFolder());
-//    captureMenu.add(resetFolderItem);
-//
-//    captureMenu.addSeparator();
-//
-//    // Mostrar pasta atual
-//    JMenuItem showCurrentFolder = new JMenuItem("Pasta Atual");
-//    showCurrentFolder.addActionListener(e -> {
-//        String currentFolder;
-//        if (customCapturePath != null && !customCapturePath.isEmpty()) {
-//            currentFolder = customCapturePath;
-//        } else if (videoFilePath != null) {
-//            File videoFile = new File(videoFilePath);
-//            currentFolder = videoFile.getParent();
-//        } else {
-//            currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
-//        }
-//
-//        JOptionPane.showMessageDialog(VideoPlayer.this,
-//                "Pasta atual para capturas:\n" + currentFolder,
-//                "Pasta de Captura",
-//                JOptionPane.INFORMATION_MESSAGE);
-//    });
-//    captureMenu.add(showCurrentFolder);
-//
-//    contextMenu.add(captureMenu);
-//    // ========== FIM: Menu de Captura ==========
-//
-//    // ========== NOVO: Menu de Captura em Lote ==========
-//    JMenu batchCaptureMenu = new JMenu("Captura em Lote");
-//
-//    // Intervalo de frames
-//    JMenu intervalMenu = new JMenu("Intervalo de Captura");
-//    ButtonGroup intervalGroup = new ButtonGroup();
-//    int[] intervals = { 2, 3, 5, 10, 15, 30, 60, 120};
-//
-//    for (int interval : intervals) {
-//        JRadioButtonMenuItem intervalItem = new JRadioButtonMenuItem("A cada " + interval + " frame" + (interval > 2 ? "s" : ""));
-//        intervalItem.setSelected(interval == batchCaptureInterval);
-//
-//        final int value = interval;
-//        intervalItem.addActionListener(e -> {
-//            batchCaptureInterval = value;
-//            System.out.println("Intervalo de captura em lote alterado para: " + batchCaptureInterval);
-//        });
-//
-//        intervalGroup.add(intervalItem);
-//        intervalMenu.add(intervalItem);
-//    }
-//
-//    batchCaptureMenu.add(intervalMenu);
-//
-//    batchCaptureMenu.addSeparator();
-//
-//    // Definir pasta personalizada
-//    JMenuItem selectBatchFolderItem = new JMenuItem("Definir Pasta...");
-//    selectBatchFolderItem.addActionListener(e -> selectBatchCaptureFolder());
-//    batchCaptureMenu.add(selectBatchFolderItem);
-//
-//    // Resetar para pasta padrão
-//    JMenuItem resetBatchFolderItem = new JMenuItem("Usar Pasta do Vídeo");
-//    resetBatchFolderItem.addActionListener(e -> resetBatchCaptureFolder());
-//    batchCaptureMenu.add(resetBatchFolderItem);
-//
-//    batchCaptureMenu.addSeparator();
-//
-//    // Mostrar pasta atual
-//    JMenuItem showBatchFolder = new JMenuItem("Pasta Atual");
-//    showBatchFolder.addActionListener(e -> {
-//        String currentFolder;
-//        if (batchCapturePath != null && !batchCapturePath.isEmpty()) {
-//            currentFolder = batchCapturePath;
-//        } else if (videoFilePath != null) {
-//            File videoFile = new File(videoFilePath);
-//            currentFolder = videoFile.getParent();
-//        } else {
-//            currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
-//        }
-//
-//        JOptionPane.showMessageDialog(VideoPlayer.this,
-//                "Pasta atual para captura em lote:\n" + currentFolder,
-//                "Pasta de Captura em Lote",
-//                JOptionPane.INFORMATION_MESSAGE);
-//    });
-//    batchCaptureMenu.add(showBatchFolder);
-//
-//    contextMenu.add(batchCaptureMenu);
-//    // ========== FIM: Menu de Captura em Lote ==========
-//
-//    // ========== NOVO: Menu de Filtros (apenas para resoluções <= 1280x720) ==========
-//    JMenu filtersMenu = new JMenu("Filtros");
-//
-//    // Ajuste de brilho
-//    JMenuItem brightnessItem = new JMenuItem("Brilho...");
-//    brightnessItem.addActionListener(e -> showBrightnessDialog());
-//    filtersMenu.add(brightnessItem);
-//
-//    // TODO: Adicionar outros filtros depois
-//    // JMenuItem contrastItem = new JMenuItem("Contraste...");
-//    // JMenuItem gammaItem = new JMenuItem("Gamma...");
-//    // JMenuItem saturationItem = new JMenuItem("Saturação...");
-//
-//    filtersMenu.addSeparator();
-//
-//    // Resetar todos os filtros
-//    JMenuItem resetFiltersItem = new JMenuItem("Resetar Filtros");
-//    resetFiltersItem.addActionListener(e -> {
-//        int confirm = JOptionPane.showConfirmDialog(VideoPlayer.this,
-//                "Deseja resetar todos os filtros aplicados?",
-//                "Confirmar Reset",
-//                JOptionPane.YES_NO_OPTION,
-//                JOptionPane.QUESTION_MESSAGE);
-//
-//        if (confirm == JOptionPane.YES_OPTION) {
-//            resetFilters();
-//        }
-//    });
-//    filtersMenu.add(resetFiltersItem);
-//
-//    filtersMenu.addSeparator();
-//
-//    // Mostrar filtros ativos
-//    JMenuItem showFiltersItem = new JMenuItem("Filtros Ativos");
-//    showFiltersItem.addActionListener(e -> {
-//        StringBuilder info = new StringBuilder();
-//        info.append("Filtros atualmente aplicados:\n\n");
-//
-//        if (!filtersEnabled || buildFilterString() == null) {
-//            info.append("Nenhum filtro ativo");
-//        } else {
-//            if (brightness != 0.0) {
-//                info.append(String.format("• Brilho: %.2f\n", brightness));
-//            }
-//            if (contrast != 1.0) {
-//                info.append(String.format("• Contraste: %.2f\n", contrast));
-//            }
-//            if (gamma != 1.0) {
-//                info.append(String.format("• Gamma: %.2f\n", gamma));
-//            }
-//            if (saturation != 1.0) {
-//                info.append(String.format("• Saturação: %.2f\n", saturation));
-//            }
-//
-//            info.append("\nString FFmpeg:\n").append(buildFilterString());
-//        }
-//
-//        JOptionPane.showMessageDialog(VideoPlayer.this,
-//                info.toString(),
-//                "Filtros Ativos",
-//                JOptionPane.INFORMATION_MESSAGE);
-//    });
-//    filtersMenu.add(showFiltersItem);
-//
-//    // Adicionar menu de filtros ao contexto (será habilitado/desabilitado dinamicamente)
-//    contextMenu.add(filtersMenu);
-//    // ========== FIM: Menu de Filtros ==========
-//
-//
-//
-//    // Opção de tela cheia
-//    JCheckBoxMenuItem fullscreenItem = new JCheckBoxMenuItem("Tela Cheia");
-//    fullscreenItem.addActionListener(e -> {
-//        toggleFullScreen();
-//    });
-//    contextMenu.add(fullscreenItem);
-//
-//           // Separador
-//           contextMenu.addSeparator();
-//
-//           JMenu spectrumMenu = new JMenu("Visualização");
-//           spectrumMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-//
-//           // === Submenu: Modo de Cor ===
-//           JMenu colorModeMenu = new JMenu("Modo de Cor");
-//
-//           ButtonGroup colorGroup1 = new ButtonGroup();
-//
-//           JRadioButtonMenuItem defaultColorItem = new JRadioButtonMenuItem("Padrão (Verde-Amarelo-Vermelho)" );
-//           defaultColorItem.addActionListener(e -> {
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT);
-//           });
-//
-//           JRadioButtonMenuItem coverColorItem = new JRadioButtonMenuItem("Baseado na Capa",true);
-//           coverColorItem.addActionListener(e -> {
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
-//           });
-//
-//           JRadioButtonMenuItem customColorItem = new JRadioButtonMenuItem("Personalizado...");
-//           customColorItem.addActionListener(e -> {
-//               showCustomColorDialog();
-//           });
-//
-//           colorGroup1.add(defaultColorItem);
-//           colorGroup1.add(coverColorItem);
-//           colorGroup1.add(customColorItem);
-//
-//           colorModeMenu.add(defaultColorItem);
-//           colorModeMenu.add(coverColorItem);
-//           colorModeMenu.add(customColorItem);
-//           colorModeMenu.addSeparator();
-//
-//           // Paletas pré-definidas
-//           JMenuItem synthwaveItem = new JMenuItem("Paleta: Synthwave");
-//           synthwaveItem.addActionListener(e -> {
-//               videoPanel.setSpectrumCustomColors(
-//                       new Color(100, 0, 200),
-//                       new Color(200, 0, 255),
-//                       new Color(255, 100, 255)
-//               );
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-//               customColorItem.setSelected(true);
-//           });
-//
-//           JMenuItem matrixItem = new JMenuItem("Paleta: Matrix");
-//           matrixItem.addActionListener(e -> {
-//               videoPanel.setSpectrumCustomColors(
-//                       new Color(0, 255, 0),
-//                       new Color(0, 255, 128),
-//                       new Color(128, 255, 255)
-//               );
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-//               customColorItem.setSelected(true);
-//           });
-//
-//           JMenuItem fireItem = new JMenuItem("Paleta: Fogo");
-//           fireItem.addActionListener(e -> {
-//               videoPanel.setSpectrumCustomColors(
-//                       new Color(255, 100, 0),
-//                       new Color(255, 200, 0),
-//                       new Color(255, 255, 100)
-//               );
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-//               customColorItem.setSelected(true);
-//           });
-//
-//           JMenuItem iceItem = new JMenuItem("Paleta: Gelo");
-//           iceItem.addActionListener(e -> {
-//               videoPanel.setSpectrumCustomColors(
-//                       new Color(0, 100, 200),
-//                       new Color(0, 200, 255),
-//                       new Color(200, 255, 255)
-//               );
-//               videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-//               customColorItem.setSelected(true);
-//           });
-//
-//           colorModeMenu.add(synthwaveItem);
-//           colorModeMenu.add(matrixItem);
-//           colorModeMenu.add(fireItem);
-//           colorModeMenu.add(iceItem);
-//
-//           // === Checkboxes de Visibilidade ===
-//           spectrumMenu.add(colorModeMenu);
-//           spectrumMenu.addSeparator();
-//
-//           JCheckBoxMenuItem showSpectrumItem = new JCheckBoxMenuItem("Mostrar Spectrum", true);
-//           showSpectrumItem.addActionListener(e -> {
-//               videoPanel.setSpectrumVisible(showSpectrumItem.isSelected());
-//           });
-//
-//           JCheckBoxMenuItem showCoverItem = new JCheckBoxMenuItem("Mostrar Capa", true);
-//           showCoverItem.addActionListener(e -> {
-//               videoPanel.setCoverArtVisible(showCoverItem.isSelected());
-//           });
-//
-//           spectrumMenu.add(showSpectrumItem);
-//           spectrumMenu.add(showCoverItem);
-//
-//           spectrumMenu.addSeparator();
-//
-//           // === Submenu: Reflexo ===
-//           JMenu reflectionMenu = new JMenu("Reflexo");
-//
-//           JCheckBoxMenuItem enableReflectionItem = new JCheckBoxMenuItem("Ativar Reflexo", true);
-//           enableReflectionItem.addActionListener(e -> {
-//               videoPanel.setSpectrumReflection(enableReflectionItem.isSelected());
-//           });
-//
-//           JMenu reflectionHeightMenu = new JMenu("Altura do Reflexo");
-//           String[] heightLabels = {"25%", "50%", "75%", "100%"};
-//           float[] heightValues = {0.25f, 0.5f, 0.75f, 1.0f};
-//
-//           ButtonGroup heightGroup = new ButtonGroup();
-//           for (int i = 0; i < heightLabels.length; i++) {
-//               final float height = heightValues[i];
-//               JRadioButtonMenuItem item = new JRadioButtonMenuItem(heightLabels[i], i == 1); // 50% selecionado
-//               item.addActionListener(e -> {
-//                   videoPanel.setSpectrumReflectionHeight(height);
-//               });
-//               heightGroup.add(item);
-//               reflectionHeightMenu.add(item);
-//           }
-//
-//           JMenu reflectionOpacityMenu = new JMenu("Opacidade do Reflexo");
-//           String[] opacityLabels = {"25%", "50%", "75%", "100%"};
-//           int[] opacityValues = {64, 128, 192, 255};
-//
-//           ButtonGroup opacityGroup = new ButtonGroup();
-//           for (int i = 0; i < opacityLabels.length; i++) {
-//               final int opacity = opacityValues[i];
-//               JRadioButtonMenuItem item = new JRadioButtonMenuItem(opacityLabels[i], i == 1); // 50% selecionado
-//               item.addActionListener(e -> {
-//                   videoPanel.setSpectrumReflectionAlpha(opacity);
-//               });
-//               opacityGroup.add(item);
-//               reflectionOpacityMenu.add(item);
-//           }
-//
-//           reflectionMenu.add(enableReflectionItem);
-//           reflectionMenu.add(reflectionHeightMenu);
-//           reflectionMenu.add(reflectionOpacityMenu);
-//
-//           spectrumMenu.add(reflectionMenu);
-//
-//
-//           contextMenu.add(spectrumMenu);
-//           // ========== FIM: Menu de Modos de cor do Spectrum ==========
-//
-//
-//           JMenu audioMenu2 = new JMenu("Áudio");
-//           audioMenu2.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-//
-//           // === Normalização ===
-//           JCheckBoxMenuItem enableNormalizationItem = new JCheckBoxMenuItem("Ativar Normalização", true);
-//           enableNormalizationItem.addActionListener(e -> {
-//               setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
-//           });
-//
-//           audioMenu2.add(enableNormalizationItem);
-//           audioMenu2.addSeparator();
-//
-//           // === Submenu: Presets de Loudness ===
-//           JMenu loudnessMenu = new JMenu("Target Loudness");
-//
-//           ButtonGroup loudnessGroup = new ButtonGroup();
-//
-//           JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
-//           streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
-//           streamingItem.addActionListener(e -> {
-//               setTargetLoudness(-14.0f);
-//           });
-//
-//           JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
-//           quietItem.setToolTipText("Música ambiente, uso casual");
-//           quietItem.addActionListener(e -> {
-//               setTargetLoudness(-18.0f);
-//           });
-//
-//           JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
-//           broadcastItem.setToolTipText("TV, Rádio");
-//           broadcastItem.addActionListener(e -> {
-//               setTargetLoudness(-23.0f);
-//           });
-//
-//           JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
-//           cinemaItem.setToolTipText("Padrão de cinema");
-//           cinemaItem.addActionListener(e -> {
-//               setTargetLoudness(-24.0f);
-//           });
-//
-//           JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
-//           loudItem.setToolTipText("Festas, clubs");
-//           loudItem.addActionListener(e -> {
-//               setTargetLoudness(-11.0f);
-//           });
-//
-//           JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
-//           customLoudnessItem.addActionListener(e -> {
-//               showCustomLoudnessDialog();
-//           });
-//
-//           loudnessGroup.add(streamingItem);
-//           loudnessGroup.add(quietItem);
-//           loudnessGroup.add(broadcastItem);
-//           loudnessGroup.add(cinemaItem);
-//           loudnessGroup.add(loudItem);
-//           loudnessGroup.add(customLoudnessItem);
-//
-//           loudnessMenu.add(streamingItem);
-//           loudnessMenu.add(quietItem);
-//           loudnessMenu.add(broadcastItem);
-//           loudnessMenu.add(cinemaItem);
-//           loudnessMenu.add(loudItem);
-//           loudnessMenu.addSeparator();
-//           loudnessMenu.add(customLoudnessItem);
-//
-//           audioMenu2.add(loudnessMenu);
-//           audioMenu2.addSeparator();
-//
-//           // === Submenu: Volume Global ===
-//           JMenu volumeGainMenu = new JMenu("Volume Global");
-//
-//           ButtonGroup volumeGroup = new ButtonGroup();
-//
-//           String[] volumeLabels = {"20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"};
-//           float[] volumeValues = {0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f};
-//
-//           for (int i = 0; i < volumeLabels.length; i++) {
-//               final float vol = volumeValues[i];
-//               JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0); // 50% selecionado
-//               item.addActionListener(e -> {
-//                   setGlobalAudioGain(vol);
-//               });
-//               volumeGroup.add(item);
-//               volumeGainMenu.add(item);
-//           }
-//
-//           audioMenu2.add(volumeGainMenu);
-//           audioMenu2.addSeparator();
-//
-//           // === Informações ===
-//           JMenuItem infoItem = new JMenuItem("Informações de Áudio");
-//           infoItem.addActionListener(e -> {
-//               String info = getNormalizationInfo();
-//               JOptionPane.showMessageDialog(this,
-//                       info + "\n\n" +
-//                               "Normalização: " + (isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
-//                               "Volume Global: " + (int)(getGlobalAudioGain() * 100) + "%",
-//                       "Informações de Áudio",
-//                       JOptionPane.INFORMATION_MESSAGE);
-//           });
-//
-//           audioMenu2.add(infoItem);
-//           contextMenu.add(audioMenu2);
-//
-//    // Atualizar estado ao abrir menu
-//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//            if (grabber == null) {
-//                JOptionPane.showMessageDialog(VideoPlayer.this,
-//                        "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
-//                        "Aviso", JOptionPane.INFORMATION_MESSAGE);
-//                SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
-//                return;
-//            }
-//
-//            updateContextMenus(audioMenu, subtitleMenu);
-//            GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-//            fullscreenItem.setSelected(gd.getFullScreenWindow() == VideoPlayer.this);
-//
-//            // Verificar resolução do vídeo e habilitar/desabilitar menu de filtros
-//            int videoWidth = grabber.getImageWidth();
-//            int videoHeight = grabber.getImageHeight();
-//            boolean isHighResolution = (videoWidth > 1280 || videoHeight > 720);
-//
-//            if (isHighResolution) {
-//                filtersMenu.setEnabled(false);
-//                filtersMenu.setToolTipText(String.format(
-//                        "Filtros desabilitados para vídeos com resolução superior a 1280x720 (Atual: %dx%d)",
-//                        videoWidth, videoHeight
-//                ));
-//            } else {
-//                filtersMenu.setEnabled(true);
-//                filtersMenu.setToolTipText(null);
-//            }
-//            if(isAudioOnly){
-//                subtitleMenu.setEnabled(false);
-//                filtersMenu.setEnabled(false);
-//                audioMenu.setEnabled(false);
-//                captureMenu.setEnabled(false);
-//                batchCaptureMenu.setEnabled(false);
-//                performanceMenu.setEnabled(false);
-//                intervalMenu.setEnabled(false);
-//                fullscreenItem.setEnabled(false);
-//                subtitleSettingsMenu.setEnabled(false);
-//                spectrumMenu.setEnabled(true);
-//                audioMenu2.setEnabled(true);
-//            }else {
-//                subtitleMenu.setEnabled(true);
-//                filtersMenu.setEnabled(true);
-//                audioMenu.setEnabled(true);
-//                captureMenu.setEnabled(true);
-//                batchCaptureMenu.setEnabled(true);
-//                performanceMenu.setEnabled(true);
-//                intervalMenu.setEnabled(true);
-//                fullscreenItem.setEnabled(true);
-//                subtitleSettingsMenu.setEnabled(true);
-//                spectrumMenu.setEnabled(false);
-//                audioMenu2.setEnabled(false);
-//            }
-//        }
-//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
-//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
-//    });
-//    // Adicionar menu ao painel
-//    addMouseListener(new MouseAdapter() {
-//        public void mousePressed(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//        public void mouseReleased(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//    });
-//}
-private void setupAudioContextMenu() {
-    JPopupMenu contextMenu = new JPopupMenu();
+        private void setupContextMenu() {
+            JPopupMenu contextMenu = new JPopupMenu();
+            // === Submenu: Playlist ===
+            JMenu playlistMenu = new JMenu("Playlist");
+            playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-    JMenu spectrumMenu = new JMenu("Visualização");
-    spectrumMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
+            openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+            openPlaylistItem.addActionListener(e -> showPlaylistDialog());
 
-    // === Submenu: Modo de Cor ===
-    JMenu colorModeMenu = new JMenu("Modo de Cor");
+            autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+            autoPlayItem.addActionListener(e -> {
+                autoPlayNext = autoPlayItem.isSelected();
+            });
 
-    ButtonGroup colorGroup1 = new ButtonGroup();
+            playlistMenu.add(openPlaylistItem);
+            playlistMenu.addSeparator();
+            playlistMenu.add(autoPlayItem);
 
-    JRadioButtonMenuItem defaultColorItem = new JRadioButtonMenuItem("Padrão (Verde-Amarelo-Vermelho)" );
-    defaultColorItem.addActionListener(e -> {
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT);
-    });
+            contextMenu.add(playlistMenu);
 
-    JRadioButtonMenuItem coverColorItem = new JRadioButtonMenuItem("Baseado na Capa",true);
-    coverColorItem.addActionListener(e -> {
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
-    });
+            // Atualizar estado ao abrir menu
+            contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+                public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                    if (grabber == null) {
+                        SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
+                    }
+                }
 
-    JRadioButtonMenuItem customColorItem = new JRadioButtonMenuItem("Personalizado...");
-    customColorItem.addActionListener(e -> {
-        showCustomColorDialog();
-    });
+                public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+                }
 
-    colorGroup1.add(defaultColorItem);
-    colorGroup1.add(coverColorItem);
-    colorGroup1.add(customColorItem);
+                public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+                }
+            });
+            // Adicionar menu ao painel
+            addMouseListener(new MouseAdapter() {
+                public void mousePressed(MouseEvent e) {
+                    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+                    }
+                }
 
-    colorModeMenu.add(defaultColorItem);
-    colorModeMenu.add(coverColorItem);
-    colorModeMenu.add(customColorItem);
-    colorModeMenu.addSeparator();
+                public void mouseReleased(MouseEvent e) {
+                    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+                    }
+                }
+            });
+        }
 
-    // Paletas pré-definidas
-    JMenuItem synthwaveItem = new JMenuItem("Paleta: Synthwave");
-    synthwaveItem.addActionListener(e -> {
-        videoPanel.setSpectrumCustomColors(
-                new Color(100, 0, 200),
-                new Color(200, 0, 255),
-                new Color(255, 100, 255)
-        );
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-        customColorItem.setSelected(true);
-    });
+        private void setupAudioContextMenu() {
+            JPopupMenu contextMenu = new JPopupMenu();
 
-    JMenuItem matrixItem = new JMenuItem("Paleta: Matrix");
-    matrixItem.addActionListener(e -> {
-        videoPanel.setSpectrumCustomColors(
-                new Color(0, 255, 0),
-                new Color(0, 255, 128),
-                new Color(128, 255, 255)
-        );
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-        customColorItem.setSelected(true);
-    });
+            JMenu spectrumMenu = new JMenu("Equalizador de áudio Animado");
+            spectrumMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-    JMenuItem fireItem = new JMenuItem("Paleta: Fogo");
-    fireItem.addActionListener(e -> {
-        videoPanel.setSpectrumCustomColors(
-                new Color(255, 100, 0),
-                new Color(255, 200, 0),
-                new Color(255, 255, 100)
-        );
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-        customColorItem.setSelected(true);
-    });
+            // === Submenu: Modo de Cor ===
+            JMenu colorModeMenu = new JMenu("Modo de Cor");
 
-    JMenuItem iceItem = new JMenuItem("Paleta: Gelo");
-    iceItem.addActionListener(e -> {
-        videoPanel.setSpectrumCustomColors(
-                new Color(0, 100, 200),
-                new Color(0, 200, 255),
-                new Color(200, 255, 255)
-        );
-        videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
-        customColorItem.setSelected(true);
-    });
+            ButtonGroup colorGroup1 = new ButtonGroup();
 
-    colorModeMenu.add(synthwaveItem);
-    colorModeMenu.add(matrixItem);
-    colorModeMenu.add(fireItem);
-    colorModeMenu.add(iceItem);
+            JRadioButtonMenuItem defaultColorItem = new JRadioButtonMenuItem("Padrão (Verde-Amarelo-Vermelho)");
+            defaultColorItem.addActionListener(e -> {
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT);
+            });
 
-    // === Checkboxes de Visibilidade ===
-    spectrumMenu.add(colorModeMenu);
-    spectrumMenu.addSeparator();
+            JRadioButtonMenuItem coverColorItem = new JRadioButtonMenuItem("Baseado na Capa", true);
+            coverColorItem.addActionListener(e -> {
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
+            });
 
-    JCheckBoxMenuItem showSpectrumItem = new JCheckBoxMenuItem("Mostrar Spectrum", true);
-    showSpectrumItem.addActionListener(e -> {
-        videoPanel.setSpectrumVisible(showSpectrumItem.isSelected());
-    });
+            JRadioButtonMenuItem customColorItem = new JRadioButtonMenuItem("Personalizado...");
+            customColorItem.addActionListener(e -> {
+                showCustomColorDialog();
+            });
 
-    JCheckBoxMenuItem showCoverItem = new JCheckBoxMenuItem("Mostrar Capa", true);
-    showCoverItem.addActionListener(e -> {
-        videoPanel.setCoverArtVisible(showCoverItem.isSelected());
-    });
+            colorGroup1.add(defaultColorItem);
+            colorGroup1.add(coverColorItem);
+            colorGroup1.add(customColorItem);
 
-    spectrumMenu.add(showSpectrumItem);
-    spectrumMenu.add(showCoverItem);
+            colorModeMenu.add(defaultColorItem);
+            colorModeMenu.add(coverColorItem);
+            colorModeMenu.add(customColorItem);
+            colorModeMenu.addSeparator();
 
-    spectrumMenu.addSeparator();
+            // Paletas pré-definidas
+            JMenuItem synthwaveItem = new JMenuItem("Paleta: Synthwave");
+            synthwaveItem.addActionListener(e -> {
+                videoPanel.setSpectrumCustomColors(
+                        new Color(100, 0, 200),
+                        new Color(200, 0, 255),
+                        new Color(255, 100, 255)
+                );
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
+                customColorItem.setSelected(true);
+            });
 
-    // === Submenu: Reflexo ===
-    JMenu reflectionMenu = new JMenu("Reflexo");
+            JMenuItem matrixItem = new JMenuItem("Paleta: Matrix");
+            matrixItem.addActionListener(e -> {
+                videoPanel.setSpectrumCustomColors(
+                        new Color(0, 255, 0),
+                        new Color(0, 255, 128),
+                        new Color(128, 255, 255)
+                );
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
+                customColorItem.setSelected(true);
+            });
 
-    JCheckBoxMenuItem enableReflectionItem = new JCheckBoxMenuItem("Ativar Reflexo", true);
-    enableReflectionItem.addActionListener(e -> {
-        videoPanel.setSpectrumReflection(enableReflectionItem.isSelected());
-    });
+            JMenuItem fireItem = new JMenuItem("Paleta: Fogo");
+            fireItem.addActionListener(e -> {
+                videoPanel.setSpectrumCustomColors(
+                        new Color(255, 100, 0),
+                        new Color(255, 200, 0),
+                        new Color(255, 255, 100)
+                );
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
+                customColorItem.setSelected(true);
+            });
 
-    JMenu reflectionHeightMenu = new JMenu("Altura do Reflexo");
-    String[] heightLabels = {"25%", "50%", "75%", "100%"};
-    float[] heightValues = {0.25f, 0.5f, 0.75f, 1.0f};
+            JMenuItem iceItem = new JMenuItem("Paleta: Gelo");
+            iceItem.addActionListener(e -> {
+                videoPanel.setSpectrumCustomColors(
+                        new Color(0, 100, 200),
+                        new Color(0, 200, 255),
+                        new Color(200, 255, 255)
+                );
+                videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
+                customColorItem.setSelected(true);
+            });
 
-    ButtonGroup heightGroup = new ButtonGroup();
-    for (int i = 0; i < heightLabels.length; i++) {
-        final float height = heightValues[i];
-        JRadioButtonMenuItem item = new JRadioButtonMenuItem(heightLabels[i], i == 1); // 50% selecionado
-        item.addActionListener(e -> {
-            videoPanel.setSpectrumReflectionHeight(height);
-        });
-        heightGroup.add(item);
-        reflectionHeightMenu.add(item);
-    }
+            colorModeMenu.add(synthwaveItem);
+            colorModeMenu.add(matrixItem);
+            colorModeMenu.add(fireItem);
+            colorModeMenu.add(iceItem);
 
-    JMenu reflectionOpacityMenu = new JMenu("Opacidade do Reflexo");
-    String[] opacityLabels = {"25%", "50%", "75%", "100%"};
-    int[] opacityValues = {64, 128, 192, 255};
+            // === Checkboxes de Visibilidade ===
+            spectrumMenu.add(colorModeMenu);
+            spectrumMenu.addSeparator();
 
-    ButtonGroup opacityGroup = new ButtonGroup();
-    for (int i = 0; i < opacityLabels.length; i++) {
-        final int opacity = opacityValues[i];
-        JRadioButtonMenuItem item = new JRadioButtonMenuItem(opacityLabels[i], i == 1); // 50% selecionado
-        item.addActionListener(e -> {
-            videoPanel.setSpectrumReflectionAlpha(opacity);
-        });
-        opacityGroup.add(item);
-        reflectionOpacityMenu.add(item);
-    }
+            JCheckBoxMenuItem showSpectrumItem = new JCheckBoxMenuItem("Mostrar Equalizador", true);
+            showSpectrumItem.addActionListener(e -> {
+                videoPanel.setSpectrumVisible(showSpectrumItem.isSelected());
+            });
 
-    reflectionMenu.add(enableReflectionItem);
-    reflectionMenu.add(reflectionHeightMenu);
-    reflectionMenu.add(reflectionOpacityMenu);
+            JCheckBoxMenuItem showCoverItem = new JCheckBoxMenuItem("Mostrar Capa", true);
+            showCoverItem.addActionListener(e -> {
+                videoPanel.setCoverArtVisible(showCoverItem.isSelected());
+            });
 
-    spectrumMenu.add(reflectionMenu);
+            spectrumMenu.add(showSpectrumItem);
+            spectrumMenu.add(showCoverItem);
 
+            spectrumMenu.addSeparator();
 
-    contextMenu.add(spectrumMenu);
-    // ========== FIM: Menu de Modos de cor do Spectrum ==========
+            // === Submenu: Reflexo ===
+            JMenu reflectionMenu = new JMenu("Reflexo");
 
+            JCheckBoxMenuItem enableReflectionItem = new JCheckBoxMenuItem("Ativar Reflexo", true);
+            enableReflectionItem.addActionListener(e -> {
+                videoPanel.setSpectrumReflection(enableReflectionItem.isSelected());
+            });
 
-    JMenu audioMenu2 = new JMenu("Áudio");
-    audioMenu2.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            JMenu reflectionHeightMenu = new JMenu("Altura do Reflexo");
+            String[] heightLabels = {"25%", "50%", "75%", "100%"};
+            float[] heightValues = {0.25f, 0.5f, 0.75f, 1.0f};
 
-    // === Normalização ===
-    JCheckBoxMenuItem enableNormalizationItem = new JCheckBoxMenuItem("Ativar Normalização", true);
-    enableNormalizationItem.addActionListener(e -> {
-        setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
-    });
-
-    audioMenu2.add(enableNormalizationItem);
-    audioMenu2.addSeparator();
-
-    // === Submenu: Presets de Loudness ===
-    JMenu loudnessMenu = new JMenu("Target Loudness");
-
-    ButtonGroup loudnessGroup = new ButtonGroup();
-
-    JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
-    streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
-    streamingItem.addActionListener(e -> {
-        setTargetLoudness(-14.0f);
-    });
-
-    JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
-    quietItem.setToolTipText("Música ambiente, uso casual");
-    quietItem.addActionListener(e -> {
-        setTargetLoudness(-18.0f);
-    });
-
-    JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
-    broadcastItem.setToolTipText("TV, Rádio");
-    broadcastItem.addActionListener(e -> {
-        setTargetLoudness(-23.0f);
-    });
-
-    JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
-    cinemaItem.setToolTipText("Padrão de cinema");
-    cinemaItem.addActionListener(e -> {
-        setTargetLoudness(-24.0f);
-    });
-
-    JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
-    loudItem.setToolTipText("Festas, clubs");
-    loudItem.addActionListener(e -> {
-        setTargetLoudness(-11.0f);
-    });
-
-    JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
-    customLoudnessItem.addActionListener(e -> {
-        showCustomLoudnessDialog();
-    });
-
-    loudnessGroup.add(streamingItem);
-    loudnessGroup.add(quietItem);
-    loudnessGroup.add(broadcastItem);
-    loudnessGroup.add(cinemaItem);
-    loudnessGroup.add(loudItem);
-    loudnessGroup.add(customLoudnessItem);
-
-    loudnessMenu.add(streamingItem);
-    loudnessMenu.add(quietItem);
-    loudnessMenu.add(broadcastItem);
-    loudnessMenu.add(cinemaItem);
-    loudnessMenu.add(loudItem);
-    loudnessMenu.addSeparator();
-    loudnessMenu.add(customLoudnessItem);
-
-    audioMenu2.add(loudnessMenu);
-    audioMenu2.addSeparator();
-
-    // === Submenu: Volume Global ===
-    JMenu volumeGainMenu = new JMenu("Volume Global");
-
-    ButtonGroup volumeGroup = new ButtonGroup();
-
-    String[] volumeLabels = {"20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"};
-    float[] volumeValues = {0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f};
-
-    for (int i = 0; i < volumeLabels.length; i++) {
-        final float vol = volumeValues[i];
-        JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0); // 50% selecionado
-        item.addActionListener(e -> {
-            setGlobalAudioGain(vol);
-        });
-        volumeGroup.add(item);
-        volumeGainMenu.add(item);
-    }
-
-    audioMenu2.add(volumeGainMenu);
-    audioMenu2.addSeparator();
-
-    // === Informações ===
-    JMenuItem infoItem = new JMenuItem("Informações de Áudio");
-    infoItem.addActionListener(e -> {
-        String info = getNormalizationInfo();
-        JOptionPane.showMessageDialog(this,
-                info + "\n\n" +
-                        "Normalização: " + (isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
-                        "Volume Global: " + (int)(getGlobalAudioGain() * 100) + "%",
-                "Informações de Áudio",
-                JOptionPane.INFORMATION_MESSAGE);
-    });
-
-    audioMenu2.add(infoItem);
-    contextMenu.add(audioMenu2);
-
-    // Atualizar estado ao abrir menu
-    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-            if (grabber == null) {
-                JOptionPane.showMessageDialog(VideoPlayer.this,
-                        "Nenhum audio carregado.\nAbra um audio primeiro.",
-                        "Aviso", JOptionPane.INFORMATION_MESSAGE);
-                SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
-                return;
+            ButtonGroup heightGroup = new ButtonGroup();
+            for (int i = 0; i < heightLabels.length; i++) {
+                final float height = heightValues[i];
+                JRadioButtonMenuItem item = new JRadioButtonMenuItem(heightLabels[i], i == 1); // 50% selecionado
+                item.addActionListener(e -> {
+                    videoPanel.setSpectrumReflectionHeight(height);
+                });
+                heightGroup.add(item);
+                reflectionHeightMenu.add(item);
             }
 
-                spectrumMenu.setEnabled(true);
-                audioMenu2.setEnabled(true);
+            JMenu reflectionOpacityMenu = new JMenu("Opacidade do Reflexo");
+            String[] opacityLabels = {"25%", "50%", "75%", "100%"};
+            int[] opacityValues = {64, 128, 192, 255};
 
-        }
-        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
-        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
-    });
-    // Adicionar menu ao painel
-    addMouseListener(new MouseAdapter() {
-        public void mousePressed(MouseEvent e) {
-            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                contextMenu.show(e.getComponent(), e.getX(), e.getY());
+            ButtonGroup opacityGroup = new ButtonGroup();
+            for (int i = 0; i < opacityLabels.length; i++) {
+                final int opacity = opacityValues[i];
+                JRadioButtonMenuItem item = new JRadioButtonMenuItem(opacityLabels[i], i == 1); // 50% selecionado
+                item.addActionListener(e -> {
+                    videoPanel.setSpectrumReflectionAlpha(opacity);
+                });
+                opacityGroup.add(item);
+                reflectionOpacityMenu.add(item);
             }
-        }
-        public void mouseReleased(MouseEvent e) {
-            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                contextMenu.show(e.getComponent(), e.getX(), e.getY());
+
+            reflectionMenu.add(enableReflectionItem);
+            reflectionMenu.add(reflectionHeightMenu);
+            reflectionMenu.add(reflectionOpacityMenu);
+
+            spectrumMenu.add(reflectionMenu);
+
+
+            contextMenu.add(spectrumMenu);
+            // ========== FIM: Menu de Modos de cor do Spectrum ==========
+
+
+            JMenu audioMenu2 = new JMenu("Áudio");
+            audioMenu2.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+            // === Normalização ===
+            JCheckBoxMenuItem enableNormalizationItem = new JCheckBoxMenuItem("Ativar Normalização", false);
+            enableNormalizationItem.addActionListener(e -> {
+                setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
+            });
+
+            audioMenu2.add(enableNormalizationItem);
+            audioMenu2.addSeparator();
+
+            // === Submenu: Presets de Loudness ===
+            JMenu loudnessMenu = new JMenu("Intensidade Sonora");
+
+            ButtonGroup loudnessGroup = new ButtonGroup();
+
+            JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
+            streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
+            streamingItem.addActionListener(e -> {
+                setTargetLoudness(-14.0f);
+            });
+
+            JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
+            quietItem.setToolTipText("Música ambiente, uso casual");
+            quietItem.addActionListener(e -> {
+                setTargetLoudness(-18.0f);
+            });
+
+            JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
+            broadcastItem.setToolTipText("TV, Rádio");
+            broadcastItem.addActionListener(e -> {
+                setTargetLoudness(-23.0f);
+            });
+
+            JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
+            cinemaItem.setToolTipText("Padrão de cinema");
+            cinemaItem.addActionListener(e -> {
+                setTargetLoudness(-24.0f);
+            });
+
+            JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
+            loudItem.setToolTipText("Festas, clubs");
+            loudItem.addActionListener(e -> {
+                setTargetLoudness(-11.0f);
+            });
+
+            JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
+            customLoudnessItem.addActionListener(e -> {
+                showCustomLoudnessDialog();
+            });
+
+            loudnessGroup.add(streamingItem);
+            loudnessGroup.add(quietItem);
+            loudnessGroup.add(broadcastItem);
+            loudnessGroup.add(cinemaItem);
+            loudnessGroup.add(loudItem);
+            loudnessGroup.add(customLoudnessItem);
+
+            loudnessMenu.add(streamingItem);
+            loudnessMenu.add(quietItem);
+            loudnessMenu.add(broadcastItem);
+            loudnessMenu.add(cinemaItem);
+            loudnessMenu.add(loudItem);
+            loudnessMenu.addSeparator();
+            loudnessMenu.add(customLoudnessItem);
+
+            audioMenu2.add(loudnessMenu);
+            audioMenu2.addSeparator();
+
+            // === Submenu: Volume Global ===
+            JMenu volumeGainMenu = new JMenu("Volume Global");
+
+            ButtonGroup volumeGroup = new ButtonGroup();
+
+            String[] volumeLabels = {"20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"};
+            float[] volumeValues = {0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f};
+
+            for (int i = 0; i < volumeLabels.length; i++) {
+                final float vol = volumeValues[i];
+                JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0); // 50% selecionado
+                item.addActionListener(e -> {
+                    setGlobalAudioGain(vol);
+                });
+                volumeGroup.add(item);
+                volumeGainMenu.add(item);
             }
+
+            audioMenu2.add(volumeGainMenu);
+            audioMenu2.addSeparator();
+
+            // === Informações ===
+            JMenuItem infoItem = new JMenuItem("Informações de Áudio");
+            infoItem.addActionListener(e -> {
+                String info = getNormalizationInfo();
+                JOptionPane.showMessageDialog(this,
+                        info + "\n\n" +
+                                "Normalização: " + (isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
+                                "Volume Global: " + (int) (getGlobalAudioGain() * 100) + "%",
+                        "Informações de Áudio",
+                        JOptionPane.INFORMATION_MESSAGE);
+            });
+
+            audioMenu2.add(infoItem);
+            contextMenu.add(audioMenu2);
+
+            // === Submenu: Playlist ===
+            JMenu playlistMenu = new JMenu("Playlist");
+            playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+            JMenuItem openPlaylistItem = new JMenuItem("📋 Gerenciar Playlist...");
+            openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+            openPlaylistItem.addActionListener(e -> showPlaylistDialog());
+
+            JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+            autoPlayItem.addActionListener(e -> {
+                autoPlayNext = autoPlayItem.isSelected();
+            });
+
+            playlistMenu.add(openPlaylistItem);
+            playlistMenu.addSeparator();
+            playlistMenu.add(autoPlayItem);
+
+            contextMenu.add(playlistMenu);
+
+
+            // Atualizar estado ao abrir menu
+            contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+                public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                    if (grabber == null) {
+                        JOptionPane.showMessageDialog(VideoPlayer.this,
+                                "Nenhum audio carregado.\nAbra um audio primeiro.",
+                                "Aviso", JOptionPane.INFORMATION_MESSAGE);
+                        SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
+                        return;
+                    }
+
+                    spectrumMenu.setEnabled(true);
+                    audioMenu2.setEnabled(true);
+
+                }
+
+                public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+                }
+
+                public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+                }
+            });
+            // Adicionar menu ao painel
+            addMouseListener(new MouseAdapter() {
+                public void mousePressed(MouseEvent e) {
+                    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+                    }
+                }
+
+                public void mouseReleased(MouseEvent e) {
+                    if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+                    }
+                }
+            });
         }
-    });
-}
-private void setupVideoContextMenu() {
+
+        private void setupVideoContextMenu() {
             JPopupMenu contextMenu = new JPopupMenu();
 
             // Menu de áudio
@@ -2423,7 +2014,7 @@ private void setupVideoContextMenu() {
             // Intervalo de frames
             JMenu intervalMenu = new JMenu("Intervalo de Captura");
             ButtonGroup intervalGroup = new ButtonGroup();
-            int[] intervals = { 2, 3, 5, 10, 15, 30, 60, 120};
+            int[] intervals = {2, 3, 5, 10, 15, 30, 60, 120};
 
             for (int interval : intervals) {
                 JRadioButtonMenuItem intervalItem = new JRadioButtonMenuItem("A cada " + interval + " frame" + (interval > 2 ? "s" : ""));
@@ -2546,6 +2137,26 @@ private void setupVideoContextMenu() {
             contextMenu.add(filtersMenu);
             // ========== FIM: Menu de Filtros ==========
 
+
+            // === Submenu: Playlist ===
+            JMenu playlistMenu = new JMenu("Playlist");
+            playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+            JMenuItem openPlaylistItem = new JMenuItem("📋 Gerenciar Playlist...");
+            openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+            openPlaylistItem.addActionListener(e -> showPlaylistDialog());
+
+            JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+            autoPlayItem.addActionListener(e -> {
+                autoPlayNext = autoPlayItem.isSelected();
+            });
+
+            playlistMenu.add(openPlaylistItem);
+            playlistMenu.addSeparator();
+            playlistMenu.add(autoPlayItem);
+
+            contextMenu.add(playlistMenu);
+
             // Opção de tela cheia
             JCheckBoxMenuItem fullscreenItem = new JCheckBoxMenuItem("Tela Cheia");
             fullscreenItem.addActionListener(e -> {
@@ -2584,19 +2195,23 @@ private void setupVideoContextMenu() {
                         filtersMenu.setToolTipText(null);
                     }
 
-                        subtitleMenu.setEnabled(true);
-                        filtersMenu.setEnabled(true);
-                        audioMenu.setEnabled(true);
-                        captureMenu.setEnabled(true);
-                        batchCaptureMenu.setEnabled(true);
-                        performanceMenu.setEnabled(true);
-                        intervalMenu.setEnabled(true);
-                        fullscreenItem.setEnabled(true);
-                        subtitleSettingsMenu.setEnabled(true);
+                    subtitleMenu.setEnabled(true);
+                    filtersMenu.setEnabled(true);
+                    audioMenu.setEnabled(true);
+                    captureMenu.setEnabled(true);
+                    batchCaptureMenu.setEnabled(true);
+                    performanceMenu.setEnabled(true);
+                    intervalMenu.setEnabled(true);
+                    fullscreenItem.setEnabled(true);
+                    subtitleSettingsMenu.setEnabled(true);
 
                 }
-                public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
-                public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
+
+                public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+                }
+
+                public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+                }
             });
             // Adicionar menu ao painel
             addMouseListener(new MouseAdapter() {
@@ -2605,6 +2220,7 @@ private void setupVideoContextMenu() {
                         contextMenu.show(e.getComponent(), e.getX(), e.getY());
                     }
                 }
+
                 public void mouseReleased(MouseEvent e) {
                     if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
                         contextMenu.show(e.getComponent(), e.getX(), e.getY());
@@ -2612,7 +2228,8 @@ private void setupVideoContextMenu() {
                 }
             });
         }
-// Diálogo para escolher cores personalizadas
+
+        // Diálogo para escolher cores personalizadas
         private void showCustomColorDialog() {
             Color bottom = JColorChooser.showDialog(this,
                     "Escolha a cor de baixo (Bottom)",
@@ -2642,6 +2259,7 @@ private void setupVideoContextMenu() {
                 }
             }
         }
+
         // Diálogo para loudness personalizado
         private void showCustomLoudnessDialog() {
             String input = JOptionPane.showInputDialog(this,
@@ -2693,70 +2311,72 @@ private void setupVideoContextMenu() {
         }
 
 
-       // Modificar o método updateContextMenus:
-       private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
-    // Atualizar menu de áudio
-    audioMenu.removeAll();
-    if (totalAudioStreams > 1) {
-        for (int i = 0; i < totalAudioStreams; i++) {
-            final int streamIndex = i;
+        // Modificar o método updateContextMenus:
+        private void updateContextMenus(JMenu audioMenu, JMenu subtitleMenu) {
+            // Atualizar menu de áudio
+            audioMenu.removeAll();
+            if (totalAudioStreams > 1) {
+                for (int i = 0; i < totalAudioStreams; i++) {
+                    final int streamIndex = i;
 
-            // Tentar obter nome da stream
-            String streamName = audioStreamNames.getOrDefault(i, "Faixa de Áudio " + (i + 1));
+                    // Tentar obter nome da stream
+                    String streamName = audioStreamNames.getOrDefault(i, "Faixa de Áudio " + (i + 1));
 
-            JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
-            item.setSelected(i == currentAudioStream);
-            item.addActionListener(e -> switchAudioStream(streamIndex));
-            audioMenu.add(item);
+                    JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
+                    item.setSelected(i == currentAudioStream);
+                    item.addActionListener(e -> switchAudioStream(streamIndex));
+                    audioMenu.add(item);
+                }
+            } else {
+                JMenuItem noAudio = new JMenuItem("Apenas uma faixa disponível");
+                noAudio.setEnabled(false);
+                audioMenu.add(noAudio);
+            }
+
+            // Atualizar menu de legendas embutidas
+            // IMPORTANTE: Contar quantos itens fixos existem (Desabilitado + Carregar externo)
+            int fixedItemsCount = 2;
+
+            // Remover apenas itens de legendas embutidas (manter os 2 primeiros fixos)
+            while (subtitleMenu.getMenuComponentCount() > fixedItemsCount) {
+                subtitleMenu.remove(fixedItemsCount);
+            }
+
+            // Se tem legendas embutidas, adicionar separador e as opções
+            if (totalSubtitleStreams > 0) {
+                // Adicionar separador após "Carregar arquivo externo"
+                subtitleMenu.insertSeparator(fixedItemsCount);
+
+                // Adicionar legendas embutidas
+                for (int i = 0; i < totalSubtitleStreams; i++) {
+                    final int streamIndex = i;
+                    String streamName = subtitleStreamNames.getOrDefault(i, "Legenda " + (i + 1));
+                    JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
+                    item.setSelected(i == currentSubtitleStream);
+                    item.addActionListener(e -> switchSubtitleStream(streamIndex));
+                    subtitleMenu.add(item);
+                }
+            }
         }
-    } else {
-        JMenuItem noAudio = new JMenuItem("Apenas uma faixa disponível");
-        noAudio.setEnabled(false);
-        audioMenu.add(noAudio);
-    }
-
-    // Atualizar menu de legendas embutidas
-    // IMPORTANTE: Contar quantos itens fixos existem (Desabilitado + Carregar externo)
-    int fixedItemsCount = 2;
-
-    // Remover apenas itens de legendas embutidas (manter os 2 primeiros fixos)
-    while (subtitleMenu.getMenuComponentCount() > fixedItemsCount) {
-        subtitleMenu.remove(fixedItemsCount);
-    }
-
-    // Se tem legendas embutidas, adicionar separador e as opções
-    if (totalSubtitleStreams > 0) {
-        // Adicionar separador após "Carregar arquivo externo"
-        subtitleMenu.insertSeparator(fixedItemsCount);
-
-        // Adicionar legendas embutidas
-        for (int i = 0; i < totalSubtitleStreams; i++) {
-            final int streamIndex = i;
-            String streamName = subtitleStreamNames.getOrDefault(i, "Legenda " + (i + 1));
-            JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
-            item.setSelected(i == currentSubtitleStream);
-            item.addActionListener(e -> switchSubtitleStream(streamIndex));
-            subtitleMenu.add(item);
-        }
-    }
-}
 
 
         public void updateImage(BufferedImage img) {
-         this.currentImage = img;
+            this.currentImage = img;
             this.coverArt = null; // Limpar cover art ao mostrar vídeo
-          // Quando há imagem de vídeo, esconder spectrum
-         if (spectrumPanel != null) {
-         spectrumPanel.setVisible(false);
-          }
-          repaint();
+            // Quando há imagem de vídeo, esconder spectrum
+            if (spectrumPanel != null) {
+                spectrumPanel.setVisible(false);
+            }
+            repaint();
         }
+
         // Na classe VideoPanel, adicionar:
         public void setCoverOpacity(float opacity) {
             if (spectrumPanel != null) {
                 spectrumPanel.setCoverOpacity(opacity);
             }
         }
+
         // NOVO: Método para mostrar spectrum analyzer
         public void showSpectrum() {
             this.currentImage = null;
@@ -2773,6 +2393,7 @@ private void setupVideoContextMenu() {
                 spectrumPanel.updateSpectrum(spectrum);
             }
         }
+
         // NOVO: Método público para alterar tamanho do spectrum
         public void setSpectrumSize(int width, int height) {
             if (spectrumPanel != null) {
@@ -2782,6 +2403,7 @@ private void setupVideoContextMenu() {
                 }
             }
         }
+
         // Na classe VideoPanel, adicionar:
         public void setSpectrumReflection(boolean show) {
             if (spectrumPanel != null) {
@@ -2810,61 +2432,62 @@ private void setupVideoContextMenu() {
         }
 
 
-   @Override
-   protected void paintComponent(Graphics g) {
-    super.paintComponent(g);
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
 
-    // Se spectrum estiver visível, ele se desenha sozinho
-    if (spectrumPanel != null && spectrumPanel.isVisible()) {
-        return;
-    }
+            // Se spectrum estiver visível, ele se desenha sozinho
+            if (spectrumPanel != null && spectrumPanel.isVisible()) {
+                return;
+            }
 
-    if (currentImage == null) {
-        // Mensagem padrão quando não há vídeo nem áudio
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 16));
-        String msg = "Clique em 'Abrir Vídeo' para começar";
-        FontMetrics fm = g.getFontMetrics();
-        int x = (getWidth() - fm.stringWidth(msg)) / 2;
-        int y = getHeight() / 2;
-        g.drawString(msg, x, y);
-        return;
-    }
+            if (currentImage == null) {
+                // Mensagem padrão quando não há vídeo nem áudio
+                g.setColor(Color.WHITE);
+                g.setFont(new Font("Arial", Font.BOLD, 16));
+                String msg = "Clique em 'Abrir Vídeo' para começar";
+                FontMetrics fm = g.getFontMetrics();
+                int x = (getWidth() - fm.stringWidth(msg)) / 2;
+                int y = getHeight() / 2;
+                g.drawString(msg, x, y);
+                return;
+            }
 
-    // Calcular dimensões mantendo aspect ratio
-    int panelWidth = getWidth();
-    int panelHeight = getHeight();
-    int imgWidth = currentImage.getWidth();
-    int imgHeight = currentImage.getHeight();
+            // Calcular dimensões mantendo aspect ratio
+            int panelWidth = getWidth();
+            int panelHeight = getHeight();
+            int imgWidth = currentImage.getWidth();
+            int imgHeight = currentImage.getHeight();
 
-    double panelRatio = (double) panelWidth / panelHeight;
-    double imgRatio = (double) imgWidth / imgHeight;
+            double panelRatio = (double) panelWidth / panelHeight;
+            double imgRatio = (double) imgWidth / imgHeight;
 
-    int drawWidth, drawHeight, x, y;
+            int drawWidth, drawHeight, x, y;
 
-    if (panelRatio > imgRatio) {
-        drawHeight = panelHeight;
-        drawWidth = (int) (imgWidth * ((double) panelHeight / imgHeight));
-        x = (panelWidth - drawWidth) / 2;
-        y = 0;
-    } else {
-        drawWidth = panelWidth;
-        drawHeight = (int) (imgHeight * ((double) panelWidth / imgWidth));
-        x = 0;
-        y = (panelHeight - drawHeight) / 2;
-    }
+            if (panelRatio > imgRatio) {
+                drawHeight = panelHeight;
+                drawWidth = (int) (imgWidth * ((double) panelHeight / imgHeight));
+                x = (panelWidth - drawWidth) / 2;
+                y = 0;
+            } else {
+                drawWidth = panelWidth;
+                drawHeight = (int) (imgHeight * ((double) panelWidth / imgWidth));
+                x = 0;
+                y = (panelHeight - drawHeight) / 2;
+            }
 
-    Graphics2D g2d = (Graphics2D) g;
-    g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-    g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
 
-    g2d.drawImage(currentImage, x, y, drawWidth, drawHeight, null);
+            g2d.drawImage(currentImage, x, y, drawWidth, drawHeight, null);
 
-    // Desenhar legendas
-    if (!currentSubtitleText.isEmpty()) {
-        drawSubtitles(g2d, panelWidth, panelHeight);
-    }
-}
+            // Desenhar legendas
+            if (!currentSubtitleText.isEmpty()) {
+                drawSubtitles(g2d, panelWidth, panelHeight);
+            }
+        }
+
         // Modificar o método drawSubtitles()
         private void drawSubtitles(Graphics2D g2d, int panelWidth, int panelHeight) {
             g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -2961,6 +2584,13 @@ private void setupVideoContextMenu() {
             }
         });
 
+        //loadPlaylist()
+        loadPlaylistButton = new JButton("📂");
+        loadPlaylistButton.setEnabled(true);
+        loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
+        loadPlaylistButton.setToolTipText("Abrir Playlist");
+        loadPlaylistButton.addActionListener(e -> loadAndPlayPlaylist());
+
         rewindButton = new JButton("⏪");
         rewindButton.setEnabled(false);
         rewindButton.setPreferredSize(new Dimension(35, 35));
@@ -3004,6 +2634,7 @@ private void setupVideoContextMenu() {
         captureAllFrameButton.addActionListener(e -> batchCaptureFrames());
 
         centerButtonPanel.add(openButton);
+        centerButtonPanel.add(loadPlaylistButton);
         centerButtonPanel.add(rewindButton);
         centerButtonPanel.add(playPauseButton);
         centerButtonPanel.add(forwardButton);
@@ -3069,7 +2700,7 @@ private void setupVideoContextMenu() {
             // Desmutar - restaurar volume anterior
             isMuted = false;
             volume = previousVolume;
-            int volumePercent = (int)(volume * 100);
+            int volumePercent = (int) (volume * 100);
             volumeSlider.setValue(volumePercent);
             volumeLabel.setText(volumePercent + "%");
             System.out.println("Som ativado - Volume restaurado para: " + volumePercent + "%");
@@ -3080,7 +2711,7 @@ private void setupVideoContextMenu() {
             volume = 0.0f;
             volumeSlider.setValue(0);
             volumeLabel.setText("0%");
-            System.out.println("Som desativado - Volume anterior salvo: " + (int)(previousVolume * 100) + "%");
+            System.out.println("Som desativado - Volume anterior salvo: " + (int) (previousVolume * 100) + "%");
         }
 
         updateVolumeButton();
@@ -3103,92 +2734,92 @@ private void setupVideoContextMenu() {
         }
     }
 
-private void captureFrame() {
-    // Verificar se há um vídeo carregado
-    if (grabber == null) {
-        JOptionPane.showMessageDialog(this,
-                "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
-                "Aviso",
-                JOptionPane.WARNING_MESSAGE);
-        return;
-    }
+    private void captureFrame() {
+        // Verificar se há um vídeo carregado
+        if (grabber == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
-    // Verificar se há uma imagem atual no painel
-    BufferedImage currentImage = videoPanel.getCurrentImage();
-    if (currentImage == null) {
-        JOptionPane.showMessageDialog(this,
-                "Nenhum frame disponível para captura.",
-                "Aviso",
-                JOptionPane.WARNING_MESSAGE);
-        return;
-    }
+        // Verificar se há uma imagem atual no painel
+        BufferedImage currentImage = videoPanel.getCurrentImage();
+        if (currentImage == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Nenhum frame disponível para captura.",
+                    "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
 
-    try {
-        // Determinar o diretório de destino
-        String targetDirectory;
-        if (customCapturePath != null && !customCapturePath.isEmpty()) {
-            targetDirectory = customCapturePath;
-        } else {
-            // Usar o diretório do vídeo
+        try {
+            // Determinar o diretório de destino
+            String targetDirectory;
+            if (customCapturePath != null && !customCapturePath.isEmpty()) {
+                targetDirectory = customCapturePath;
+            } else {
+                // Usar o diretório do vídeo
+                File videoFile = new File(videoFilePath);
+                targetDirectory = videoFile.getParent();
+            }
+
+            // Obter o nome do vídeo sem extensão
             File videoFile = new File(videoFilePath);
-            targetDirectory = videoFile.getParent();
-        }
+            String videoName = videoFile.getName();
+            int lastDotIndex = videoName.lastIndexOf('.');
+            if (lastDotIndex > 0) {
+                videoName = videoName.substring(0, lastDotIndex);
+            }
 
-        // Obter o nome do vídeo sem extensão
-        File videoFile = new File(videoFilePath);
-        String videoName = videoFile.getName();
-        int lastDotIndex = videoName.lastIndexOf('.');
-        if (lastDotIndex > 0) {
-            videoName = videoName.substring(0, lastDotIndex);
-        }
+            // Criar o nome do arquivo de imagem
+            String imageName = String.format("%s_frame_%d.jpg", videoName, currentFrame);
+            File outputFile = new File(targetDirectory, imageName);
 
-        // Criar o nome do arquivo de imagem
-        String imageName = String.format("%s_frame_%d.jpg", videoName, currentFrame);
-        File outputFile = new File(targetDirectory, imageName);
+            // Verificar se o arquivo já existe e criar um nome único se necessário
+            int counter = 1;
+            while (outputFile.exists()) {
+                imageName = String.format("%s_frame_%d_(%d).jpg", videoName, currentFrame, counter);
+                outputFile = new File(targetDirectory, imageName);
+                counter++;
+            }
 
-        // Verificar se o arquivo já existe e criar um nome único se necessário
-        int counter = 1;
-        while (outputFile.exists()) {
-            imageName = String.format("%s_frame_%d_(%d).jpg", videoName, currentFrame, counter);
-            outputFile = new File(targetDirectory, imageName);
-            counter++;
-        }
+            // Salvar a imagem em formato JPEG
+            ImageIO.write(currentImage, "jpg", outputFile);
 
-        // Salvar a imagem em formato JPEG
-        ImageIO.write(currentImage, "jpg", outputFile);
+            System.out.println("Frame capturado: " + outputFile.getAbsolutePath());
 
-        System.out.println("Frame capturado: " + outputFile.getAbsolutePath());
+            // Mostrar mensagem de sucesso (se não estiver em modo silencioso)
+            if (!silentCapture) {
+                int response = JOptionPane.showConfirmDialog(this,
+                        "Frame capturado com sucesso!\n" +
+                                "Arquivo: " + imageName + "\n" +
+                                "Local: " + targetDirectory + "\n\n" +
+                                "Deseja abrir a pasta?",
+                        "Captura Realizada",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.INFORMATION_MESSAGE);
 
-        // Mostrar mensagem de sucesso (se não estiver em modo silencioso)
-        if (!silentCapture) {
-            int response = JOptionPane.showConfirmDialog(this,
-                    "Frame capturado com sucesso!\n" +
-                            "Arquivo: " + imageName + "\n" +
-                            "Local: " + targetDirectory + "\n\n" +
-                            "Deseja abrir a pasta?",
-                    "Captura Realizada",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.INFORMATION_MESSAGE);
-
-            // Abrir a pasta se o usuário confirmar
-            if (response == JOptionPane.YES_OPTION) {
-                try {
-                    Desktop desktop = Desktop.getDesktop();
-                    desktop.open(new File(targetDirectory));
-                } catch (Exception ex) {
-                    System.err.println("Erro ao abrir pasta: " + ex.getMessage());
+                // Abrir a pasta se o usuário confirmar
+                if (response == JOptionPane.YES_OPTION) {
+                    try {
+                        Desktop desktop = Desktop.getDesktop();
+                        desktop.open(new File(targetDirectory));
+                    } catch (Exception ex) {
+                        System.err.println("Erro ao abrir pasta: " + ex.getMessage());
+                    }
                 }
             }
-        }
 
-    } catch (IOException ex) {
-        ex.printStackTrace();
-        JOptionPane.showMessageDialog(this,
-                "Erro ao salvar a imagem:\n" + ex.getMessage(),
-                "Erro",
-                JOptionPane.ERROR_MESSAGE);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Erro ao salvar a imagem:\n" + ex.getMessage(),
+                    "Erro",
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
-}
 
     private void selectCaptureFolder() {
         JFileChooser folderChooser = new JFileChooser();
@@ -3309,7 +2940,7 @@ private void captureFrame() {
         message.append("Informações:\n");
         message.append("• Total de frames: ").append(totalFrames).append("\n");
         message.append("• Frames a capturar: ").append(totalFramesToCapture).append(" (a cada ").append(batchCaptureInterval).append(" frames)\n");
-        message.append("• Duração: ").append(durationMinutes).append(" min ").append((int)(durationSeconds % 60)).append(" seg\n");
+        message.append("• Duração: ").append(durationMinutes).append(" min ").append((int) (durationSeconds % 60)).append(" seg\n");
         message.append("• Resolução: ").append(videoWidth).append("x").append(videoHeight).append("\n\n");
 
         // Determinar pasta de destino
@@ -3563,57 +3194,26 @@ private void captureFrame() {
         progressDialog.setVisible(true);
     }
 
-    private void openVideo() throws Exception {
+    private void openVideo() {
         if (isPlaying) {
             pauseVideo();
         }
         JnaFileChooser fc = new JnaFileChooser();
-        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov","3gp");
-        fc.addFilter("Arquivos de Audio (*.mp3)", "mp3");
+        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp");
+        fc.addFilter("Arquivos de Audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac )", "mp3", "flac", "wav", "ogg", "m4a", "aac");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
-            if(f.getName().endsWith("mp3")){
+            if (f.getName().endsWith("mp3")
+                    || f.getName().endsWith("flac")
+                    || f.getName().endsWith("wav")
+                    || f.getName().endsWith("ogg")
+                    || f.getName().endsWith("m4a")
+                    || f.getName().endsWith("aac")) {
                 loadAudio(f.getAbsolutePath());
-            }else {
+            } else {
                 loadVideo(f.getAbsolutePath());
             }
         }
-    }
-    public static void playMp3(String filePath) throws Exception{
-        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(filePath);
-        grabber.start();
-
-        AudioFormat audioFormat = new AudioFormat(
-                grabber.getSampleRate(),
-                16, // 16-bit samples
-                grabber.getAudioChannels(),
-                true, // signed
-                false // little-endian
-        );
-
-        SourceDataLine line = AudioSystem.getSourceDataLine(audioFormat);
-        line.open(audioFormat);
-        line.start();
-
-        Frame frame;
-        while ((frame = grabber.grabSamples()) != null) {
-            if (frame.samples != null) {
-                ShortBuffer samples = (ShortBuffer) frame.samples[0];
-                byte[] audioBytes = new byte[samples.capacity() * 2]; // 2 bytes per short
-                for (int i = 0; i < samples.capacity(); i++) {
-                    short s = samples.get(i);
-                    audioBytes[i * 2] = (byte) (s & 0xFF);
-                    audioBytes[i * 2 + 1] = (byte) ((s >> 8) & 0xFF);
-                }
-                line.write(audioBytes, 0, audioBytes.length);
-            }
-        }
-
-        line.drain();
-        line.stop();
-        line.close();
-        grabber.stop();
-        grabber.release();
     }
 
 
@@ -3623,6 +3223,9 @@ private void captureFrame() {
         videoFilePath = filepath;
 
         System.out.println("=== INÍCIO loadAudio ===");
+
+        // NOVO: Limpar playlist e fechar dialog
+        clearPlaylistAndCloseDialog();
 
         // Fechar reprodução anterior ANTES de iniciar nova thread
         if (isPlaying) {
@@ -3743,7 +3346,7 @@ private void captureFrame() {
                 // Para áudio, vamos simular frames a 30 FPS para controle de progresso
                 frameRate = 30.0;
                 double durationSeconds = grabber.getLengthInTime() / 1000000.0; // microsegundos para segundos
-                totalFrames = (long)(durationSeconds * frameRate);
+                totalFrames = (long) (durationSeconds * frameRate);
                 currentFrame = 0;
                 System.out.println("8. Duração: " + durationSeconds + "s, Frames simulados: " + totalFrames);
 
@@ -3775,7 +3378,7 @@ private void captureFrame() {
                         // Combinação default - deve refletir o que está no menu
                         setGlobalAudioGain(0.20f);          // 20% do volume
                         setTargetLoudness(-18.0f);         // Target mais baixo
-                        setAudioNormalizationEnabled(true); // Manter normalização ativa
+                        setAudioNormalizationEnabled(false); // normalização desativada
 
                     } catch (Exception audioEx) {
                         System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
@@ -3811,14 +3414,14 @@ private void captureFrame() {
                     // Limpar painel de vídeo e mostrar mensagem
 //                    videoPanel.updateImage(null);
 //                    videoPanel.repaint();
-                  // Mostrar spectrum analyzer
+                    // Mostrar spectrum analyzer
 
                     // USAR O MÉTODO PÚBLICO EM VEZ DE ACESSAR spectrumPanel DIRETAMENTE
                     videoPanel.setSpectrumSize(600, 400);
                     // Ativar reflexo
                     videoPanel.setSpectrumReflection(true);
 
-                   // Ajustar altura do reflexo (0.0 a 1.0)
+                    // Ajustar altura do reflexo (0.0 a 1.0)
                     videoPanel.setSpectrumReflectionHeight(1f); // 50% da altura original
 
                     // Ajustar transparência do reflexo (0 a 255)
@@ -3829,11 +3432,12 @@ private void captureFrame() {
                     // Ajustar opacidade da capa (0.0 = invisível, 1.0 = opaco)
                     videoPanel.setCoverOpacity(0.5f); // 30% de opacidade (padrão)
 
-                   // Para capa mais visível
-                   // videoPanel.setCoverOpacity(0.5f);
+                    // Para capa mais visível
+                    // videoPanel.setCoverOpacity(0.5f);
 
-                   // Para capa mais discreta
-                   // videoPanel.setCoverOpacity(0.2f);
+                    // Para capa mais discreta
+                    // videoPanel.setCoverOpacity(0.2f);
+
 
                     // ATIVAR MODO COVER_PALETTE se houver capa
                     videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
@@ -3841,7 +3445,7 @@ private void captureFrame() {
                     System.out.println("É somete audio? " + isAudioOnly);
                     System.out.println("É somete audio? " + isAudioOnly);
 
-                        videoPanel.setupAudioContextMenu();
+                    videoPanel.setupAudioContextMenu();
 
                     playVideo();
                     System.out.println("13. UI HABILITADA - Pronto para reproduzir áudio!");
@@ -3873,14 +3477,23 @@ private void captureFrame() {
         System.out.println("=== FIM loadAudio (método principal) ===");
     }
 
-    private void loadVideo(String filepath) {
-        isAudioOnly = false;
+   private void loadVideo(String filepath) {
+    isAudioOnly = false;
 
     // Salvar caminho do vídeo
     currentVideoPath = filepath;
     videoFilePath = filepath;
 
     System.out.println("=== INÍCIO loadVideo ===");
+
+    // **VERIFICAR SE É AV1 EM ALTA RESOLUÇÃO (BLOQUEAR SE SIM)**
+    if (!checkAV1Resolution(filepath)) {
+        System.out.println("Vídeo bloqueado - AV1 em alta resolução com decoder lento");
+        return; // Sair sem carregar o vídeo
+    }
+
+    // Limpar playlist e fechar dialog
+    clearPlaylistAndCloseDialog();
 
     // Fechar vídeo anterior ANTES de iniciar nova thread
     if (isPlaying) {
@@ -3913,13 +3526,13 @@ private void captureFrame() {
         audioLine = null;
     }
 
-        // NOVO: Limpar cover art ao carregar vídeo
-        System.out.println("Limpando cover art...");
-        audioCoverArt = null;
-        SwingUtilities.invokeLater(() -> {
-            videoPanel.setCoverArt(null);
-            videoPanel.repaint();
-        });
+    // Limpar cover art ao carregar vídeo
+    System.out.println("Limpando cover art...");
+    audioCoverArt = null;
+    SwingUtilities.invokeLater(() -> {
+        videoPanel.setCoverArt(null);
+        videoPanel.repaint();
+    });
 
     // Limpar estado
     System.out.println("Limpando estado...");
@@ -3960,45 +3573,56 @@ private void captureFrame() {
             String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
             System.out.println("4. Extensão detectada: " + extension);
 
+            // **NOVO: Otimizar threads para todos os vídeos**
+            System.out.println("5. Configurando threads...");
+            try {
+                int numThreads = Runtime.getRuntime().availableProcessors();
+               // grabber.setOption("threads", String.valueOf(numThreads));
+                System.out.println("Threads configuradas: " + numThreads);
+            } catch (Exception e) {
+                System.out.println("Erro ao configurar threads: " + e.getMessage());
+            }
 
+            // Aplicar aceleração GPU se habilitada
             if (hardwareAccelerationEnabled) {
-                System.out.println("5. Tentando habilitar aceleração GPU...");
+                System.out.println("6. Tentando habilitar aceleração GPU...");
                 tryEnableHardwareAcceleration(grabber);
             } else {
-                System.out.println("5. Aceleração GPU desabilitada");
+                System.out.println("6. Aceleração GPU desabilitada");
             }
 
             // Opções para melhorar performance
             if (extension.equals("wmv")) {
-                System.out.println("6. Aplicando opções WMV...");
+                System.out.println("7. Aplicando opções WMV...");
                 try {
-                    grabber.setOption("threads", "auto");
+                  //  grabber.setOption("threads", "auto");
                     grabber.setOption("fflags", "nobuffer");
-                    grabber.setOption("flags", "low_delay");
+                  //  grabber.setOption("flags", "low_delay");
                 } catch (Exception e) {
                     System.out.println("Erro nas opções WMV: " + e.getMessage());
                 }
             } else {
-                System.out.println("6. Não é WMV, pulando opções específicas");
+                System.out.println("7. Não é WMV, pulando opções específicas");
             }
 
             // Opções gerais
-            System.out.println("7. Aplicando opções gerais...");
+            System.out.println("8. Aplicando opções gerais...");
             try {
                 grabber.setOption("analyzeduration", "2000000");
                 grabber.setOption("probesize", "2000000");
                 grabber.setOption("fflags", "+genpts");
-                System.out.println("7. Opções aplicadas");
+                System.out.println("8. Opções aplicadas");
             } catch (Exception e) {
                 System.out.println("Erro nas opções gerais: " + e.getMessage());
             }
 
             System.out.println("Iniciando pré-detecção de streams de áudio...");
 
-            // NOVO: Detectar mapeamento ANTES de start() usando um grabber temporário
+            // Detectar mapeamento ANTES de start() usando um grabber temporário
             try {
                 FFmpegFrameGrabber tempGrabber = new FFmpegFrameGrabber(filepath);
                 tempGrabber.start();
+                tempGrabber.setOption("c:v", "libdav1d");
                 totalAudioStreams = tempGrabber.getAudioStream();
                 tempGrabber.stop();
                 tempGrabber.release();
@@ -4026,16 +3650,21 @@ private void captureFrame() {
                 // Continuar sem setAudioStream - usará stream padrão
             }
 
-            System.out.println("8. Chamando grabber.start()...");
-            grabber.start();
-            System.out.println("9. grabber.start() CONCLUÍDO!");
+            System.out.println("9. Chamando grabber.start()...");
 
+            grabber.start();
+            System.out.println("10. grabber.start() CONCLUÍDO!");
+            System.out.println(grabber.getVideoMetadata());
+            // **DETECTAR E OTIMIZAR AV1**
+            System.out.println("11. Detectando codec...");
+
+            detectAndOptimizeAV1(grabber);
             // Definir stream atual como 0 (primeira lógica)
             currentAudioStream = 0;
-            System.out.println("10. Stream de áudio atual definida: " + currentAudioStream);
+            System.out.println("12. Stream de áudio atual definida: " + currentAudioStream);
 
             // Detectar streams de legendas em thread separada
-            System.out.println("11. Iniciando detecção de legendas em thread separada...");
+            System.out.println("13. Iniciando detecção de legendas em thread separada...");
             new Thread(() -> {
                 try {
                     System.out.println("Thread de legendas INICIADA");
@@ -4046,14 +3675,14 @@ private void captureFrame() {
                 }
             }, "SubtitleDetector").start();
 
-            System.out.println("12. Obtendo totalFrames e frameRate...");
+            System.out.println("14. Obtendo totalFrames e frameRate...");
             totalFrames = grabber.getLengthInVideoFrames();
             frameRate = grabber.getVideoFrameRate();
             currentFrame = 0;
-            System.out.println("13. Total frames: " + totalFrames + ", FPS: " + frameRate);
+            System.out.println("15. Total frames: " + totalFrames + ", FPS: " + frameRate);
 
             // Correções de FPS
-            System.out.println("14. Verificando correções de FPS...");
+            System.out.println("16. Verificando correções de FPS...");
 
             if (extension.equals("flv") && frameRate > 100) {
                 double tbr = grabber.getFrameRate();
@@ -4091,13 +3720,13 @@ private void captureFrame() {
                 frameRate = 30.0;
             }
 
-            System.out.println("15. Configurando áudio...");
+            System.out.println("17. Configurando áudio...");
             audioChannels = grabber.getAudioChannels();
             sampleRate = grabber.getSampleRate();
-            System.out.println("16. Canais: " + audioChannels + ", SampleRate: " + sampleRate);
+            System.out.println("18. Canais: " + audioChannels + ", SampleRate: " + sampleRate);
 
             if (audioChannels > 0 && sampleRate > 0 && !extension.equals("gif")) {
-                System.out.println("17. Criando audioLine...");
+                System.out.println("19. Criando audioLine...");
                 try {
                     int outputChannels = audioChannels > 2 ? 2 : audioChannels;
 
@@ -4109,73 +3738,90 @@ private void captureFrame() {
                     DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
                     audioLine = (SourceDataLine) AudioSystem.getLine(info);
 
-                    int bufferSize = sampleRate * outputChannels * 2;
-                    if (extension.equals("wmv")) bufferSize *= 4;
+                    // **BUFFER MAIOR para evitar travamentos**
+                    int bufferSize = sampleRate * outputChannels * 4; // 4 bytes, 1 segundo de buffer
+
+                    if (extension.equals("wmv")) {
+                        bufferSize *= 2;
+                    }
+
+                    // **Para vídeos 4K (AV1), aumentar ainda mais o buffer**
+                    int videoWidth = grabber.getImageWidth();
+                    if (videoWidth >= 3840) {
+                        bufferSize *= 3; // 3 segundos de buffer para 4K
+                        System.out.println("Vídeo 4K detectado - usando buffer de áudio expandido");
+                    }
 
                     audioLine.open(audioFormat, bufferSize);
-                    System.out.println("18. AudioLine configurado com sucesso");
+                    System.out.println("20. AudioLine configurado com buffer de " + bufferSize + " bytes");
                 } catch (Exception audioEx) {
-                    System.err.println("18. Erro ao configurar áudio: " + audioEx.getMessage());
+                    System.err.println("20. Erro ao configurar áudio: " + audioEx.getMessage());
                     audioLine = null;
                 }
             } else {
-                System.out.println("17-18. Sem áudio");
+                System.out.println("19-20. Sem áudio");
             }
 
-            System.out.println("19. Procurando legendas externas...");
+            System.out.println("21. Procurando legendas externas...");
             searchExternalSubtitles(filepath);
-            System.out.println("20. Busca de legendas concluída");
+            System.out.println("22. Busca de legendas concluída");
 
-            System.out.println("21. Vídeo carregado! Habilitando UI...");
-
+            System.out.println("23. Vídeo carregado! Habilitando UI...");
 
             int videoWidth = grabber.getImageWidth();
             int videoHeight = grabber.getImageHeight();
             int tempVideoWidth = videoWidth;
-            if(videoWidth <= 500){
-                tempVideoWidth = 600;
+            int tempVideoHeight = videoHeight;
+            if (videoWidth <= 500) {
+                tempVideoWidth = 1080;
             }
+            if (videoHeight <= 500) {
+                tempVideoHeight = 720;
+            }
+
             // Guardar dimensões para usar no SwingUtilities.invokeLater
             final int finalWidth = tempVideoWidth;
-            final int finalHeight = videoHeight;
+            final int finalHeight = tempVideoHeight;
+            System.out.println("Resoluçao do video: " + finalHeight + " : " + finalWidth);
 
             SwingUtilities.invokeLater(() -> {
-
                 // Redimensionar e centralizar a janela
+
                 setSize(finalWidth, finalHeight);
 
-                //Se a resolução do video for igual ou maior que a resolução da tela maximizar, para evitar
-                //que parte do video fique de fora tela
-                if(finalWidth >= screenWidth || finalHeight >= screenHeight ){
+                // Se a resolução do video for igual ou maior que a resolução da tela maximizar
+                if (finalWidth >= screenWidth || finalHeight >= screenHeight) {
                     System.out.println("Excedeu ou é igual, maximizando ");
                     setExtendedState(JFrame.MAXIMIZED_BOTH);
-
                 }
-                setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
-                setResizable(true);// Pode maximizar a janela
 
-                System.out.println("22. SwingUtilities.invokeLater EXECUTANDO");
+                setLocationRelativeTo(null); // Centralizar após redimensionar
+                setResizable(true); // Pode maximizar a janela
+
+                System.out.println("24. SwingUtilities.invokeLater EXECUTANDO");
                 playPauseButton.setEnabled(true);
                 stopButton.setEnabled(true);
                 progressSlider.setEnabled(true);
                 progressSlider.setValue(0);
                 openButton.setEnabled(true);
-                rewindButton.setEnabled(true);      // NOVO
-                forwardButton.setEnabled(true);     // NOVO
-                nextFrameButton.setEnabled(true);   // NOVO
-                captureFrameButton.setEnabled(true); // NOVO
-                captureAllFrameButton.setEnabled(true); // NOVO
+                rewindButton.setEnabled(true);
+                forwardButton.setEnabled(true);
+                nextFrameButton.setEnabled(true);
+                captureFrameButton.setEnabled(true);
+                captureAllFrameButton.setEnabled(true);
                 volumeButton.setEnabled(true);
                 updateTimeLabel();
 
                 setTitle("Video Player - " + new java.io.File(filepath).getName());
+
                 videoPanel.setupVideoContextMenu();
+
                 playVideo();
 
-                System.out.println("23. UI HABILITADA - Pronto para reproduzir!");
+                System.out.println("25. UI HABILITADA - Pronto para reproduzir!");
             });
 
-            System.out.println("24. Thread de carregamento CONCLUÍDA");
+            System.out.println("26. Thread de carregamento CONCLUÍDA");
 
         } catch (Exception e) {
             System.err.println("ERRO CRÍTICO na thread de carregamento:");
@@ -4191,7 +3837,6 @@ private void captureFrame() {
                 stopButton.setEnabled(false);
                 volumeButton.setEnabled(false);
                 setTitle("Video Player - JavaCV");
-
             });
         }
     }, "VideoLoader");
@@ -4201,71 +3846,1041 @@ private void captureFrame() {
     System.out.println("Thread iniciada! Aguardando conclusão...");
     System.out.println("=== FIM loadVideo (método principal) ===");
 }
-
-private void rewind10Seconds() {
-    if (grabber == null || totalFrames == 0) return;
-
-    System.out.println("Retrocedendo 10 segundos...");
-
-    // Calcular quantos frames correspondem a 10 segundos
-    long framesTo10Seconds = (long)(frameRate * 10);
-    long targetFrame = Math.max(0, currentFrame - framesTo10Seconds);
-
-    boolean wasPlaying = isPlaying;
-    if (wasPlaying) {
-        pauseVideo();
-    }
-
+private void detectAndOptimizeAV1(FFmpegFrameGrabber grabber) {
     try {
-        currentFrame = targetFrame;
+        String videoCodec = grabber.getVideoCodecName();
+        System.out.println("Codec detectado: " + videoCodec);
 
-        if (isAudioOnly) {
-            // Para áudio, usar timestamp
-            long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
-            grabber.setTimestamp(targetTimestamp);
-            System.out.println("Retrocedeu áudio para frame: " + targetFrame);
-        } else {
-            // Para vídeo, usar frame number
-            grabber.setFrameNumber((int)targetFrame);
+        // Se for AV1 e estiver usando libaom-av1, avisar
+        if (videoCodec != null && videoCodec.toLowerCase().contains("av1")) {
+            System.out.println("=== VÍDEO AV1 DETECTADO ===");
 
-            // Capturar e exibir frame
-            Frame frame = grabber.grabImage();
-            if (frame != null && frame.image != null) {
-                BufferedImage img = converter.convert(frame);
-                if (img != null) {
-                    videoPanel.updateImage(img);
-                }
+            if (videoCodec.contains("libaom")) {
+                System.out.println("AVISO: Usando libaom-av1 (encoder como decoder)");
+                System.out.println("Isso é mais lento. Idealmente deveria usar libdav1d.");
+                System.out.println("Solução: Recompilar JavaCV com libdav1d ou usar build diferente.");
+
+                // Configurações específicas do libaom-av1
+                grabber.setOption("cpu-used", "8"); // Velocidade de codificação média (0=lento/qualidade, 8=rápido/baixa qualidade)
+                grabber.setOption("crf", "28");    // Qualidade (valor padrão é geralmente bom, menor é melhor qualidade)
+                grabber.setVideoBitrate(2000000); // Exemplo de definição de bitrate (2 Mbps)
+                grabber.setOption("g", "150");    // GOP size para melhor capacidade de busca
+                grabber.setOption("fps", "20");
+                grabber.setOption("c:v", "libdav1d");
+                grabber.setVideoCodec(AV_CODEC_ID_AV1);
+               // grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P10LE); // 10-bit color (opcional)
+            } else if (videoCodec.contains("libdav1d") || videoCodec.contains("dav1d")) {
+                System.out.println("✓ Usando libdav1d - decoder otimizado!");
             }
 
-            // Resetar posição
-            grabber.setFrameNumber((int)targetFrame);
+            // Informações sobre a configuração
+            int threads = Runtime.getRuntime().availableProcessors();
+            System.out.println("Threads disponíveis: " + threads);
+            System.out.println("Resolução: " + grabber.getImageWidth() + "x" + grabber.getImageHeight());
+            System.out.println("FPS: " + grabber.getVideoFrameRate());
 
-            // Atualizar legenda
-            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-            updateSubtitle(currentTimeMs);
-        }
-
-        // Atualizar UI
-        updateTimeLabel();
-        int progress = (int)((targetFrame * 100) / totalFrames);
-        progressSlider.setValue(progress);
-
-        if (audioLine != null) {
-            audioLine.flush();
-        }
-
-        System.out.println("Retrocedeu para frame: " + targetFrame);
-
-        if (wasPlaying) {
-            Thread.sleep(100);
-            playVideo();
+            // Para vídeos 4K AV1, sugerir desabilitar filtros
+            if (grabber.getImageWidth() >= 3840) {
+                System.out.println("DICA: Para vídeo 4K, desabilite filtros para melhor performance");
+            }
         }
 
     } catch (Exception e) {
-        System.err.println("Erro ao retroceder: " + e.getMessage());
-        e.printStackTrace();
+        System.out.println("Erro ao detectar codec: " + e.getMessage());
     }
 }
+
+    /**
+     * Verifica se o vídeo é AV1 com resolução acima de 1080p e bloqueia reprodução
+     * Retorna true se o vídeo pode ser reproduzido, false se deve ser bloqueado
+     */
+    private boolean checkAV1Resolution(String filepath) {
+        FFmpegFrameGrabber tempGrabber = null;
+
+        try {
+            String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
+
+            // Verificar apenas arquivos MP4
+            if (!extension.equals("mp5")) {
+                return true; // Permitir outros formatos
+            }
+
+            System.out.println("Verificando codec e resolução do MP4...");
+
+            // Criar grabber temporário para verificação
+            tempGrabber = new FFmpegFrameGrabber(filepath);
+            tempGrabber.start();
+
+            // Obter informações do vídeo
+            String videoCodec = tempGrabber.getVideoCodecName();
+            int width = tempGrabber.getImageWidth();
+            int height = tempGrabber.getImageHeight();
+
+            System.out.println("Codec: " + videoCodec);
+            System.out.println("Resolução: " + width + "x" + height);
+
+            // Verificar se é AV1
+            boolean isAV1 = false;
+            if (videoCodec != null) {
+                String codecLower = videoCodec.toLowerCase();
+                isAV1 = codecLower.contains("av1") || codecLower.contains("libaom");
+            }
+
+            // Verificar se está usando libaom-av1 (decoder lento)
+            boolean isSlowDecoder = false;
+            if (isAV1 && videoCodec != null && videoCodec.contains("libaom")) {
+                isSlowDecoder = true;
+                System.out.println("AVISO: Detectado libaom-av1 (decoder lento)");
+            }
+
+            // Verificar resolução
+            boolean isHighRes = (width > 1920 || height > 1080);
+
+            // Fechar grabber temporário
+            tempGrabber.stop();
+            tempGrabber.release();
+
+            // Bloquear se for AV1 com libaom E alta resolução
+            if (isAV1 && isSlowDecoder && isHighRes) {
+                System.out.println("BLOQUEADO: AV1 com libaom-av1 em resolução " + width + "x" + height);
+
+                // Mostrar modal de aviso
+                SwingUtilities.invokeLater(() -> {
+                    String message = String.format(
+                            "Este vídeo não pode ser reproduzido:\n\n" +
+                                    "• Codec: AV1 (libaom-av1)\n" +
+                                    "• Resolução: %dx%d\n\n" +
+                                    "O JavaCV está usando o decoder 'libaom-av1' que é muito lento\n" +
+                                    "para vídeos AV1 em alta resolução (acima de 1920x1080).\n\n" +
+                                    "Soluções:\n" +
+                                    "1. Converter o vídeo para H.264/H.265\n" +
+                                    "2. Reduzir a resolução para 1080p ou menos\n" +
+                                    "3. Atualizar o JavaCV para versão com libdav1d\n" +
+                                    "4. Reproduzir com player externo (VLC, MPV, etc.)",
+                            width, height
+                    );
+
+                    JOptionPane.showMessageDialog(
+                            this,
+                            message,
+                            "Vídeo AV1 em Alta Resolução Não Suportado",
+                            JOptionPane.WARNING_MESSAGE
+                    );
+
+                    // Reabilitar botão para carregar outro vídeo
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Video Player - JavaCV");
+                });
+
+                return false; // Bloquear reprodução
+            }
+
+            // Se for AV1 mas com libdav1d, ou resolução baixa, permitir
+            if (isAV1 && !isSlowDecoder) {
+                System.out.println("✓ AV1 com decoder otimizado detectado - permitindo reprodução");
+            } else if (isAV1 && !isHighRes) {
+                System.out.println("✓ AV1 em resolução baixa (" + width + "x" + height + ") - permitindo reprodução");
+            }
+
+            return true; // Permitir reprodução
+
+        } catch (Exception e) {
+            System.err.println("Erro ao verificar codec/resolução: " + e.getMessage());
+            e.printStackTrace();
+
+            // Em caso de erro na verificação, permitir tentar reproduzir
+            if (tempGrabber != null) {
+                try {
+                    tempGrabber.stop();
+                    tempGrabber.release();
+                } catch (Exception ex) {
+                    // Ignorar erro ao fechar
+                }
+            }
+
+            return true; // Permitir reprodução em caso de erro na verificação
+        }
+    }
+
+    private void playVideo() {
+        if (grabber == null || isPlaying) return;
+
+        isPlaying = true;
+        isStopped = false;
+        playPauseButton.setText("⏸");
+
+        if (audioLine != null && !audioLine.isRunning()) {
+            audioLine.start();
+            videoPanel.spectrumPanel.setPaused(false);
+        }
+
+        playbackThread = new Thread(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
+                long frameDelay = (long) (1000.0 / frameRate);
+                long frameCount = 0;
+
+                // Se for áudio apenas, usar lógica simplificada
+                if (isAudioOnly) {
+                    System.out.println("Iniciando reprodução de áudio...");
+
+                    // Posicionar no frame atual (para retomar de onde parou)
+                    try {
+                        long targetTimestamp = (long) ((currentFrame / frameRate) * 1000000);
+                        grabber.setTimestamp(targetTimestamp);
+                        System.out.println("Retomando áudio do frame: " + currentFrame);
+                    } catch (Exception e) {
+                        System.err.println("Erro ao posicionar áudio: " + e.getMessage());
+                    }
+
+                    Frame frame;
+                    long lastUpdateTime = System.currentTimeMillis();
+                    int samplesProcessed = 0;
+
+                    while (isPlaying) {
+                        frame = grabber.grabSamples();
+
+                        if (frame == null) {
+                            System.out.println("Fim do áudio alcançado");
+                            handleVideoEnd();
+                            break;
+                        }
+
+                        if (frame.samples != null && audioLine != null) {
+                            try {
+                                ShortBuffer channelSamples = (ShortBuffer) frame.samples[0];
+                                channelSamples.rewind();
+
+                                if (channelSamples.remaining() > 0) {
+                                    byte[] audioBytes = processAudioSamples(channelSamples);
+
+                                    if (audioBytes != null) {
+                                        audioLine.write(audioBytes, 0, audioBytes.length);
+                                        samplesProcessed++;
+                                    }
+                                }
+
+                                long currentTime = System.currentTimeMillis();
+                                long elapsedTime = currentTime - lastUpdateTime;
+
+                                if (elapsedTime >= 100) {
+                                    long framesElapsed = (long) ((elapsedTime / 1000.0) * frameRate);
+                                    currentFrame += framesElapsed;
+
+                                    if (currentFrame > totalFrames) {
+                                        currentFrame = totalFrames;
+                                    }
+
+                                    lastUpdateTime = currentTime;
+
+                                    SwingUtilities.invokeLater(() -> {
+                                        if (!isSeeking && totalFrames > 0) {
+                                            int progress = (int) ((currentFrame * 100) / totalFrames);
+                                            progressSlider.setValue(progress);
+                                            updateTimeLabel();
+                                        }
+                                    });
+                                }
+
+                            } catch (Exception audioEx) {
+                                System.err.println("Erro ao processar áudio: " + audioEx.getMessage());
+                            }
+                        }
+                    }
+
+                    System.out.println("Reprodução de áudio finalizada");
+
+                } else {
+                    // ===== LÓGICA DE VÍDEO (ORIGINAL COM OTIMIZAÇÕES) =====
+                    long lastUpdateTime = startTime;
+                    double avgFrameTime = frameDelay;
+                    long totalDecodeTime = 0;
+                    long totalRenderTime = 0;
+                    int statsCounter = 0;
+
+                    // **NOVO: Detectar se é vídeo pesado (4K)**
+                    boolean isHeavyVideo = (grabber.getImageWidth() >= 3840);
+                    int uiUpdateInterval = isHeavyVideo ? 10 : 5; // Atualizar UI menos frequente em 4K
+
+                    System.out.println("Iniciando reprodução - " +
+                            (isHeavyVideo ? "Modo 4K (UI a cada 10 frames)" : "Modo normal (UI a cada 5 frames)"));
+
+                    while (isPlaying) {
+                        long frameStartTime = System.currentTimeMillis();
+                        long decodeStart = System.currentTimeMillis();
+
+                        Frame frame = grabber.grab();
+
+                        long decodeTime = System.currentTimeMillis() - decodeStart;
+
+                        if (frame == null) {
+                            handleVideoEnd();
+                            break;
+                        }
+
+                        // **PROCESSAR VÍDEO**
+                        if (frame.image != null) {
+                            long renderStart = System.currentTimeMillis();
+                            BufferedImage img = converter.convert(frame);
+
+                            if (img != null) {
+                                // **OTIMIZAÇÃO: Pular filtros em vídeos pesados se enabled**
+                                if (filtersEnabled) {
+                                    // Para 4K, aplicar filtros apenas a cada 2 frames
+                                    if (!isHeavyVideo || currentFrame % 2 == 0) {
+                                        img = applyImageFilters(img);
+                                    }
+                                }
+                                videoPanel.updateImage(img);
+                            }
+
+                            long renderTime = System.currentTimeMillis() - renderStart;
+                            totalDecodeTime += decodeTime;
+                            totalRenderTime += renderTime;
+                            statsCounter++;
+
+                            // Log de performance a cada 100 frames
+                            if (statsCounter >= 100) {
+                                long avgDecode = totalDecodeTime / statsCounter;
+                                long avgRender = totalRenderTime / statsCounter;
+                                System.out.println("Performance - Decode: " + avgDecode + "ms, Render: " + avgRender + "ms");
+                                totalDecodeTime = 0;
+                                totalRenderTime = 0;
+                                statsCounter = 0;
+                            }
+
+                            currentFrame++;
+                            frameCount++;
+
+                            // Atualizar legenda
+                            long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
+                            updateSubtitle(currentTimeMs);
+
+                            // Calcular tempo médio de frame (para sincronização adaptativa)
+                            long timeSinceLastUpdate = frameStartTime - lastUpdateTime;
+                            if (frameCount > 10) {
+                                avgFrameTime = (avgFrameTime * 0.9) + (timeSinceLastUpdate * 0.1);
+                            }
+                            lastUpdateTime = frameStartTime;
+
+                            // **Atualizar UI com frequência adaptativa**
+                            if (currentFrame % uiUpdateInterval == 0) {
+                                SwingUtilities.invokeLater(() -> {
+                                    if (!isSeeking && totalFrames > 0) {
+                                        int progress = (int) ((currentFrame * 100) / totalFrames);
+                                        progressSlider.setValue(progress);
+                                        updateTimeLabel();
+                                    }
+                                });
+                            }
+
+                            // **SINCRONIZAÇÃO DE TEMPO (ORIGINAL - MANTIDA)**
+                            long expectedTime = startTime + (frameCount * frameDelay);
+                            long currentTime = System.currentTimeMillis();
+                            long sleepTime = expectedTime - currentTime;
+
+                            if (sleepTime > 0) {
+                                Thread.sleep(sleepTime);
+                            } else if (sleepTime < -frameDelay * 3) {
+                                // Se estiver muito atrasado, reajustar referência de tempo
+                                startTime = currentTime - (long) (frameCount * frameDelay * 0.5);
+                            }
+                        }
+
+                        // **PROCESSAR ÁUDIO (ORIGINAL - MANTIDO)**
+                        if (frame.samples != null && audioLine != null) {
+                            processVideoAudioFrame(frame);
+                        }
+                    }
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    isPlaying = false;
+                    playPauseButton.setText("▶");
+                });
+            }
+        });
+
+        playbackThread.start();
+    }
+
+    // **MÉTODO AUXILIAR PARA FIM DE VÍDEO**
+    private void handleVideoEnd() {
+        if (playlistManager.size() > 0 && playlistManager.isShuffle()) {
+            playlistManager.markCurrentAsPlayed();
+        }
+
+        if (autoPlayNext && playlistManager.size() > 0) {
+            SwingUtilities.invokeLater(() -> {
+                PlaylistItem next = playlistManager.next();
+                playlistDialog.refreshPlaylist();
+                if (next != null) {
+                    System.out.println("Auto-play: " + next.getDisplayName());
+                    playFromPlaylist(next.getFilePath());
+                } else {
+                    stopVideo();
+                }
+            });
+        } else {
+            SwingUtilities.invokeLater(() -> stopVideo());
+        }
+    }
+
+    private void loadAudioFromPlaylist(String filepath) {
+        // Salvar caminho do áudio
+        currentVideoPath = filepath;
+        videoFilePath = filepath;
+
+        System.out.println("=== INÍCIO loadAudioFromPlaylist  ===");
+
+        // Fechar reprodução anterior ANTES de iniciar nova thread
+        if (isPlaying) {
+            System.out.println("Parando reprodução anterior...");
+            isPlaying = false;
+            if (playbackThread != null) {
+                try {
+                    playbackThread.interrupt();
+                    playbackThread.join(500);
+                } catch (Exception e) {
+                    System.out.println("Erro ao parar thread de playback: " + e.getMessage());
+                }
+            }
+        }
+
+        if (grabber != null) {
+            System.out.println("Fechando grabber anterior...");
+            try {
+                grabber.stop();
+                grabber.release();
+            } catch (Exception e) {
+                System.out.println("Erro ao fechar grabber anterior: " + e.getMessage());
+            }
+            grabber = null;
+        }
+
+        if (audioLine != null && audioLine.isOpen()) {
+            System.out.println("Fechando audioLine anterior...");
+            audioLine.close();
+            audioLine = null;
+        }
+
+        // NOVO: Limpar cover art anterior
+        System.out.println("Limpando cover art anterior...");
+        audioCoverArt = null;
+        SwingUtilities.invokeLater(() -> {
+            videoPanel.setCoverArt(null);
+            videoPanel.repaint();
+        });
+
+        // Limpar estado
+        System.out.println("Limpando estado...");
+        subtitles.clear();
+        currentSubtitleText = "";
+        currentSubtitleStream = -1;
+        currentFrame = 0;
+
+        // Desabilitar controles durante carregamento
+        System.out.println("Desabilitando controles...");
+        playPauseButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        progressSlider.setEnabled(false);
+        openButton.setEnabled(false);
+        volumeButton.setEnabled(false);
+        rewindButton.setEnabled(false);
+        forwardButton.setEnabled(false);
+        nextFrameButton.setEnabled(false);
+        captureFrameButton.setEnabled(false);
+        captureAllFrameButton.setEnabled(false);
+
+        // Resetar filtros
+        brightness = 0.0;
+        contrast = 1.0;
+        gamma = 1.0;
+        saturation = 1.0;
+        filtersEnabled = false;
+
+        System.out.println("Atualizando título...");
+        setTitle("Video Player - Carregando áudio...");
+
+        System.out.println("Iniciando thread de carregamento de áudio...");
+
+        // Resetar normalização
+        normalizationCalculated = false;
+        normalizationSampleCount = 0;
+        normalizationGain = 1.0f;
+        maxPeakLevel = 0.0f;
+        averageRMS = 0.0f;
+        rmsHistoryIndex = 0;
+        Arrays.fill(rmsHistory, 0.0f);
+        loudnessAnalyzer.reset();
+
+
+        // Carregar áudio em thread separada
+        Thread loaderThread = new Thread(() -> {
+            System.out.println("Thread de carregamento de áudio INICIADA");
+            try {
+                System.out.println("1. Criando FFmpegFrameGrabber para áudio...");
+                grabber = new FFmpegFrameGrabber(filepath);
+                System.out.println("2. FFmpegFrameGrabber criado");
+
+                // Opções para melhorar performance de áudio
+                System.out.println("3. Aplicando opções de áudio...");
+                try {
+                    grabber.setOption("analyzeduration", "2000000");
+                    grabber.setOption("probesize", "2000000");
+                    System.out.println("3. Opções aplicadas");
+                } catch (Exception e) {
+                    System.out.println("Erro nas opções: " + e.getMessage());
+                }
+
+                System.out.println("4. Chamando grabber.start()...");
+                grabber.start();
+                System.out.println("5. grabber.start() CONCLUÍDO!");
+
+                // Marcar como áudio apenas
+                isAudioOnly = true;
+
+                System.out.println("11. Tentando extrair cover art...");
+                extractCoverArt(filepath);
+
+                System.out.println("6. Obtendo informações do áudio...");
+                audioChannels = grabber.getAudioChannels();
+                sampleRate = grabber.getSampleRate();
+                System.out.println("7. Canais: " + audioChannels + ", SampleRate: " + sampleRate);
+
+                // Calcular duração em "frames" baseado na taxa de amostragem
+                // Para áudio, vamos simular frames a 30 FPS para controle de progresso
+                frameRate = 30.0;
+                double durationSeconds = grabber.getLengthInTime() / 1000000.0; // microsegundos para segundos
+                totalFrames = (long) (durationSeconds * frameRate);
+                currentFrame = 0;
+                System.out.println("8. Duração: " + durationSeconds + "s, Frames simulados: " + totalFrames);
+
+                // Configurar linha de áudio
+                if (audioChannels > 0 && sampleRate > 0) {
+                    System.out.println("9. Criando audioLine...");
+                    try {
+                        int outputChannels = audioChannels > 2 ? 2 : audioChannels;
+
+                        if (audioChannels > 2) {
+                            System.out.println("Áudio " + audioChannels + " canais detectado, fazendo downmix para estéreo");
+                        }
+
+                        AudioFormat audioFormat = new AudioFormat(
+                                sampleRate,
+                                16,                    // 16-bit samples
+                                outputChannels,        // stereo ou mono
+                                true,                  // signed
+                                true                   // big-endian (Para audio tem que ser false)
+                        );
+
+                        DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
+                        audioLine = (SourceDataLine) AudioSystem.getLine(info);
+
+                        int bufferSize = sampleRate * outputChannels * 2;
+                        audioLine.open(audioFormat, bufferSize);
+                        System.out.println("10. AudioLine configurado com sucesso");
+
+                        // Combinação default - deve refletir o que está no menu
+                        setGlobalAudioGain(0.20f);          // 20% do volume
+                        setTargetLoudness(-18.0f);         // Target mais baixo
+                        setAudioNormalizationEnabled(false); // normalização desativada
+
+                    } catch (Exception audioEx) {
+                        System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
+                        audioLine = null;
+                    }
+                }
+
+                System.out.println("11. Áudio carregado! Habilitando UI...");
+
+                SwingUtilities.invokeLater(() -> {
+
+                    // Redimensionar e centralizar a janela
+                    setSize(650, 500);
+                    setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
+                    setResizable(false);// Desabilta maximizar a janela
+                    System.out.println("12. SwingUtilities.invokeLater EXECUTANDO");
+                    playPauseButton.setEnabled(true);
+                    stopButton.setEnabled(true);
+                    progressSlider.setEnabled(true);
+                    progressSlider.setValue(0);
+                    openButton.setEnabled(true);
+                    rewindButton.setEnabled(true);
+                    forwardButton.setEnabled(true);
+                    volumeButton.setEnabled(true);
+
+                    // Desabilitar controles de vídeo
+                    nextFrameButton.setEnabled(false);
+                    captureFrameButton.setEnabled(false);
+                    captureAllFrameButton.setEnabled(false);
+
+                    updateTimeLabel();
+
+                    // Limpar painel de vídeo e mostrar mensagem
+//                    videoPanel.updateImage(null);
+//                    videoPanel.repaint();
+                    // Mostrar spectrum analyzer
+
+                    // USAR O MÉTODO PÚBLICO EM VEZ DE ACESSAR spectrumPanel DIRETAMENTE
+                    videoPanel.setSpectrumSize(600, 400);
+                    // Ativar reflexo
+                    videoPanel.setSpectrumReflection(true);
+
+                    // Ajustar altura do reflexo (0.0 a 1.0)
+                    videoPanel.setSpectrumReflectionHeight(1f); // 50% da altura original
+
+                    // Ajustar transparência do reflexo (0 a 255)
+                    videoPanel.setSpectrumReflectionAlpha(180); // Mais transparente
+
+                    videoPanel.showSpectrum();
+
+                    // Ajustar opacidade da capa (0.0 = invisível, 1.0 = opaco)
+                    videoPanel.setCoverOpacity(0.5f); // 30% de opacidade (padrão)
+
+                    // Para capa mais visível
+                    // videoPanel.setCoverOpacity(0.5f);
+
+                    // Para capa mais discreta
+                    // videoPanel.setCoverOpacity(0.2f);
+
+
+                    // ATIVAR MODO COVER_PALETTE se houver capa
+                    videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
+                    setTitle("Video Player - " + new java.io.File(filepath).getName());
+
+                    videoPanel.setupAudioContextMenu();
+
+                    playVideo();
+                    System.out.println("13. UI HABILITADA - Pronto para reproduzir áudio!");
+                });
+
+                System.out.println("14. Thread de carregamento de áudio CONCLUÍDA");
+
+            } catch (Exception e) {
+                System.err.println("ERRO CRÍTICO na thread de carregamento de áudio:");
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao abrir arquivo de áudio:\n" + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Video Player - JavaCV");
+                });
+            }
+        }, "AudioLoader");
+
+        System.out.println("Thread criada, iniciando...");
+        loaderThread.start();
+        System.out.println("Thread iniciada! Aguardando conclusão...");
+        System.out.println("=== FIM loadAudio (método principal) ===");
+    }
+
+    private void loadVideoFromPlaylist(String filepath) {
+        isAudioOnly = false;
+
+        // Salvar caminho do vídeo
+        currentVideoPath = filepath;
+        videoFilePath = filepath;
+
+        System.out.println("=== INÍCIO loadVideo ===");
+
+        // Fechar vídeo anterior ANTES de iniciar nova thread
+        if (isPlaying) {
+            System.out.println("Parando reprodução anterior...");
+            isPlaying = false;
+            if (playbackThread != null) {
+                try {
+                    playbackThread.interrupt();
+                    playbackThread.join(500);
+                } catch (Exception e) {
+                    System.out.println("Erro ao parar thread de playback: " + e.getMessage());
+                }
+            }
+        }
+
+        if (grabber != null) {
+            System.out.println("Fechando grabber anterior...");
+            try {
+                grabber.stop();
+                grabber.release();
+            } catch (Exception e) {
+                System.out.println("Erro ao fechar grabber anterior: " + e.getMessage());
+            }
+            grabber = null;
+        }
+
+        if (audioLine != null && audioLine.isOpen()) {
+            System.out.println("Fechando audioLine anterior...");
+            audioLine.close();
+            audioLine = null;
+        }
+
+        // NOVO: Limpar cover art ao carregar vídeo
+        System.out.println("Limpando cover art...");
+        audioCoverArt = null;
+        SwingUtilities.invokeLater(() -> {
+            videoPanel.setCoverArt(null);
+            videoPanel.repaint();
+        });
+
+        // Limpar estado
+        System.out.println("Limpando estado...");
+        subtitles.clear();
+        currentSubtitleText = "";
+        currentSubtitleStream = -1;
+        currentFrame = 0;
+
+        // Desabilitar controles durante carregamento
+        System.out.println("Desabilitando controles...");
+        playPauseButton.setEnabled(false);
+        stopButton.setEnabled(false);
+        progressSlider.setEnabled(false);
+        openButton.setEnabled(false);
+        volumeButton.setEnabled(false);
+
+        brightness = 0.0;
+        contrast = 1.0;
+        gamma = 1.0;
+        saturation = 1.0;
+        filtersEnabled = false;
+
+        System.out.println("Atualizando título...");
+        setTitle("Video Player - Carregando...");
+
+        System.out.println("Iniciando thread de carregamento...");
+
+        // Carregar vídeo em thread separada
+        Thread loaderThread = new Thread(() -> {
+            System.out.println("Thread de carregamento INICIADA");
+            try {
+                System.out.println("1. videoFilePath definido: " + videoFilePath);
+
+                System.out.println("2. Criando FFmpegFrameGrabber...");
+                grabber = new FFmpegFrameGrabber(filepath);
+                System.out.println("3. FFmpegFrameGrabber criado");
+
+                String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
+                System.out.println("4. Extensão detectada: " + extension);
+
+
+                if (hardwareAccelerationEnabled) {
+                    System.out.println("5. Tentando habilitar aceleração GPU...");
+                    tryEnableHardwareAcceleration(grabber);
+                } else {
+                    System.out.println("5. Aceleração GPU desabilitada");
+                }
+
+                // Opções para melhorar performance
+                if (extension.equals("wmv")) {
+                    System.out.println("6. Aplicando opções WMV...");
+                    try {
+                     //   grabber.setOption("threads", "auto");
+                        grabber.setOption("fflags", "nobuffer");
+                       // grabber.setOption("flags", "low_delay");
+                    } catch (Exception e) {
+                        System.out.println("Erro nas opções WMV: " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("6. Não é WMV, pulando opções específicas");
+                }
+
+                // Opções gerais
+                System.out.println("7. Aplicando opções gerais...");
+                try {
+                    grabber.setOption("analyzeduration", "2000000");
+                    grabber.setOption("probesize", "2000000");
+                    grabber.setOption("fflags", "+genpts");
+                    System.out.println("7. Opções aplicadas");
+                } catch (Exception e) {
+                    System.out.println("Erro nas opções gerais: " + e.getMessage());
+                }
+
+                System.out.println("Iniciando pré-detecção de streams de áudio...");
+
+                // NOVO: Detectar mapeamento ANTES de start() usando um grabber temporário
+                try {
+                    FFmpegFrameGrabber tempGrabber = new FFmpegFrameGrabber(filepath);
+                    tempGrabber.start();
+                    totalAudioStreams = tempGrabber.getAudioStream();
+                    tempGrabber.stop();
+                    tempGrabber.release();
+
+                    System.out.println("Total de faixas de áudio pré-detectadas: " + totalAudioStreams);
+
+                    // Detectar nomes e mapeamento
+                    if (totalAudioStreams > 0) {
+                        detectAudioStreamNames(filepath);
+                        System.out.println("Mapeamento de áudio detectado: " + logicalToPhysicalAudioStream);
+                    }
+
+                    // Agora usar o mapeamento para stream lógica 0
+                    if (!logicalToPhysicalAudioStream.isEmpty()) {
+                        int physicalStream0 = logicalToPhysicalAudioStream.get(0);
+                        System.out.println("Definindo stream lógica 0 (física " + physicalStream0 + ")");
+                        grabber.setAudioStream(physicalStream0);
+                    } else {
+                        System.out.println("Mapeamento vazio, não definindo stream de áudio");
+                    }
+
+                } catch (Exception e) {
+                    System.out.println("Erro na pré-detecção de áudio: " + e.getMessage());
+                    e.printStackTrace();
+                    // Continuar sem setAudioStream - usará stream padrão
+                }
+
+                System.out.println("8. Chamando grabber.start()...");
+                grabber.start();
+                System.out.println("9. grabber.start() CONCLUÍDO!");
+
+                // Definir stream atual como 0 (primeira lógica)
+                currentAudioStream = 0;
+                System.out.println("10. Stream de áudio atual definida: " + currentAudioStream);
+
+                // Detectar streams de legendas em thread separada
+                System.out.println("11. Iniciando detecção de legendas em thread separada...");
+                new Thread(() -> {
+                    try {
+                        System.out.println("Thread de legendas INICIADA");
+                        detectEmbeddedSubtitles(filepath);
+                        System.out.println("Thread de legendas CONCLUÍDA");
+                    } catch (Exception e) {
+                        System.out.println("Não foi possível detectar legendas embutidas: " + e.getMessage());
+                    }
+                }, "SubtitleDetector").start();
+
+                System.out.println("12. Obtendo totalFrames e frameRate...");
+                totalFrames = grabber.getLengthInVideoFrames();
+                frameRate = grabber.getVideoFrameRate();
+                currentFrame = 0;
+                System.out.println("13. Total frames: " + totalFrames + ", FPS: " + frameRate);
+
+                // Correções de FPS
+                System.out.println("14. Verificando correções de FPS...");
+
+                if (extension.equals("flv") && frameRate > 100) {
+                    double tbr = grabber.getFrameRate();
+                    if (tbr > 0 && tbr < 100) {
+                        frameRate = tbr;
+                        System.out.println("FLV detectado - usando FPS corrigido: " + frameRate);
+                    } else {
+                        frameRate = 29.97;
+                        System.out.println("FLV detectado - usando FPS padrão: 29.97");
+                    }
+                }
+
+                if (extension.equals("wmv") && frameRate > 100) {
+                    double tbr = grabber.getFrameRate();
+                    if (tbr > 0 && tbr < 100) {
+                        frameRate = tbr;
+                        System.out.println("WMV detectado - usando FPS corrigido: " + frameRate);
+                    } else {
+                        frameRate = 30.0;
+                        System.out.println("WMV detectado - usando FPS padrão: 30");
+                    }
+                }
+
+                if (extension.equals("gif")) {
+                    double tbr = grabber.getFrameRate();
+                    if (tbr > 0 && Math.abs(tbr - frameRate) > 1) {
+                        frameRate = tbr;
+                        System.out.println("GIF detectado - usando FPS (tbr): " + frameRate);
+                    }
+                    audioLine = null;
+                }
+
+                if (frameRate > 120 || frameRate < 1) {
+                    System.out.println("FPS inválido, corrigindo para 30");
+                    frameRate = 30.0;
+                }
+
+                System.out.println("15. Configurando áudio...");
+                audioChannels = grabber.getAudioChannels();
+                sampleRate = grabber.getSampleRate();
+                System.out.println("16. Canais: " + audioChannels + ", SampleRate: " + sampleRate);
+
+                if (audioChannels > 0 && sampleRate > 0 && !extension.equals("gif")) {
+                    System.out.println("17. Criando audioLine...");
+                    try {
+                        int outputChannels = audioChannels > 2 ? 2 : audioChannels;
+
+                        if (audioChannels > 2) {
+                            System.out.println("Áudio " + audioChannels + " canais detectado, fazendo downmix para estéreo");
+                        }
+
+                        AudioFormat audioFormat = new AudioFormat(sampleRate, 16, outputChannels, true, true);
+                        DataLine.Info info = new DataLine.Info(SourceDataLine.class, audioFormat);
+                        audioLine = (SourceDataLine) AudioSystem.getLine(info);
+
+                        int bufferSize = sampleRate * outputChannels * 2;
+                        if (extension.equals("wmv")) bufferSize *= 4;
+
+                        audioLine.open(audioFormat, bufferSize);
+                        System.out.println("18. AudioLine configurado com sucesso");
+                    } catch (Exception audioEx) {
+                        System.err.println("18. Erro ao configurar áudio: " + audioEx.getMessage());
+                        audioLine = null;
+                    }
+                } else {
+                    System.out.println("17-18. Sem áudio");
+                }
+
+                System.out.println("19. Procurando legendas externas...");
+                searchExternalSubtitles(filepath);
+                System.out.println("20. Busca de legendas concluída");
+
+                System.out.println("21. Vídeo carregado! Habilitando UI...");
+
+
+                int videoWidth = grabber.getImageWidth();
+                int videoHeight = grabber.getImageHeight();
+                int tempVideoWidth = videoWidth;
+                if (videoWidth <= 500) {
+                    tempVideoWidth = 600;
+                }
+                // Guardar dimensões para usar no SwingUtilities.invokeLater
+                final int finalWidth = tempVideoWidth;
+                final int finalHeight = videoHeight;
+
+                SwingUtilities.invokeLater(() -> {
+
+                    // Redimensionar e centralizar a janela
+                    setSize(finalWidth, finalHeight);
+
+                    //Se a resolução do video for igual ou maior que a resolução da tela maximizar, para evitar
+                    //que parte do video fique de fora tela
+                    if (finalWidth >= screenWidth || finalHeight >= screenHeight) {
+                        System.out.println("Excedeu ou é igual, maximizando ");
+                        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+                    }
+                    setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
+                    setResizable(true);// Pode maximizar a janela
+
+                    System.out.println("22. SwingUtilities.invokeLater EXECUTANDO");
+                    playPauseButton.setEnabled(true);
+                    stopButton.setEnabled(true);
+                    progressSlider.setEnabled(true);
+                    progressSlider.setValue(0);
+                    openButton.setEnabled(true);
+                    rewindButton.setEnabled(true);      // NOVO
+                    forwardButton.setEnabled(true);     // NOVO
+                    nextFrameButton.setEnabled(true);   // NOVO
+                    captureFrameButton.setEnabled(true); // NOVO
+                    captureAllFrameButton.setEnabled(true); // NOVO
+                    volumeButton.setEnabled(true);
+                    updateTimeLabel();
+
+                    setTitle("Video Player - " + new java.io.File(filepath).getName());
+
+                    videoPanel.setupVideoContextMenu();
+
+                    playVideo();
+
+                    System.out.println("23. UI HABILITADA - Pronto para reproduzir!");
+                });
+
+                System.out.println("24. Thread de carregamento CONCLUÍDA");
+
+            } catch (Exception e) {
+                System.err.println("ERRO CRÍTICO na thread de carregamento:");
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao abrir vídeo:\n" + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Video Player - JavaCV");
+
+                });
+            }
+        }, "VideoLoader");
+
+        System.out.println("Thread criada, iniciando...");
+        loaderThread.start();
+        System.out.println("Thread iniciada! Aguardando conclusão...");
+        System.out.println("=== FIM loadVideo (método principal) ===");
+    }
+
+    private void rewind10Seconds() {
+        if (grabber == null || totalFrames == 0) return;
+
+        System.out.println("Retrocedendo 10 segundos...");
+
+        // Calcular quantos frames correspondem a 10 segundos
+        long framesTo10Seconds = (long) (frameRate * 10);
+        long targetFrame = Math.max(0, currentFrame - framesTo10Seconds);
+
+        boolean wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pauseVideo();
+        }
+
+        try {
+            currentFrame = targetFrame;
+
+            if (isAudioOnly) {
+                // Para áudio, usar timestamp
+                long targetTimestamp = (long) ((currentFrame / frameRate) * 1000000);
+                grabber.setTimestamp(targetTimestamp);
+                System.out.println("Retrocedeu áudio para frame: " + targetFrame);
+            } else {
+                // Para vídeo, usar frame number
+                grabber.setFrameNumber((int) targetFrame);
+
+                // Capturar e exibir frame
+                Frame frame = grabber.grabImage();
+                if (frame != null && frame.image != null) {
+                    BufferedImage img = converter.convert(frame);
+                    if (img != null) {
+                        videoPanel.updateImage(img);
+                    }
+                }
+
+                // Resetar posição
+                grabber.setFrameNumber((int) targetFrame);
+
+                // Atualizar legenda
+                long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
+                updateSubtitle(currentTimeMs);
+            }
+
+            // Atualizar UI
+            updateTimeLabel();
+            int progress = (int) ((targetFrame * 100) / totalFrames);
+            progressSlider.setValue(progress);
+
+            if (audioLine != null) {
+                audioLine.flush();
+            }
+
+            System.out.println("Retrocedeu para frame: " + targetFrame);
+
+            if (wasPlaying) {
+                Thread.sleep(100);
+                playVideo();
+            }
+
+        } catch (Exception e) {
+            System.err.println("Erro ao retroceder: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 
     private void forward10Seconds() {
         if (grabber == null || totalFrames == 0) return;
@@ -4273,7 +4888,7 @@ private void rewind10Seconds() {
         System.out.println("Avançando 10 segundos...");
 
         // Calcular quantos frames correspondem a 10 segundos
-        long framesTo10Seconds = (long)(frameRate * 10);
+        long framesTo10Seconds = (long) (frameRate * 10);
         long targetFrame = Math.min(totalFrames - 1, currentFrame + framesTo10Seconds);
 
         boolean wasPlaying = isPlaying;
@@ -4286,12 +4901,12 @@ private void rewind10Seconds() {
 
             if (isAudioOnly) {
                 // Para áudio, usar timestamp
-                long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
+                long targetTimestamp = (long) ((currentFrame / frameRate) * 1000000);
                 grabber.setTimestamp(targetTimestamp);
                 System.out.println("Avançou áudio para frame: " + targetFrame);
             } else {
                 // Para vídeo, usar frame number
-                grabber.setFrameNumber((int)targetFrame);
+                grabber.setFrameNumber((int) targetFrame);
 
                 // Capturar e exibir frame
                 Frame frame = grabber.grabImage();
@@ -4303,16 +4918,16 @@ private void rewind10Seconds() {
                 }
 
                 // Resetar posição
-                grabber.setFrameNumber((int)targetFrame);
+                grabber.setFrameNumber((int) targetFrame);
 
                 // Atualizar legenda
-                long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
                 updateSubtitle(currentTimeMs);
             }
 
             // Atualizar UI
             updateTimeLabel();
-            int progress = (int)((targetFrame * 100) / totalFrames);
+            int progress = (int) ((targetFrame * 100) / totalFrames);
             progressSlider.setValue(progress);
 
             if (audioLine != null) {
@@ -4332,95 +4947,94 @@ private void rewind10Seconds() {
         }
     }
 
-private void nextFrame() {
-    if (grabber == null || totalFrames == 0) return;
+    private void nextFrame() {
+        if (grabber == null || totalFrames == 0) return;
 
-    System.out.println("Avançando " + framesToSkip + " frame(s)...");
+        System.out.println("Avançando " + framesToSkip + " frame(s)...");
 
-    // Se estiver tocando, pausar primeiro
-    if (isPlaying) {
-        pauseVideo();
-    }
+        // Se estiver tocando, pausar primeiro
+        if (isPlaying) {
+            pauseVideo();
+        }
 
-    // Verificar se não está no final
-    if (currentFrame >= totalFrames - 1) {
-        System.out.println("Já está no último frame");
-        return;
-    }
+        // Verificar se não está no final
+        if (currentFrame >= totalFrames - 1) {
+            System.out.println("Já está no último frame");
+            return;
+        }
 
-    try {
-        int framesAdvanced = 0;
+        try {
+            int framesAdvanced = 0;
 
-        // Avançar a quantidade configurada de frames
-        while (framesAdvanced < framesToSkip) {
-            Frame frame = grabber.grab();
+            // Avançar a quantidade configurada de frames
+            while (framesAdvanced < framesToSkip) {
+                Frame frame = grabber.grab();
 
-            if (frame == null) {
-                System.out.println("Chegou ao fim do vídeo");
-                break;
+                if (frame == null) {
+                    System.out.println("Chegou ao fim do vídeo");
+                    break;
+                }
+
+                // Se for frame de vídeo, contar
+                if (frame.image != null) {
+                    framesAdvanced++;
+
+                    // Só exibir o último frame
+                    if (framesAdvanced == framesToSkip) {
+                        BufferedImage img = converter.convert(frame);
+                        if (img != null) {
+                            videoPanel.updateImage(img);
+                            currentFrame++;
+
+                            // Atualizar UI
+                            updateTimeLabel();
+                            int progress = (int) ((currentFrame * 100) / totalFrames);
+                            progressSlider.setValue(progress);
+
+                            // Atualizar legenda
+                            long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
+                            updateSubtitle(currentTimeMs);
+
+                            System.out.println("Frame atual: " + currentFrame + " (avançou " + framesToSkip + " frames)");
+                        }
+                    } else {
+                        // Contar frame mas não exibir
+                        currentFrame++;
+                    }
+                }
+                // Frames de áudio são ignorados automaticamente
             }
 
-            // Se for frame de vídeo, contar
-            if (frame.image != null) {
-                framesAdvanced++;
+        } catch (Exception e) {
+            System.err.println("Erro ao avançar frame: " + e.getMessage());
+            e.printStackTrace();
 
-                // Só exibir o último frame
-                if (framesAdvanced == framesToSkip) {
+            // Fallback: tentar com setFrameNumber
+            try {
+                System.out.println("Tentando fallback com setFrameNumber...");
+                long targetFrame = Math.min(totalFrames - 1, currentFrame + framesToSkip);
+                grabber.setFrameNumber((int) targetFrame);
+                currentFrame = targetFrame;
+
+                Frame frame = grabber.grabImage();
+                if (frame != null && frame.image != null) {
                     BufferedImage img = converter.convert(frame);
                     if (img != null) {
                         videoPanel.updateImage(img);
-                        currentFrame++;
-
-                        // Atualizar UI
                         updateTimeLabel();
-                        int progress = (int)((currentFrame * 100) / totalFrames);
+                        int progress = (int) ((targetFrame * 100) / totalFrames);
                         progressSlider.setValue(progress);
 
-                        // Atualizar legenda
-                        long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                        long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
                         updateSubtitle(currentTimeMs);
-
-                        System.out.println("Frame atual: " + currentFrame + " (avançou " + framesToSkip + " frames)");
                     }
-                } else {
-                    // Contar frame mas não exibir
-                    currentFrame++;
                 }
+                grabber.setFrameNumber((int) targetFrame);
+            } catch (Exception fallbackError) {
+                System.err.println("Fallback também falhou: " + fallbackError.getMessage());
             }
-            // Frames de áudio são ignorados automaticamente
-        }
-
-    } catch (Exception e) {
-        System.err.println("Erro ao avançar frame: " + e.getMessage());
-        e.printStackTrace();
-
-        // Fallback: tentar com setFrameNumber
-        try {
-            System.out.println("Tentando fallback com setFrameNumber...");
-            long targetFrame = Math.min(totalFrames - 1, currentFrame + framesToSkip);
-            grabber.setFrameNumber((int)targetFrame);
-            currentFrame = targetFrame;
-
-            Frame frame = grabber.grabImage();
-            if (frame != null && frame.image != null) {
-                BufferedImage img = converter.convert(frame);
-                if (img != null) {
-                    videoPanel.updateImage(img);
-                    updateTimeLabel();
-                    int progress = (int)((targetFrame * 100) / totalFrames);
-                    progressSlider.setValue(progress);
-
-                    long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-                    updateSubtitle(currentTimeMs);
-                }
-            }
-            grabber.setFrameNumber((int)targetFrame);
-        } catch (Exception fallbackError) {
-            System.err.println("Fallback também falhou: " + fallbackError.getMessage());
         }
     }
-}
-
 
     private void searchExternalSubtitles(String videoPath) {
         System.out.println("21. Iniciando busca de legendas externas...");
@@ -4444,51 +5058,52 @@ private void nextFrame() {
         System.out.println("Nenhuma legenda externa encontrada");
     }
 
-private void loadSubtitleFile(File file) {
-    System.out.println("Carregando legenda: " + file.getName());
+    private void loadSubtitleFile(File file) {
+        System.out.println("Carregando legenda: " + file.getName());
 
-    new Thread(() -> {
-        try {
-            String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
-            System.out.println("Arquivo lido: " + content.length() + " caracteres");
+        new Thread(() -> {
+            try {
+                String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+                System.out.println("Arquivo lido: " + content.length() + " caracteres");
 
-            // Detectar formato
-            String filename = file.getName().toLowerCase();
-            if (filename.endsWith(".srt")) {
-                System.out.println("Parseando SRT...");
-                parseSRT(content);
-            } else if (filename.endsWith(".vtt")) {
-                System.out.println("Parseando VTT...");
-                parseVTT(content);
-            } else if (filename.endsWith(".ass") || filename.endsWith(".ssa")) {
-                System.out.println("Parseando ASS/SSA...");
-                parseASS(content);
-            } else {
-                System.out.println("Formato de legenda não suportado: " + file.getName());
-                return;
+                // Detectar formato
+                String filename = file.getName().toLowerCase();
+                if (filename.endsWith(".srt")) {
+                    System.out.println("Parseando SRT...");
+                    parseSRT(content);
+                } else if (filename.endsWith(".vtt")) {
+                    System.out.println("Parseando VTT...");
+                    parseVTT(content);
+                } else if (filename.endsWith(".ass") || filename.endsWith(".ssa")) {
+                    System.out.println("Parseando ASS/SSA...");
+                    parseASS(content);
+                } else {
+                    System.out.println("Formato de legenda não suportado: " + file.getName());
+                    return;
+                }
+
+                currentSubtitleStream = -2;
+                System.out.println("Legenda parseada: " + subtitles.size() + " entradas");
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Legenda carregada com sucesso!",
+                            "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                });
+
+            } catch (Exception e) {
+                System.err.println("Erro ao carregar legenda: " + e.getMessage());
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao carregar legenda: " + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+                });
             }
+        }, "SubtitleLoader").start();
+    }
 
-            currentSubtitleStream = -2;
-            System.out.println("Legenda parseada: " + subtitles.size() + " entradas");
-
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(this,
-                        "Legenda carregada com sucesso!",
-                        "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-            });
-
-        } catch (Exception e) {
-            System.err.println("Erro ao carregar legenda: " + e.getMessage());
-            e.printStackTrace();
-
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(this,
-                        "Erro ao carregar legenda: " + e.getMessage(),
-                        "Erro", JOptionPane.ERROR_MESSAGE);
-            });
-        }
-    }, "SubtitleLoader").start();
-}
     private String cleanSubtitleText(String text) {
         if (text == null || text.isEmpty()) return text;
 
@@ -4755,6 +5370,7 @@ private void loadSubtitleFile(File file) {
                 return f.isDirectory() || name.endsWith(".srt") || name.endsWith(".sub") ||
                         name.endsWith(".ass") || name.endsWith(".ssa") || name.endsWith(".vtt");
             }
+
             public String getDescription() {
                 return "Arquivos de Legenda (*.srt, *.sub, *.ass, *.vtt)";
             }
@@ -4769,66 +5385,66 @@ private void loadSubtitleFile(File file) {
         }
     }
 
-private void parseSRT(String content) {
-    System.out.println("Iniciando parse SRT...");
-    subtitles.clear();
+    private void parseSRT(String content) {
+        System.out.println("Iniciando parse SRT...");
+        subtitles.clear();
 
-    try {
-        // Normalizar quebras de linha
-        content = content.replace("\r\n", "\n").replace("\r", "\n");
+        try {
+            // Normalizar quebras de linha
+            content = content.replace("\r\n", "\n").replace("\r", "\n");
 
-        // Split por blocos (separados por linha vazia dupla)
-        String[] blocks = content.split("\n\n+");
+            // Split por blocos (separados por linha vazia dupla)
+            String[] blocks = content.split("\n\n+");
 
-        System.out.println("Total de blocos encontrados: " + blocks.length);
+            System.out.println("Total de blocos encontrados: " + blocks.length);
 
-        for (String block : blocks) {
-            block = block.trim();
-            if (block.isEmpty()) continue;
+            for (String block : blocks) {
+                block = block.trim();
+                if (block.isEmpty()) continue;
 
-            String[] lines = block.split("\n");
-            if (lines.length < 3) continue; // Precisa ter: número, timestamp, texto
+                String[] lines = block.split("\n");
+                if (lines.length < 3) continue; // Precisa ter: número, timestamp, texto
 
-            try {
-                // Linha 0: número (ignorar)
-                // Linha 1: timestamp
-                String timeLine = lines[1];
+                try {
+                    // Linha 0: número (ignorar)
+                    // Linha 1: timestamp
+                    String timeLine = lines[1];
 
-                if (!timeLine.contains("-->")) continue;
+                    if (!timeLine.contains("-->")) continue;
 
-                String[] times = timeLine.split("-->");
-                if (times.length != 2) continue;
+                    String[] times = timeLine.split("-->");
+                    if (times.length != 2) continue;
 
-                long startTime = parseTimestamp(times[0].trim());
-                long endTime = parseTimestamp(times[1].trim());
+                    long startTime = parseTimestamp(times[0].trim());
+                    long endTime = parseTimestamp(times[1].trim());
 
-                // Linhas 2+: texto da legenda
-                StringBuilder text = new StringBuilder();
-                for (int i = 2; i < lines.length; i++) {
-                    if (text.length() > 0) text.append("\n");
-                    text.append(lines[i]);
+                    // Linhas 2+: texto da legenda
+                    StringBuilder text = new StringBuilder();
+                    for (int i = 2; i < lines.length; i++) {
+                        if (text.length() > 0) text.append("\n");
+                        text.append(lines[i]);
+                    }
+
+                    // IMPORTANTE: Limpar tags HTML/ASS do texto
+                    String cleanedText = cleanSubtitleText(text.toString());
+
+                    if (!cleanedText.isEmpty()) {
+                        subtitles.add(new SubtitleEntry(startTime, endTime, cleanedText));
+                    }
+
+                } catch (Exception e) {
+                    // Pular entrada inválida
+                    System.err.println("Erro ao parsear bloco: " + e.getMessage());
                 }
-
-                // IMPORTANTE: Limpar tags HTML/ASS do texto
-                String cleanedText = cleanSubtitleText(text.toString());
-
-                if (!cleanedText.isEmpty()) {
-                    subtitles.add(new SubtitleEntry(startTime, endTime, cleanedText));
-                }
-
-            } catch (Exception e) {
-                // Pular entrada inválida
-                System.err.println("Erro ao parsear bloco: " + e.getMessage());
             }
+
+            System.out.println("SRT parseado com sucesso: " + subtitles.size() + " entradas");
+
+        } catch (Exception e) {
+            System.err.println("Erro crítico no parse SRT: " + e.getMessage());
+            e.printStackTrace();
         }
-
-        System.out.println("SRT parseado com sucesso: " + subtitles.size() + " entradas");
-
-    } catch (Exception e) {
-        System.err.println("Erro crítico no parse SRT: " + e.getMessage());
-        e.printStackTrace();
     }
-}
 
     private void parseVTT(String content) {
         System.out.println("Iniciando parse VTT...");
@@ -4904,6 +5520,7 @@ private void parseSRT(String content) {
             e.printStackTrace();
         }
     }
+
     private long parseTimestamp(String timestamp) {
         try {
             // Formato: HH:MM:SS,mmm ou MM:SS,mmm
@@ -5048,9 +5665,9 @@ private void parseSRT(String content) {
 
                         if (extension.equals("wmv")) {
                             try {
-                                grabber.setOption("threads", "auto");
+                             //   grabber.setOption("threads", "auto");
                                 grabber.setOption("fflags", "nobuffer");
-                                grabber.setOption("flags", "low_delay");
+                             //   grabber.setOption("flags", "low_delay");
                             } catch (Exception e) {
                                 System.out.println("Erro nas opções WMV: " + e.getMessage());
                             }
@@ -5156,7 +5773,7 @@ private void parseSRT(String content) {
                     try {
                         if (savedFramePosition > 0 && totalFrames > 0) {
                             // Ir para o frame salvo
-                            grabber.setFrameNumber((int)savedFramePosition);
+                            grabber.setFrameNumber((int) savedFramePosition);
                             currentFrame = savedFramePosition;
 
                             // Capturar e exibir frame atual
@@ -5169,16 +5786,16 @@ private void parseSRT(String content) {
                             }
 
                             // Resetar para posição correta
-                            grabber.setFrameNumber((int)savedFramePosition);
+                            grabber.setFrameNumber((int) savedFramePosition);
                             currentFrame = savedFramePosition;
 
                             // Atualizar UI
-                            int progress = (int)((savedFramePosition * 100) / totalFrames);
+                            int progress = (int) ((savedFramePosition * 100) / totalFrames);
                             progressSlider.setValue(progress);
                             updateTimeLabel();
 
                             // Atualizar legenda
-                            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
+                            long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
                             updateSubtitle(currentTimeMs);
 
                             System.out.println("Posição restaurada após troca de áudio: frame " + savedFramePosition);
@@ -5216,123 +5833,134 @@ private void parseSRT(String content) {
     }
 
 
-private void switchSubtitleStream(int streamIndex) {
-    currentSubtitleStream = streamIndex;
-    System.out.println("Trocando para legenda embutida stream: " + streamIndex);
+    private void switchSubtitleStream(int streamIndex) {
+        currentSubtitleStream = streamIndex;
+        System.out.println("Trocando para legenda embutida stream: " + streamIndex);
 
-    if (videoFilePath == null) {
-        System.err.println("Caminho do vídeo não disponível");
-        return;
-    }
+        if (videoFilePath == null) {
+            System.err.println("Caminho do vídeo não disponível");
+            return;
+        }
 
-    // Extrair legenda embutida usando FFmpeg em thread separada
-    new Thread(() -> {
-        try {
-            togglePlayPause();
-            // Sempre extrair como SRT para normalizar formato
-            File tempSubtitle = File.createTempFile("subtitle_", ".srt");
-            tempSubtitle.deleteOnExit();
+        // Extrair legenda embutida usando FFmpeg em thread separada
+        new Thread(() -> {
+            try {
+                togglePlayPause();
+                // Sempre extrair como SRT para normalizar formato
+                File tempSubtitle = File.createTempFile("subtitle_", ".srt");
+                tempSubtitle.deleteOnExit();
 
-            System.out.println("Extraindo legenda para: " + tempSubtitle.getAbsolutePath());
-            System.out.println("Comando: ffmpeg -i \"" + videoFilePath + "\" -map 0:s:" + streamIndex + " \"" + tempSubtitle.getAbsolutePath() + "\"");
+                System.out.println("Extraindo legenda para: " + tempSubtitle.getAbsolutePath());
+                System.out.println("Comando: ffmpeg -i \"" + videoFilePath + "\" -map 0:s:" + streamIndex + " \"" + tempSubtitle.getAbsolutePath() + "\"");
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    ffmpegPath,
-                    "-i", videoFilePath,
-                    "-map", "0:s:" + streamIndex,
-                    "-c:s", "srt", // Converter para SRT
-                    "-y",
-                    tempSubtitle.getAbsolutePath()
-            );
+                ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-i", videoFilePath,
+                        "-map", "0:s:" + streamIndex,
+                        "-c:s", "srt", // Converter para SRT
+                        "-y",
+                        tempSubtitle.getAbsolutePath()
+                );
 
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            boolean hasError = false;
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String line;
+                boolean hasError = false;
 
-            while ((line = reader.readLine()) != null) {
-                System.out.println("FFmpeg: " + line);
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("FFmpeg: " + line);
 
-                if (line.toLowerCase().contains("error") || line.toLowerCase().contains("invalid")) {
-                    hasError = true;
-                    System.err.println("ERRO: " + line);
-                }
-            }
-
-            int exitCode = process.waitFor();
-
-            System.out.println("FFmpeg terminou com código: " + exitCode);
-            System.out.println("Arquivo existe: " + tempSubtitle.exists());
-            System.out.println("Tamanho do arquivo: " + tempSubtitle.length() + " bytes");
-
-            if (exitCode == 0 && tempSubtitle.exists() && tempSubtitle.length() > 0) {
-                System.out.println("Legenda extraída com sucesso!");
-
-                try (BufferedReader br = new BufferedReader(new FileReader(tempSubtitle))) {
-                    System.out.println("=== Primeiras linhas da legenda ===");
-                    for (int i = 0; i < 5 && br.ready(); i++) {
-                        System.out.println(br.readLine());
+                    if (line.toLowerCase().contains("error") || line.toLowerCase().contains("invalid")) {
+                        hasError = true;
+                        System.err.println("ERRO: " + line);
                     }
-                    System.out.println("=================================");
                 }
+
+                int exitCode = process.waitFor();
+
+                System.out.println("FFmpeg terminou com código: " + exitCode);
+                System.out.println("Arquivo existe: " + tempSubtitle.exists());
+                System.out.println("Tamanho do arquivo: " + tempSubtitle.length() + " bytes");
+
+                if (exitCode == 0 && tempSubtitle.exists() && tempSubtitle.length() > 0) {
+                    System.out.println("Legenda extraída com sucesso!");
+
+                    try (BufferedReader br = new BufferedReader(new FileReader(tempSubtitle))) {
+                        System.out.println("=== Primeiras linhas da legenda ===");
+                        for (int i = 0; i < 5 && br.ready(); i++) {
+                            System.out.println(br.readLine());
+                        }
+                        System.out.println("=================================");
+                    }
+
+                    SwingUtilities.invokeLater(() -> {
+                        loadSubtitleFile(tempSubtitle);
+                        if (!subtitles.isEmpty()) {
+                            JOptionPane.showMessageDialog(this,
+                                    "Legenda carregada com sucesso!",
+                                    "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                        }
+
+                    });
+
+                } else {
+                    throw new Exception("Falha ao extrair legenda (código: " + exitCode + ", tamanho: " + tempSubtitle.length() + ")");
+                }
+                togglePlayPause();
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Erro detalhado: " + e.getMessage());
 
                 SwingUtilities.invokeLater(() -> {
-                    loadSubtitleFile(tempSubtitle);
-                    if (!subtitles.isEmpty()) {
-                        JOptionPane.showMessageDialog(this,
-                                "Legenda carregada com sucesso!",
-                                "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-                    }
-
+                    JOptionPane.showMessageDialog(this,
+                            "Não foi possível carregar a legenda embutida.\n" +
+                                    "Possíveis causas:\n" +
+                                    "- FFmpeg não está na pasta lib app\n" +
+                                    "- Stream de legenda incompatível\n" +
+                                    "- Formato de legenda não suportado\n\n" +
+                                    "Erro: " + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
                 });
-
-            } else {
-                throw new Exception("Falha ao extrair legenda (código: " + exitCode + ", tamanho: " + tempSubtitle.length() + ")");
             }
-            togglePlayPause();
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("Erro detalhado: " + e.getMessage());
+        }).start();
 
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(this,
-                        "Não foi possível carregar a legenda embutida.\n" +
-                                "Possíveis causas:\n" +
-                                "- FFmpeg não está na pasta lib app\n" +
-                                "- Stream de legenda incompatível\n" +
-                                "- Formato de legenda não suportado\n\n" +
-                                "Erro: " + e.getMessage(),
-                        "Erro", JOptionPane.ERROR_MESSAGE);
-            });
-        }
-    }).start();
-
-}
-    private void tryEnableHardwareAcceleration(FFmpegFrameGrabber grabber) {
-        String os = System.getProperty("os.name").toLowerCase();
-
-        try {
-            if (os.contains("win")) {
-                grabber.setVideoOption("hwaccel", "auto");
-                grabber.setVideoOption("hwaccel_output_format", "auto");
-                System.out.println("Aceleração GPU habilitada (Windows - auto)");
-            } else if (os.contains("mac")) {
-                grabber.setVideoOption("hwaccel", "videotoolbox");
-                System.out.println("Aceleração GPU habilitada (macOS)");
-            } else if (os.contains("linux")) {
-                grabber.setVideoOption("hwaccel", "vaapi");
-                grabber.setVideoOption("hwaccel_device", "/dev/dri/renderD128");
-                System.out.println("Aceleração GPU habilitada (Linux)");
-            }
-
-            grabber.setVideoOption("threads", "auto");
-
-        } catch (Exception e) {
-            System.out.println("Não foi possível habilitar aceleração GPU: " + e.getMessage());
-        }
     }
+
+private void tryEnableHardwareAcceleration(FFmpegFrameGrabber grabber) {
+    String os = System.getProperty("os.name").toLowerCase();
+
+    try {
+        // Primeiro, tentar hardware acceleration (mas sua GPU não suporta AV1)
+        if (os.contains("win")) {
+            try {
+                grabber.setVideoOption("hwaccel", "none");
+                System.out.println("Tentando aceleração GPU (auto)");
+            } catch (Exception e) {
+                System.out.println("Hardware acceleration não disponível: " + e.getMessage());
+            }
+        }
+
+        // CRÍTICO: Forçar uso do decoder dav1d para AV1 (muito mais rápido)
+        // dav1d é 2-3x mais rápido que libaom-av1 decoder
+        try {
+            grabber.setVideoCodecName("libdav1d");
+            System.out.println("Decoder dav1d configurado para AV1");
+        } catch (Exception e) {
+            System.out.println("Decoder dav1d não disponível, usando padrão");
+        }
+
+        // Threads: usar todos os cores mas limitar para não sobrecarregar
+//        int threads = Math.min(Runtime.getRuntime().availableProcessors(), 8);
+//        grabber.setVideoOption("threads", String.valueOf(threads));
+//        System.out.println("Threads configuradas: " + threads);
+
+    } catch (Exception e) {
+        System.out.println("Erro ao configurar aceleração: " + e.getMessage());
+    }
+}
+
 
     private void togglePlayPause() {
         if (isPlaying) {
@@ -5342,191 +5970,6 @@ private void switchSubtitleStream(int streamIndex) {
         }
     }
 
-private void playVideo() {
-    if (grabber == null || isPlaying) return;
-
-    isPlaying = true;
-    isStopped = false;
-    playPauseButton.setText("⏸");
-
-    if (audioLine != null && !audioLine.isRunning()) {
-        audioLine.start();
-        videoPanel.spectrumPanel.setPaused(false);
-    }
-
-    playbackThread = new Thread(() -> {
-        try {
-            long startTime = System.currentTimeMillis();
-            long frameDelay = (long)(1000.0 / frameRate);
-            long frameCount = 0;
-
-            // Se for áudio apenas, usar lógica simplificada
-            if (isAudioOnly) {
-                System.out.println("Iniciando reprodução de áudio...");
-
-                // Posicionar no frame atual (para retomar de onde parou)
-                try {
-                    long targetTimestamp = (long)((currentFrame / frameRate) * 1000000); // microsegundos
-                    grabber.setTimestamp(targetTimestamp);
-                    System.out.println("Retomando áudio do frame: " + currentFrame + " (timestamp: " + targetTimestamp + "µs)");
-                } catch (Exception e) {
-                    System.err.println("Erro ao posicionar áudio: " + e.getMessage());
-                }
-
-                Frame frame;
-                long lastUpdateTime = System.currentTimeMillis();
-                int samplesProcessed = 0;
-
-                while (isPlaying) {
-                    frame = grabber.grabSamples();
-
-                    // Se não houver mais samples, chegou ao fim
-                    if (frame == null) {
-                        System.out.println("Fim do áudio alcançado");
-                        SwingUtilities.invokeLater(() -> stopVideo());
-                        break;
-                    }
-
-                    if (frame.samples != null && audioLine != null) {
-                        try {
-                            ShortBuffer channelSamples = (ShortBuffer) frame.samples[0];
-                            channelSamples.rewind();
-
-                            if (channelSamples.remaining() > 0) {
-                                // Processar áudio (com downmix se necessário)
-                                byte[] audioBytes = processAudioSamples(channelSamples);
-
-                                if (audioBytes != null) {
-                                    audioLine.write(audioBytes, 0, audioBytes.length);
-                                    samplesProcessed++;
-                                }
-                            }
-
-                            // Calcular frame atual baseado no tempo decorrido
-                            long currentTime = System.currentTimeMillis();
-                            long elapsedTime = currentTime - lastUpdateTime;
-
-                            if (elapsedTime >= 100) { // Atualizar a cada 100ms
-                                // Incrementar frames baseado no tempo real decorrido
-                                long framesElapsed = (long)((elapsedTime / 1000.0) * frameRate);
-                                currentFrame += framesElapsed;
-
-                                // Garantir que não ultrapasse o total
-                                if (currentFrame > totalFrames) {
-                                    currentFrame = totalFrames;
-                                }
-
-                                lastUpdateTime = currentTime;
-
-                                SwingUtilities.invokeLater(() -> {
-                                    if (!isSeeking && totalFrames > 0) {
-                                        int progress = (int)((currentFrame * 100) / totalFrames);
-                                        progressSlider.setValue(progress);
-                                        updateTimeLabel();
-                                    }
-                                });
-                            }
-
-                        } catch (Exception audioEx) {
-                            System.err.println("Erro ao processar áudio: " + audioEx.getMessage());
-                        }
-                    }
-                }
-
-                System.out.println("Reprodução de áudio finalizada (samples processados: " + samplesProcessed + ")");
-
-            } else {
-                // Lógica original de vídeo (mantida intacta)
-                long lastUpdateTime = startTime;
-                double avgFrameTime = frameDelay;
-                long totalDecodeTime = 0;
-                long totalRenderTime = 0;
-                int statsCounter = 0;
-
-                while (isPlaying) {
-                    long frameStartTime = System.currentTimeMillis();
-                    long decodeStart = System.currentTimeMillis();
-                    Frame frame = grabber.grab();
-                    long decodeTime = System.currentTimeMillis() - decodeStart;
-
-                    if (frame == null) {
-                        SwingUtilities.invokeLater(() -> stopVideo());
-                        break;
-                    }
-
-                    // [Resto da lógica de vídeo mantida...]
-                    if (frame.image != null) {
-                        long renderStart = System.currentTimeMillis();
-                        BufferedImage img = converter.convert(frame);
-                        if (img != null) {
-                            if (filtersEnabled) {
-                                img = applyImageFilters(img);
-                            }
-                            videoPanel.updateImage(img);
-                        }
-                        long renderTime = System.currentTimeMillis() - renderStart;
-                        totalDecodeTime += decodeTime;
-                        totalRenderTime += renderTime;
-                        statsCounter++;
-
-                        if (statsCounter >= 100) {
-                            long avgDecode = totalDecodeTime / statsCounter;
-                            long avgRender = totalRenderTime / statsCounter;
-                            System.out.println("Performance - Decode: " + avgDecode + "ms, Render: " + avgRender + "ms");
-                            totalDecodeTime = 0;
-                            totalRenderTime = 0;
-                            statsCounter = 0;
-                        }
-
-                        currentFrame++;
-                        frameCount++;
-                        long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-                        updateSubtitle(currentTimeMs);
-                        long timeSinceLastUpdate = frameStartTime - lastUpdateTime;
-                        if (frameCount > 10) {
-                            avgFrameTime = (avgFrameTime * 0.9) + (timeSinceLastUpdate * 0.1);
-                        }
-                        lastUpdateTime = frameStartTime;
-
-                        if (currentFrame % 5 == 0) {
-                            SwingUtilities.invokeLater(() -> {
-                                if (!isSeeking && totalFrames > 0) {
-                                    int progress = (int)((currentFrame * 100) / totalFrames);
-                                    progressSlider.setValue(progress);
-                                    updateTimeLabel();
-                                }
-                            });
-                        }
-
-                        long expectedTime = startTime + (frameCount * frameDelay);
-                        long currentTime = System.currentTimeMillis();
-                        long sleepTime = expectedTime - currentTime;
-
-                        if (sleepTime > 0) {
-                            Thread.sleep(sleepTime);
-                        } else if (sleepTime < -frameDelay * 3) {
-                            startTime = currentTime - (long)(frameCount * frameDelay * 0.5);
-                        }
-                    }
-
-                    if (frame.samples != null && audioLine != null) {
-                        // [Lógica de áudio para vídeo mantida...]
-                        processVideoAudioFrame(frame);
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            SwingUtilities.invokeLater(() -> {
-                isPlaying = false;
-                playPauseButton.setText("▶");
-            });
-        }
-    });
-
-    playbackThread.start();
-}
     // Método auxiliar para processar samples de áudio (para áudio apenas)
     private byte[] processAudioSamples(ShortBuffer channelSamples) {
         try {
@@ -5659,13 +6102,13 @@ private void playVideo() {
                     left = Math.max(-32768, Math.min(32767, left));
                     right = Math.max(-32768, Math.min(32767, right));
 
-                    short leftShort = (short)left;
-                    short rightShort = (short)right;
+                    short leftShort = (short) left;
+                    short rightShort = (short) right;
 
-                    audioBytes[i * 4] = (byte)((leftShort >> 8) & 0xFF);
-                    audioBytes[i * 4 + 1] = (byte)(leftShort & 0xFF);
-                    audioBytes[i * 4 + 2] = (byte)((rightShort >> 8) & 0xFF);
-                    audioBytes[i * 4 + 3] = (byte)(rightShort & 0xFF);
+                    audioBytes[i * 4] = (byte) ((leftShort >> 8) & 0xFF);
+                    audioBytes[i * 4 + 1] = (byte) (leftShort & 0xFF);
+                    audioBytes[i * 4 + 2] = (byte) ((rightShort >> 8) & 0xFF);
+                    audioBytes[i * 4 + 3] = (byte) (rightShort & 0xFF);
                 }
 
                 return audioBytes;
@@ -5675,9 +6118,9 @@ private void playVideo() {
                 byte[] audioBytes = new byte[audioSamplesArray.length * 2];
                 for (int i = 0; i < audioSamplesArray.length; i++) {
                     // APENAS volume do slider (globalAudioGain já aplicado acima)
-                    short s = (short)(audioSamplesArray[i] * volume);
-                    audioBytes[i * 2] = (byte)((s >> 8) & 0xFF);
-                    audioBytes[i * 2 + 1] = (byte)(s & 0xFF);
+                    short s = (short) (audioSamplesArray[i] * volume);
+                    audioBytes[i * 2] = (byte) ((s >> 8) & 0xFF);
+                    audioBytes[i * 2 + 1] = (byte) (s & 0xFF);
                 }
                 return audioBytes;
             }
@@ -5720,7 +6163,7 @@ private void playVideo() {
 
         // Copiar samples e aplicar janela de Hamming
         for (int i = 0; i < Math.min(sampleCount, fftSize); i++) {
-            float hamming = (float)(0.54 - 0.46 * Math.cos(2 * Math.PI * i / (fftSize - 1)));
+            float hamming = (float) (0.54 - 0.46 * Math.cos(2 * Math.PI * i / (fftSize - 1)));
             real[i] = audioSamples[i] * hamming;
             imag[i] = 0;
         }
@@ -5737,14 +6180,14 @@ private void playVideo() {
             for (int j = 0; j < samplesPerBar; j++) {
                 int index = i * samplesPerBar + j;
                 if (index < fftSize / 2) {
-                    float magnitude = (float)Math.sqrt(real[index] * real[index] + imag[index] * imag[index]);
+                    float magnitude = (float) Math.sqrt(real[index] * real[index] + imag[index] * imag[index]);
                     sum += magnitude;
                 }
             }
 
             // Normalizar e aplicar escala logarítmica
             float avg = sum / samplesPerBar;
-            spectrum[i] = (float)(Math.log10(1 + avg) / 5.0); // Escala log
+            spectrum[i] = (float) (Math.log10(1 + avg) / 5.0); // Escala log
             spectrum[i] = Math.min(1.0f, spectrum[i]); // Limitar a 1.0
         }
 
@@ -5800,7 +6243,9 @@ private void playVideo() {
                     wI = tempR * wlenI + wI * wlenR;
                 }
             }
-        }}
+        }
+    }
+
     // Método auxiliar para processar áudio de vídeo (mantém lógica original)
     private void processVideoAudioFrame(Frame frame) {
         if (frame.samples == null || audioLine == null) {
@@ -5886,15 +6331,15 @@ private void playVideo() {
                         left = Math.max(-32768, Math.min(32767, left));
                         right = Math.max(-32768, Math.min(32767, right));
 
-                        outBuffer.putShort((short)left);
-                        outBuffer.putShort((short)right);
+                        outBuffer.putShort((short) left);
+                        outBuffer.putShort((short) right);
                     }
                 } else {
                     outBuffer = ByteBuffer.allocate(channelSamples.remaining() * 2);
 
                     while (channelSamples.hasRemaining()) {
                         short val = channelSamples.get();
-                        val = (short)(val * volume);
+                        val = (short) (val * volume);
                         outBuffer.putShort(val);
                     }
                 }
@@ -5929,37 +6374,37 @@ private void playVideo() {
     }
 
 
-private void pauseVideo() {
-    isPlaying = false;
-    isStopped = false; // NÃO marcar como stopped, apenas pausado
-    playPauseButton.setText("▶");
+    private void pauseVideo() {
+        isPlaying = false;
+        isStopped = false; // NÃO marcar como stopped, apenas pausado
+        playPauseButton.setText("▶");
 
-    if (audioLine != null && audioLine.isRunning()) {
-        audioLine.stop();
-        audioLine.flush();
-        videoPanel.spectrumPanel.setPaused(true);
-    }
-
-    // Aguardar thread terminar para garantir que currentFrame está correto
-    if (playbackThread != null && playbackThread.isAlive()) {
-        try {
-            playbackThread.join(500);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        if (audioLine != null && audioLine.isRunning()) {
+            audioLine.stop();
+            audioLine.flush();
+            videoPanel.spectrumPanel.setPaused(true);
         }
-    }
 
-    // Atualizar UI com a posição atual
-    SwingUtilities.invokeLater(() -> {
-        updateTimeLabel();
-        if (totalFrames > 0) {
-            int progress = (int)((currentFrame * 100) / totalFrames);
-            progressSlider.setValue(progress);
+        // Aguardar thread terminar para garantir que currentFrame está correto
+        if (playbackThread != null && playbackThread.isAlive()) {
+            try {
+                playbackThread.join(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
-    });
 
-    System.out.println("Áudio pausado no frame: " + currentFrame);
-}
+        // Atualizar UI com a posição atual
+        SwingUtilities.invokeLater(() -> {
+            updateTimeLabel();
+            if (totalFrames > 0) {
+                int progress = (int) ((currentFrame * 100) / totalFrames);
+                progressSlider.setValue(progress);
+            }
+        });
+
+        System.out.println("Áudio pausado no frame: " + currentFrame);
+    }
 
     private void stopVideo() {
         isPlaying = false;
@@ -6011,67 +6456,68 @@ private void pauseVideo() {
         }
     }
 
-private void seekToPosition(int percentage) {
-    if (grabber == null || totalFrames == 0) return;
+    private void seekToPosition(int percentage) {
+        if (grabber == null || totalFrames == 0) return;
 
-    boolean wasPlaying = isPlaying;
-    if (wasPlaying) {
-        pauseVideo();
-    }
+        boolean wasPlaying = isPlaying;
+        if (wasPlaying) {
+            pauseVideo();
+        }
 
-    try {
-        long targetFrame = (totalFrames * percentage) / 100;
-        currentFrame = targetFrame;
+        try {
+            long targetFrame = (totalFrames * percentage) / 100;
+            currentFrame = targetFrame;
 
-        if (isAudioOnly) {
-            // Para áudio, usar timestamp em microsegundos
-            long targetTimestamp = (long)((currentFrame / frameRate) * 1000000);
-            System.out.println("Seek áudio para frame: " + targetFrame + " (timestamp: " + targetTimestamp + "µs)");
-            grabber.setTimestamp(targetTimestamp);
+            if (isAudioOnly) {
+                // Para áudio, usar timestamp em microsegundos
+                long targetTimestamp = (long) ((currentFrame / frameRate) * 1000000);
+                System.out.println("Seek áudio para frame: " + targetFrame + " (timestamp: " + targetTimestamp + "µs)");
+                grabber.setTimestamp(targetTimestamp);
 
-            if (audioLine != null) {
-                audioLine.flush();
-            }
-        } else {
-            // Para vídeo, usar frame number
-            grabber.setFrameNumber((int)targetFrame);
+                if (audioLine != null) {
+                    audioLine.flush();
+                }
+            } else {
+                // Para vídeo, usar frame number
+                grabber.setFrameNumber((int) targetFrame);
 
-            Frame frame = grabber.grabImage();
-            if (frame != null && frame.image != null) {
-                BufferedImage img = converter.convert(frame);
-                if (img != null) {
-                    videoPanel.updateImage(img);
+                Frame frame = grabber.grabImage();
+                if (frame != null && frame.image != null) {
+                    BufferedImage img = converter.convert(frame);
+                    if (img != null) {
+                        videoPanel.updateImage(img);
+                    }
+                }
+
+                // Atualizar legenda para nova posição
+                long currentTimeMs = (long) ((currentFrame / frameRate) * 1000);
+                updateSubtitle(currentTimeMs);
+
+                if (audioLine != null) {
+                    audioLine.flush();
                 }
             }
 
-            // Atualizar legenda para nova posição
-            long currentTimeMs = (long)((currentFrame / frameRate) * 1000);
-            updateSubtitle(currentTimeMs);
+            // Atualizar UI
+            updateTimeLabel();
+            progressSlider.setValue(percentage);
 
-            if (audioLine != null) {
-                audioLine.flush();
+            if (wasPlaying) {
+                Thread.sleep(100);
+                playVideo();
             }
+
+        } catch (Exception e) {
+            System.err.println("Erro ao fazer seek: " + e.getMessage());
+            e.printStackTrace();
         }
-
-        // Atualizar UI
-        updateTimeLabel();
-        progressSlider.setValue(percentage);
-
-        if (wasPlaying) {
-            Thread.sleep(100);
-            playVideo();
-        }
-
-    } catch (Exception e) {
-        System.err.println("Erro ao fazer seek: " + e.getMessage());
-        e.printStackTrace();
     }
-}
+
     private void updateTimeLabel() {
         if (grabber == null || frameRate == 0) return;
 
-        long currentSeconds = (long)(currentFrame / frameRate);
-        long totalSeconds = (long)(totalFrames / frameRate);
+        long currentSeconds = (long) (currentFrame / frameRate);
+        long totalSeconds = (long) (totalFrames / frameRate);
 
         String currentTime = formatTime(currentSeconds);
         String totalTime = formatTime(totalSeconds);
@@ -6091,6 +6537,7 @@ private void seekToPosition(int percentage) {
             return String.format("%02d:%02d", minutes, secs);
         }
     }
+
     private void extractCoverArt(String audioFilePath) {
         System.out.println("=== Tentando extrair cover art ===");
 
@@ -6182,7 +6629,6 @@ private void seekToPosition(int percentage) {
     }
 
 
-
     // ==================== CLASSE INTERNA: AudioSpectrumPanel ====================
 
     class AudioSpectrumPanel extends JPanel {
@@ -6199,6 +6645,7 @@ private void seekToPosition(int percentage) {
             CUSTOM,         // Cores personalizadas
             COVER_PALETTE   // Baseado na paleta da capa
         }
+
         // Variáveis de cor
         private ColorMode colorMode = ColorMode.DEFAULT;
         private Color customBottomColor = new Color(0, 255, 0);    // Verde
@@ -6273,6 +6720,7 @@ private void seekToPosition(int percentage) {
 
             repaint();
         }
+
         // Extrai paleta de cores dominantes da imagem
         private void extractColorsFromCover(BufferedImage image) {
             if (image == null) return;
@@ -6338,7 +6786,8 @@ private void seekToPosition(int percentage) {
                 coverMiddleColor = new Color(255, 255, 0);
                 coverTopColor = new Color(255, 0, 0);
             }
-         }
+        }
+
         // Quantizar cor (agrupar cores similares)
         private int quantizeColor(int rgb) {
             int r = (rgb >> 16) & 0xFF;
@@ -6352,6 +6801,7 @@ private void seekToPosition(int percentage) {
 
             return (r << 16) | (g << 8) | b;
         }
+
         // Selecionar 3 cores da paleta baseado em critérios
         private Color[] selectPaletteColors(List<Color> dominantColors) {
             Color[] result = new Color[3];
@@ -6392,9 +6842,9 @@ private void seekToPosition(int percentage) {
 
         // Ajustar brilho de uma cor
         private Color adjustBrightness(Color c, float factor) {
-            int r = Math.min(255, (int)(c.getRed() * factor));
-            int g = Math.min(255, (int)(c.getGreen() * factor));
-            int b = Math.min(255, (int)(c.getBlue() * factor));
+            int r = Math.min(255, (int) (c.getRed() * factor));
+            int g = Math.min(255, (int) (c.getGreen() * factor));
+            int b = Math.min(255, (int) (c.getBlue() * factor));
             return new Color(r, g, b);
         }
 
@@ -6490,7 +6940,9 @@ private void seekToPosition(int percentage) {
             this.columnSpacing = Math.max(0, spacing);
         }
 
-        /** Define largura e altura do painel (método dinâmico) */
+        /**
+         * Define largura e altura do painel (método dinâmico)
+         */
         public void setPanelSize(int width, int height) {
             this.panelWidth = Math.max(100, width);
             this.panelHeight = Math.max(100, height);
@@ -6502,12 +6954,16 @@ private void seekToPosition(int percentage) {
             repaint();
         }
 
-        /** Retorna a largura atual configurada */
+        /**
+         * Retorna a largura atual configurada
+         */
         public int getPanelWidth() {
             return panelWidth;
         }
 
-        /** Retorna a altura atual configurada */
+        /**
+         * Retorna a altura atual configurada
+         */
         public int getPanelHeight() {
             return panelHeight;
         }
@@ -6540,7 +6996,6 @@ private void seekToPosition(int percentage) {
                 int titleHeight = 80;
                 int baseLineY = showReflection ? (height - titleHeight) / 2 + titleHeight : height - 20;
                 int maxBarHeight = baseLineY - titleHeight - 20;
-
 
 
                 // ===== Desenhar Barras ORIGINAIS =====
@@ -6620,7 +7075,7 @@ private void seekToPosition(int percentage) {
                 }
 
                 // === Quadradinhos ===
-                int reflectionSquares = isReflection ? (int)(numSquares * reflectionHeight) : numSquares;
+                int reflectionSquares = isReflection ? (int) (numSquares * reflectionHeight) : numSquares;
 
                 for (int j = 0; j < reflectionSquares; j++) {
                     int y = startY + j * (adjustedSquareHeight + spacingY);
@@ -6630,7 +7085,7 @@ private void seekToPosition(int percentage) {
                     if (isReflection) {
                         posRatio = (float) j / (float) (reflectionSquares - 1);
                         // Fade adicional: mais transparente quanto mais longe da linha d'água
-                        alphaMultiplier *= (1.0f - (j / (float)reflectionSquares) * 0.6f);
+                        alphaMultiplier *= (1.0f - (j / (float) reflectionSquares) * 0.6f);
                     } else {
                         posRatio = (float) (numSquares - 1 - j) / (float) (numSquares - 1);
                     }
@@ -6646,7 +7101,7 @@ private void seekToPosition(int percentage) {
                     g2d.fillRect(x, y, barWidth, adjustedSquareHeight);
 
                     // borda sutil
-                    g2d.setColor(new Color(0, 0, 0, (int)(60 * alphaMultiplier)));
+                    g2d.setColor(new Color(0, 0, 0, (int) (60 * alphaMultiplier)));
                     g2d.drawRect(x, y, barWidth, adjustedSquareHeight);
                 }
 
@@ -6670,13 +7125,13 @@ private void seekToPosition(int percentage) {
             Composite originalComposite = g2d.getComposite();
 
             // Efeito de ondulação sutil (opcional)
-             g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
+            g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
 
             // Desenhar barras refletidas
-            drawBars(g2d, width, barWidth, (int)(maxBarHeight * reflectionHeight), baseY, true);
+            drawBars(g2d, width, barWidth, (int) (maxBarHeight * reflectionHeight), baseY, true);
 
             // Gradiente de fade de cima para baixo no reflexo
-            int reflectionAreaHeight = (int)(maxBarHeight * reflectionHeight) + 50;
+            int reflectionAreaHeight = (int) (maxBarHeight * reflectionHeight) + 50;
             GradientPaint fadeGradient = new GradientPaint(
                     0, baseY + 3, new Color(0, 0, 0, 0),
                     0, baseY + reflectionAreaHeight, new Color(0, 0, 0, 150)
@@ -6687,7 +7142,7 @@ private void seekToPosition(int percentage) {
             g2d.setComposite(originalComposite);
         }
 
-    //** Gradiente baseado no modo de cor selecionado (0 = base, 1 = topo) */
+        //** Gradiente baseado no modo de cor selecionado (0 = base, 1 = topo) */
         private Color getColorForPosition(float posRatio) {
             posRatio = Math.max(0, Math.min(1, posRatio));
 
@@ -6712,10 +7167,10 @@ private void seekToPosition(int percentage) {
                     // Verde -> Amarelo -> Vermelho (padrão)
                     if (posRatio < 0.5f) {
                         float localRatio = posRatio * 2.0f;
-                        return new Color((int)(255 * localRatio), 255, 0);
+                        return new Color((int) (255 * localRatio), 255, 0);
                     } else {
                         float localRatio = (posRatio - 0.5f) * 2.0f;
-                        return new Color(255, (int)(255 * (1 - localRatio)), 0);
+                        return new Color(255, (int) (255 * (1 - localRatio)), 0);
                     }
             }
 
@@ -6730,10 +7185,11 @@ private void seekToPosition(int percentage) {
                 return interpolateColor(middleColor, topColor, localRatio);
             }
         }
+
         private Color interpolateColor(Color c1, Color c2, float ratio) {
-            int r = (int)(c1.getRed() + (c2.getRed() - c1.getRed()) * ratio);
-            int g = (int)(c1.getGreen() + (c2.getGreen() - c1.getGreen()) * ratio);
-            int b = (int)(c1.getBlue() + (c2.getBlue() - c1.getBlue()) * ratio);
+            int r = (int) (c1.getRed() + (c2.getRed() - c1.getRed()) * ratio);
+            int g = (int) (c1.getGreen() + (c2.getGreen() - c1.getGreen()) * ratio);
+            int b = (int) (c1.getBlue() + (c2.getBlue() - c1.getBlue()) * ratio);
             return new Color(
                     Math.max(0, Math.min(255, r)),
                     Math.max(0, Math.min(255, g)),
@@ -6773,9 +7229,18 @@ private void seekToPosition(int percentage) {
             }
         }
 
-        public Color getCustomBottomColor() { return customBottomColor; }
-        public Color getCustomMiddleColor() { return customMiddleColor; }
-        public Color getCustomTopColor() { return customTopColor; }
+        public Color getCustomBottomColor() {
+            return customBottomColor;
+        }
+
+        public Color getCustomMiddleColor() {
+            return customMiddleColor;
+        }
+
+        public Color getCustomTopColor() {
+            return customTopColor;
+        }
+
         // NOVO: Método para desenhar cover art no fundo
         private void drawCoverArt(Graphics2D g2d, int panelWidth, int panelHeight) {
             if (coverArt == null) return;
@@ -6951,7 +7416,7 @@ private void seekToPosition(int percentage) {
 
     public String getNormalizationInfo() {
         if (!audioNormalizationEnabled) {
-            return "Normalização: Desativada | Volume: " + (int)(globalAudioGain * 100) + "%";
+            return "Normalização: Desativada | Volume: " + (int) (globalAudioGain * 100) + "%";
         }
 
         if (!normalizationCalculated) {
@@ -6961,7 +7426,7 @@ private void seekToPosition(int percentage) {
         float gainDb = 20.0f * (float) Math.log10(normalizationGain);
         return String.format("Normalização: %.1f dB | Volume: %d%% | Pico: %.1f dBFS",
                 gainDb,
-                (int)(globalAudioGain * 100),
+                (int) (globalAudioGain * 100),
                 20 * Math.log10(maxPeakLevel));
     }
     // ==================== PRESETS DE LOUDNESS ====================
@@ -6981,8 +7446,13 @@ private void seekToPosition(int percentage) {
             this.description = description;
         }
 
-        public float getDbFS() { return dbFS; }
-        public String getDescription() { return description; }
+        public float getDbFS() {
+            return dbFS;
+        }
+
+        public String getDescription() {
+            return description;
+        }
     }
 
     // Aplicar preset
@@ -6990,11 +7460,13 @@ private void seekToPosition(int percentage) {
         setTargetLoudness(preset.getDbFS());
         System.out.println("Preset aplicado: " + preset.getDescription());
     }
+
     // NOVO: Controle de ganho global (volume master do áudio)
     public void setGlobalAudioGain(float gain) {
         this.globalAudioGain = Math.max(0.01f, Math.min(1.0f, gain));
-        System.out.println("Ganho global de áudio: " + (int)(this.globalAudioGain * 100) + "%");
+        System.out.println("Ganho global de áudio: " + (int) (this.globalAudioGain * 100) + "%");
     }
+
     public float getGlobalAudioGain() {
         return globalAudioGain;
     }
@@ -7023,7 +7495,7 @@ private void seekToPosition(int percentage) {
         SwingUtilities.invokeLater(() -> {
             FlatDraculaIJTheme.setup();
             FlatDarkFlatIJTheme.setup();
-            UIManager.put( "Button.arc", 999 );
+            UIManager.put("Button.arc", 999);
             VideoPlayer player = new VideoPlayer();
             player.setVisible(true);
         });
