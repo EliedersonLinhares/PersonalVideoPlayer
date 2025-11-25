@@ -87,7 +87,7 @@ public class FiltersManager {
                 e.printStackTrace();
             }
         }
-        videoPlayer.playVideo();
+        videoPlayer.playVideoOrAudio();
     }
 
     public void resetFilters(VideoPlayer videoPlayer) {

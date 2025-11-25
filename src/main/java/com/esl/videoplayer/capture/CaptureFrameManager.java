@@ -256,7 +256,7 @@ public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePa
 
         if (response != JOptionPane.YES_OPTION) {
             if (wasPlaying) {
-                videoPlayer.playVideo();
+                videoPlayer.playVideoOrAudio();
             }
             return;
         }

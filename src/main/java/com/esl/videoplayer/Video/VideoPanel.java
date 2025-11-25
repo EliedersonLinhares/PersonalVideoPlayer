@@ -1,7 +1,8 @@
 package com.esl.videoplayer.Video;
 
-import com.esl.videoplayer.Spectrum.AudioSpectrumPanel;
+import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.audio.AudioLoudnessManager;
 import com.esl.videoplayer.capture.CaptureFrameManager;
 import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.subtitle.SubtitleManager;
@@ -28,13 +29,15 @@ public class VideoPanel extends JPanel {
     private String batchCapturePath = null;
 
     private  SubtitleManager subtitleManager;
+    private AudioLoudnessManager audioLoudnessManager;
 
     public BufferedImage getCurrentImage() {
         return currentImage;
     }
-    public VideoPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager, VideoPlayer videoPlayer) {
+    public VideoPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager, VideoPlayer videoPlayer, AudioLoudnessManager audioLoudnessManager) {
 
         this.subtitleManager = subtitleManager;
+        this.audioLoudnessManager = audioLoudnessManager;
 
         setBackground(Color.BLACK);
         setDoubleBuffered(true);
@@ -349,7 +352,7 @@ public class VideoPanel extends JPanel {
         // === Normalização ===
         JCheckBoxMenuItem enableNormalizationItem = new JCheckBoxMenuItem("Ativar Normalização", false);
         enableNormalizationItem.addActionListener(e -> {
-            videoPlayer.setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
+            audioLoudnessManager.setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
         });
 
         audioMenu2.add(enableNormalizationItem);
@@ -363,31 +366,31 @@ public class VideoPanel extends JPanel {
         JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
         streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
         streamingItem.addActionListener(e -> {
-            videoPlayer.setTargetLoudness(-14.0f);
+            audioLoudnessManager.setTargetLoudness(-14.0f);
         });
 
         JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
         quietItem.setToolTipText("Música ambiente, uso casual");
         quietItem.addActionListener(e -> {
-            videoPlayer.setTargetLoudness(-18.0f);
+            audioLoudnessManager.setTargetLoudness(-18.0f);
         });
 
         JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
         broadcastItem.setToolTipText("TV, Rádio");
         broadcastItem.addActionListener(e -> {
-            videoPlayer.setTargetLoudness(-23.0f);
+            audioLoudnessManager.setTargetLoudness(-23.0f);
         });
 
         JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
         cinemaItem.setToolTipText("Padrão de cinema");
         cinemaItem.addActionListener(e -> {
-            videoPlayer.setTargetLoudness(-24.0f);
+            audioLoudnessManager.setTargetLoudness(-24.0f);
         });
 
         JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
         loudItem.setToolTipText("Festas, clubs");
         loudItem.addActionListener(e -> {
-            videoPlayer.setTargetLoudness(-11.0f);
+            audioLoudnessManager.setTargetLoudness(-11.0f);
         });
 
         JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
@@ -425,7 +428,7 @@ public class VideoPanel extends JPanel {
             final float vol = volumeValues[i];
             JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0); // 50% selecionado
             item.addActionListener(e -> {
-                videoPlayer.setGlobalAudioGain(vol);
+                audioLoudnessManager.setGlobalAudioGain(vol);
             });
             volumeGroup.add(item);
             volumeGainMenu.add(item);
@@ -437,11 +440,11 @@ public class VideoPanel extends JPanel {
         // === Informações ===
         JMenuItem infoItem = new JMenuItem("Informações de Áudio");
         infoItem.addActionListener(e -> {
-            String info = videoPlayer.getNormalizationInfo();
+            String info = audioLoudnessManager.getNormalizationInfo();
             JOptionPane.showMessageDialog(this,
                     info + "\n\n" +
-                            "Normalização: " + (videoPlayer.isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
-                            "Volume Global: " + (int) (videoPlayer.getGlobalAudioGain() * 100) + "%",
+                            "Normalização: " + (audioLoudnessManager.isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
+                            "Volume Global: " + (int) (audioLoudnessManager.getGlobalAudioGain() * 100) + "%",
                     "Informações de Áudio",
                     JOptionPane.INFORMATION_MESSAGE);
         });
@@ -944,7 +947,7 @@ public class VideoPanel extends JPanel {
             try {
                 float loudness = Float.parseFloat(input);
                 if (loudness >= -30.0f && loudness <= 0.0f) {
-                    videoPlayer.setTargetLoudness(loudness);
+                    audioLoudnessManager.setTargetLoudness(loudness);
                     JOptionPane.showMessageDialog(this,
                             "Target loudness definido: " + loudness + " dBFS",
                             "Sucesso",

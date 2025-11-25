@@ -1,6 +1,4 @@
-package com.esl.videoplayer.Spectrum;
-
-import com.esl.videoplayer.VideoPlayer;
+package com.esl.videoplayer.audio.Spectrum;
 
 import javax.swing.*;
 import java.awt.*;
