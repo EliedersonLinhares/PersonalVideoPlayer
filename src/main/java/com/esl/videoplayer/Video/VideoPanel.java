@@ -16,7 +16,7 @@ import java.util.Map;
 
 public class VideoPanel extends JPanel {
     private BufferedImage currentImage;
-    private AudioSpectrumPanel spectrumPanel;
+    public AudioSpectrumPanel spectrumPanel;
     private BufferedImage coverArt; // NOVO: Cover art do áudio
     JCheckBoxMenuItem autoPlayItem;
 
@@ -190,7 +190,7 @@ public class VideoPanel extends JPanel {
         });
     }
 
-    private void setupAudioContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+    public void setupAudioContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         JMenu spectrumMenu = new JMenu("Equalizador de áudio Animado");
@@ -507,9 +507,9 @@ public class VideoPanel extends JPanel {
         });
     }
 
-    private void setupVideoContextMenu(SubtitleManager subtitleManager, CaptureFrameManager captureFrameManager, VideoPlayer videoPlayer,
-                                       FiltersManager filtersManager,String videoFilePath, FFmpegFrameGrabber grabber, JButton nextFrameButton,
-                                       int totalAudioStreams, int currentAudioStream, Map<Integer, String> audioStreamNames, String ffmpegPath) {
+    public void setupVideoContextMenu(SubtitleManager subtitleManager, CaptureFrameManager captureFrameManager, VideoPlayer videoPlayer,
+                                      FiltersManager filtersManager, String videoFilePath, FFmpegFrameGrabber grabber, JButton nextFrameButton,
+                                      int totalAudioStreams, int currentAudioStream, Map<Integer, String> audioStreamNames, String ffmpegPath) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         // Menu de áudio
@@ -778,20 +778,20 @@ public class VideoPanel extends JPanel {
             StringBuilder info = new StringBuilder();
             info.append("Filtros atualmente aplicados:\n\n");
 
-            if (!filtersManager.filtersEnabled || filtersManager.buildFilterString() == null) {
+            if (!filtersManager.isFiltersEnabled() || filtersManager.buildFilterString() == null) {
                 info.append("Nenhum filtro ativo");
             } else {
-                if (filtersManager.brightness != 0.0) {
-                    info.append(String.format("• Brilho: %.2f\n", filtersManager.brightness));
+                if (filtersManager.getBrightness() != 0.0) {
+                    info.append(String.format("• Brilho: %.2f\n", filtersManager.getBrightness()));
                 }
-                if (filtersManager.contrast != 1.0) {
-                    info.append(String.format("• Contraste: %.2f\n", filtersManager.contrast));
+                if (filtersManager.getContrast() != 1.0) {
+                    info.append(String.format("• Contraste: %.2f\n", filtersManager.getContrast()));
                 }
-                if (filtersManager.gamma != 1.0) {
-                    info.append(String.format("• Gamma: %.2f\n",filtersManager.gamma));
+                if (filtersManager.getGamma() != 1.0) {
+                    info.append(String.format("• Gamma: %.2f\n",filtersManager.getGamma()));
                 }
-                if (filtersManager.saturation != 1.0) {
-                    info.append(String.format("• Saturação: %.2f\n", filtersManager.saturation));
+                if (filtersManager.getSaturation() != 1.0) {
+                    info.append(String.format("• Saturação: %.2f\n", filtersManager.getSaturation()));
                 }
 
                 info.append("\nString FFmpeg:\n").append(filtersManager.buildFilterString());

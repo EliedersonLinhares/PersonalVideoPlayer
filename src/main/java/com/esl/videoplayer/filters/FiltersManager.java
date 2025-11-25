@@ -9,18 +9,14 @@ import java.awt.image.BufferedImage;
 
 public class FiltersManager {
 
-    public boolean filtersEnabled = false;
-    public double brightness = 0.0;  // -1.0 a 1.0
-    public double contrast = 1.0;    // 0.0 a 2.0
-    public double gamma = 1.0;       // 0.1 a 10.0
-    public double saturation = 1.0;  // 0.0 a 3.0
+    private boolean filtersEnabled = false;
+    private double brightness = 0.0;  // -1.0 a 1.0
+    private double contrast = 1.0;    // 0.0 a 2.0
+    private double gamma = 1.0;       // 0.1 a 10.0
+    private double saturation = 1.0;  // 0.0 a 3.0
 
-    public FiltersManager(VideoPlayer videoPlayer){
-        this.contrast = videoPlayer.contrast;
-        this.gamma = videoPlayer.gamma;
-        this.saturation = videoPlayer.saturation;
+    public FiltersManager(){
     }
-
     public String buildFilterString() {
         if (!filtersEnabled) {
             return null;
@@ -308,5 +304,45 @@ public class FiltersManager {
 
         dialog.add(panel);
         dialog.setVisible(true);
+    }
+
+    public boolean isFiltersEnabled() {
+        return filtersEnabled;
+    }
+
+    public void setFiltersEnabled(boolean filtersEnabled) {
+        this.filtersEnabled = filtersEnabled;
+    }
+
+    public double getBrightness() {
+        return brightness;
+    }
+
+    public void setBrightness(double brightness) {
+        this.brightness = brightness;
+    }
+
+    public double getContrast() {
+        return contrast;
+    }
+
+    public void setContrast(double contrast) {
+        this.contrast = contrast;
+    }
+
+    public double getGamma() {
+        return gamma;
+    }
+
+    public void setGamma(double gamma) {
+        this.gamma = gamma;
+    }
+
+    public double getSaturation() {
+        return saturation;
+    }
+
+    public void setSaturation(double saturation) {
+        this.saturation = saturation;
     }
 }

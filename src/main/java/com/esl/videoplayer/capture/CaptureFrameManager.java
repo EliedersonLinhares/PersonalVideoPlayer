@@ -1,5 +1,6 @@
 package com.esl.videoplayer.capture;
 
+import com.esl.videoplayer.Video.VideoPanel;
 import com.esl.videoplayer.VideoPlayer;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 
@@ -12,7 +13,7 @@ import java.io.IOException;
 
 public class CaptureFrameManager {
 
-    public void captureFrame(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, VideoPlayer.VideoPanel videoPanel,
+    public void captureFrame(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, VideoPanel videoPanel,
                              String customCapturePath, String videoFilePath, long currentFrame, boolean silentCapture ) {
         // Verificar se há um vídeo carregado
         if (grabber == null) {

@@ -1,5 +1,6 @@
 package com.esl.videoplayer.subtitle;
 
+import com.esl.videoplayer.Video.VideoPanel;
 import com.esl.videoplayer.VideoPlayer;
 
 import javax.swing.*;
@@ -257,7 +258,7 @@ public class SubtitleManager {
         }
     }
 
-    public void updateSubtitle(long currentTimeMs, VideoPlayer.VideoPanel videoPanel) {
+    public void updateSubtitle(long currentTimeMs, VideoPanel videoPanel) {
         if (getCurrentSubtitleStream() == -1 || subtitles.isEmpty()) {
             currentSubtitleText = "";
             return;
