@@ -6,6 +6,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -339,6 +340,101 @@ public class SubtitleManager {
         adaptiveSize = Math.max(12, Math.min(120, adaptiveSize));
 
         return adaptiveSize;
+    }
+
+    public void switchSubtitleStream(int streamIndex, String videoFilePath, VideoPlayer videoPlayer, String ffmpegPath) {
+        setCurrentSubtitleStream(streamIndex);
+        System.out.println("Trocando para legenda embutida stream: " + streamIndex);
+
+        if (videoFilePath == null) {
+            System.err.println("Caminho do vídeo não disponível");
+            return;
+        }
+
+        // Extrair legenda embutida usando FFmpeg em thread separada
+        new Thread(() -> {
+            try {
+                videoPlayer.togglePlayPause();
+                // Sempre extrair como SRT para normalizar formato
+                File tempSubtitle = File.createTempFile("subtitle_", ".srt");
+                tempSubtitle.deleteOnExit();
+
+                System.out.println("Extraindo legenda para: " + tempSubtitle.getAbsolutePath());
+                System.out.println("Comando: ffmpeg -i \"" + videoFilePath + "\" -map 0:s:" + streamIndex + " \"" + tempSubtitle.getAbsolutePath() + "\"");
+
+                ProcessBuilder pb = new ProcessBuilder(
+                        ffmpegPath,
+                        "-i", videoFilePath,
+                        "-map", "0:s:" + streamIndex,
+                        "-c:s", "srt", // Converter para SRT
+                        "-y",
+                        tempSubtitle.getAbsolutePath()
+                );
+
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String line;
+                boolean hasError = false;
+
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("FFmpeg: " + line);
+
+                    if (line.toLowerCase().contains("error") || line.toLowerCase().contains("invalid")) {
+                        hasError = true;
+                        System.err.println("ERRO: " + line);
+                    }
+                }
+
+                int exitCode = process.waitFor();
+
+                System.out.println("FFmpeg terminou com código: " + exitCode);
+                System.out.println("Arquivo existe: " + tempSubtitle.exists());
+                System.out.println("Tamanho do arquivo: " + tempSubtitle.length() + " bytes");
+
+                if (exitCode == 0 && tempSubtitle.exists() && tempSubtitle.length() > 0) {
+                    System.out.println("Legenda extraída com sucesso!");
+
+                    try (BufferedReader br = new BufferedReader(new FileReader(tempSubtitle))) {
+                        System.out.println("=== Primeiras linhas da legenda ===");
+                        for (int i = 0; i < 5 && br.ready(); i++) {
+                            System.out.println(br.readLine());
+                        }
+                        System.out.println("=================================");
+                    }
+
+                    SwingUtilities.invokeLater(() -> {
+                        loadSubtitleFile(tempSubtitle, videoPlayer);
+                        if (!getSubtitles().isEmpty()) {
+                            JOptionPane.showMessageDialog(videoPlayer,
+                                    "Legenda carregada com sucesso!",
+                                    "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                        }
+
+                    });
+
+                } else {
+                    throw new Exception("Falha ao extrair legenda (código: " + exitCode + ", tamanho: " + tempSubtitle.length() + ")");
+                }
+                videoPlayer.togglePlayPause();
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Erro detalhado: " + e.getMessage());
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(videoPlayer,
+                            "Não foi possível carregar a legenda embutida.\n" +
+                                    "Possíveis causas:\n" +
+                                    "- FFmpeg não está na pasta lib app\n" +
+                                    "- Stream de legenda incompatível\n" +
+                                    "- Formato de legenda não suportado\n\n" +
+                                    "Erro: " + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        }).start();
+
     }
 
 

@@ -11,9 +11,9 @@ public class FiltersManager {
 
     public boolean filtersEnabled = false;
     public double brightness = 0.0;  // -1.0 a 1.0
-    private double contrast = 1.0;    // 0.0 a 2.0
-    private double gamma = 1.0;       // 0.1 a 10.0
-    private double saturation = 1.0;  // 0.0 a 3.0
+    public double contrast = 1.0;    // 0.0 a 2.0
+    public double gamma = 1.0;       // 0.1 a 10.0
+    public double saturation = 1.0;  // 0.0 a 3.0
 
     public FiltersManager(VideoPlayer videoPlayer){
         this.contrast = videoPlayer.contrast;
