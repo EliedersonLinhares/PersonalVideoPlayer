@@ -208,36 +208,6 @@ public class PlaylistDialog extends JDialog {
         refreshPlaylist();
     }
 
-//    private void addTracks() {
-//        // Usar JFileChooser nativo ou JnaFileChooser conforme disponível
-//        JFileChooser fc = new JFileChooser();
-//        fc.setMultiSelectionEnabled(true);
-//        fc.setFileFilter(new javax.swing.filechooser.FileFilter() {
-//            @Override
-//            public boolean accept(File f) {
-//                if (f.isDirectory()) return true;
-//                String name = f.getName().toLowerCase();
-//                return name.endsWith(".mp3") || name.endsWith(".wav") ||
-//                        name.endsWith(".flac") || name.endsWith(".ogg") ||
-//                        name.endsWith(".mp4") || name.endsWith(".avi") ||
-//                        name.endsWith(".mkv") || name.endsWith(".mov");
-//            }
-//
-//            @Override
-//            public String getDescription() {
-//                return "Arquivos de Áudio/Vídeo";
-//            }
-//        });
-//
-//        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-//            File[] files = fc.getSelectedFiles();
-//            for (File file : files) {
-//                PlaylistItem item = new PlaylistItem(file.getAbsolutePath());
-//                playlistManager.addItem(item);
-//            }
-//            notifyPlaylistChanged();
-//        }
-//    }
     private void addTracks() {
         JnaFileChooser fc = new JnaFileChooser();
         fc.setMultiSelectionEnabled(true);
@@ -295,11 +265,36 @@ public class PlaylistDialog extends JDialog {
         }
     }
 
-    private void savePlaylist() {
-        JFileChooser fc = new JFileChooser();
-        fc.setSelectedFile(new File("playlist.m3u"));
+//    private void savePlaylist() {
+//        JFileChooser fc = new JFileChooser();
+//        fc.setSelectedFile(new File("playlist.m3u"));
+//
+//        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+//            File file = fc.getSelectedFile();
+//            String path = file.getAbsolutePath();
+//            if (!path.toLowerCase().endsWith(".m3u")) {
+//                path += ".m3u";
+//            }
+//
+//            try {
+//                playlistManager.saveM3U(path);
+//                JOptionPane.showMessageDialog(this,
+//                        "Playlist salva com sucesso!",
+//                        "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+//            } catch (IOException e) {
+//                JOptionPane.showMessageDialog(this,
+//                        "Erro ao salvar playlist:\n" + e.getMessage(),
+//                        "Erro", JOptionPane.ERROR_MESSAGE);
+//            }
+//        }
+//    }
 
-        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+    private void savePlaylist() {
+        JnaFileChooser fc = new JnaFileChooser();
+        fc.setDefaultFileName("playlist.m3u");
+        fc.addFilter("Playlist (*.m3u)", "m3u");
+
+        if (fc.showSaveDialog(this)) {
             File file = fc.getSelectedFile();
             String path = file.getAbsolutePath();
             if (!path.toLowerCase().endsWith(".m3u")) {
@@ -319,24 +314,24 @@ public class PlaylistDialog extends JDialog {
         }
     }
 
-    public void loadPlaylist() {
-        JFileChooser fc = new JFileChooser();
-
-        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = fc.getSelectedFile();
-            try {
-                playlistManager.loadM3U(file.getAbsolutePath());
-                refreshPlaylist();
-                JOptionPane.showMessageDialog(this,
-                        "Playlist carregada: " + playlistManager.size() + " items",
-                        "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(this,
-                        "Erro ao carregar playlist:\n" + e.getMessage(),
-                        "Erro", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
+//    public void loadPlaylist() {
+//        JFileChooser fc = new JFileChooser();
+//
+//        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+//            File file = fc.getSelectedFile();
+//            try {
+//                playlistManager.loadM3U(file.getAbsolutePath());
+//                refreshPlaylist();
+//                JOptionPane.showMessageDialog(this,
+//                        "Playlist carregada: " + playlistManager.size() + " items",
+//                        "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+//            } catch (IOException e) {
+//                JOptionPane.showMessageDialog(this,
+//                        "Erro ao carregar playlist:\n" + e.getMessage(),
+//                        "Erro", JOptionPane.ERROR_MESSAGE);
+//            }
+//        }
+//    }
 
     private void toggleShuffle() {
         playlistManager.setShuffle(shuffleButton.isSelected());

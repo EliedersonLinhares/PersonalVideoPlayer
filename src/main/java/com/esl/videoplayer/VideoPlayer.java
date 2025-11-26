@@ -53,6 +53,7 @@ public class VideoPlayer extends JFrame {
     private CoverArt coverArt;
 
     public VideoPanel videoPanel;
+    private JPanel controlPanel;
     private JButton playPauseButton;
     private JButton stopButton;
     private JSlider progressSlider;
@@ -133,7 +134,7 @@ public class VideoPlayer extends JFrame {
         setTitle("Video Player - JavaCV");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(false);
-        setSize(600, 300);
+        setSize(700, 500);
         setLocationRelativeTo(null);
 
         captureFrameManager = new CaptureFrameManager();
@@ -182,85 +183,82 @@ public class VideoPlayer extends JFrame {
         initComponents();
 
         // NOVO: Adicionar KeyEventDispatcher global para capturar teclas em qualquer lugar
-        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(new KeyEventDispatcher() {
-            @Override
-            public boolean dispatchKeyEvent(KeyEvent e) {
-                // Só processar quando a tecla for pressionada (não released)
-                if (e.getID() != KeyEvent.KEY_PRESSED) {
-                    return false;
-                }
-
-                // Não processar se estiver digitando em um campo de texto
-                Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-                if (focusOwner instanceof JTextField || focusOwner instanceof JTextArea) {
-                    return false;
-                }
-
-                // Processar atalhos globais
-                switch (e.getKeyCode()) {
-                    case KeyEvent.VK_ESCAPE:
-                        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-                        if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                            exitFullScreen();
-                            return true; // Consumir evento
-                        }
-                        break;
-
-                    case KeyEvent.VK_F11:
-                        toggleFullScreen();
-                        return true;
-
-                    case KeyEvent.VK_SPACE:
-                        if (grabber != null) {
-                            togglePlayPause();
-                            return true;
-                        }
-                        break;
-
-                    case KeyEvent.VK_LEFT:
-                        if (grabber != null) {
-                            rewind10Seconds();
-                            return true;
-                        }
-                        break;
-
-                    case KeyEvent.VK_RIGHT:
-                        if (grabber != null) {
-                            forward10Seconds();
-                            return true;
-                        }
-                        break;
-
-                    case KeyEvent.VK_X:
-                        if (grabber != null) {
-                            nextFrame();
-                            return true;
-                        }
-                        break;
-
-                    case KeyEvent.VK_S:
-                        if (grabber != null) {
-                            stopVideo();
-                            return true;
-                        }
-                        break;
-                    case KeyEvent.VK_C:
-                        if (grabber != null) {
-                            captureFrameManager.captureFrame(grabber, VideoPlayer.this, videoPanel,
-                                   videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture());
-                            return true;
-                        }
-                        break;
-                    case KeyEvent.VK_V:
-                        if (grabber != null) {
-                            captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,batchCaptureThread,isPlaying,
-                            totalFrames, videoPanel.getBatchCaptureInterval(),frameRate, videoPanel.getBatchCapturePath(), videoFilePath);
-                            return true;
-                        }
-                        break;
-                }
-                return false; // Não consumir o evento se não for um dos nossos atalhos
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
+            // Só processar quando a tecla for pressionada (não released)
+            if (e.getID() != KeyEvent.KEY_PRESSED) {
+                return false;
             }
+
+            // Não processar se estiver digitando em um campo de texto
+            Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+            if (focusOwner instanceof JTextField || focusOwner instanceof JTextArea) {
+                return false;
+            }
+
+            // Processar atalhos globais
+            switch (e.getKeyCode()) {
+                case KeyEvent.VK_ESCAPE:
+                    GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+                    if (gd.getFullScreenWindow() == VideoPlayer.this) {
+                        exitFullScreen();
+                        return true; // Consumir evento
+                    }
+                    break;
+
+                case KeyEvent.VK_F11:
+                    toggleFullScreen();
+                    return true;
+
+                case KeyEvent.VK_SPACE:
+                    if (grabber != null) {
+                        togglePlayPause();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_LEFT:
+                    if (grabber != null) {
+                        rewind10Seconds();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_RIGHT:
+                    if (grabber != null) {
+                        forward10Seconds();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_X:
+                    if (grabber != null) {
+                        nextFrame();
+                        return true;
+                    }
+                    break;
+
+                case KeyEvent.VK_S:
+                    if (grabber != null) {
+                        stopVideo();
+                        return true;
+                    }
+                    break;
+                case KeyEvent.VK_C:
+                    if (grabber != null) {
+                        captureFrameManager.captureFrame(grabber, VideoPlayer.this, videoPanel,
+                               videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture());
+                        return true;
+                    }
+                    break;
+                case KeyEvent.VK_V:
+                    if (grabber != null) {
+                        captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,batchCaptureThread,isPlaying,
+                        totalFrames, videoPanel.getBatchCaptureInterval(),frameRate, videoPanel.getBatchCapturePath(), videoFilePath);
+                        return true;
+                    }
+                    break;
+            }
+            return false; // Não consumir o evento se não for um dos nossos atalhos
         });
 
         // Adicionar listener de teclado no painel de vídeo (mantido como backup)
@@ -479,7 +477,7 @@ public class VideoPlayer extends JFrame {
             setUndecorated(true);
             gd.setFullScreenWindow(this);
             setVisible(true);
-
+            controlPanel.setVisible(false);
             System.out.println("Modo tela cheia ativado");
 
             // Recarregar vídeo na posição salva
@@ -536,7 +534,7 @@ public class VideoPlayer extends JFrame {
             gd.setFullScreenWindow(null);
             dispose();
             setUndecorated(false);
-
+            controlPanel.setVisible(true);
             // Restaurar geometria
             if (normalBounds != null) {
                 setBounds(normalBounds);
@@ -643,12 +641,6 @@ public class VideoPlayer extends JFrame {
                     System.out.println("Nomes de streams de áudio restaurados: " + audioStreamNames.size());
                 }
 
-//                if (!savedSubtitleStreamNames.isEmpty()) {
-//                    subtitleStreamNames = new HashMap<>(savedSubtitleStreamNames);
-//                    totalSubtitleStreams = subtitleStreamNames.size();
-//                    System.out.println("Nomes de streams de legendas restaurados: " + subtitleStreamNames.size());
-//                    System.out.println("totalSubtitleStreams definido: " + totalSubtitleStreams);
-//                }
                 if (!savedSubtitleStreamNames.isEmpty()) {
                    subtitleManager.setSubtitleStreamNames( new HashMap<>(savedSubtitleStreamNames));
                    subtitleManager.setTotalSubtitleStreams(subtitleManager.getSubtitleStreamNames().size());
@@ -1034,12 +1026,10 @@ public class VideoPlayer extends JFrame {
     private void initComponents() {
         setLayout(new BorderLayout());
 
-        //videoPanel = new VideoPanel();
-
         add(videoPanel, BorderLayout.CENTER);
 
         // Painel de controles
-        JPanel controlPanel = new JPanel(new BorderLayout());
+        controlPanel = new JPanel(new BorderLayout());
         controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // Barra de progresso (PRIMEIRO - no topo)
@@ -1830,6 +1820,15 @@ public class VideoPlayer extends JFrame {
         // Limpar cover art ao carregar vídeo
         System.out.println("Limpando cover art...");
         coverArt.setAudioCoverArt(null);
+
+        //Manter o layout do Spectrum panel
+        if(videoPanel.getSpectrumLayoutMode() == AudioSpectrumPanel.LayoutMode.CIRCULAR){
+            videoPanel.setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.CIRCULAR);
+        }else if(videoPanel.getSpectrumLayoutMode() == AudioSpectrumPanel.LayoutMode.WAVEFORM) {
+            videoPanel.setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.WAVEFORM);
+        }else {
+            videoPanel.setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.LINEAR);
+        }
         SwingUtilities.invokeLater(() -> {
             videoPanel.setCoverArt(null);
             videoPanel.repaint();
@@ -2375,7 +2374,7 @@ public class VideoPlayer extends JFrame {
                 SwingUtilities.invokeLater(() -> {
 
                     // Redimensionar e centralizar a janela
-                    setSize(650, 500);
+                    setSize(700, 500);
                     setLocationRelativeTo(null); // IMPORTANTE: Centralizar após redimensionar
                     setResizable(false);// Desabilta maximizar a janela
                     System.out.println("12. SwingUtilities.invokeLater EXECUTANDO");

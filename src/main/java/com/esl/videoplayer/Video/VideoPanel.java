@@ -17,7 +17,7 @@ import java.util.Map;
 
 public class VideoPanel extends JPanel {
     private BufferedImage currentImage;
-    public AudioSpectrumPanel spectrumPanel;
+
     private BufferedImage coverArt; // NOVO: Cover art do áudio
     JCheckBoxMenuItem autoPlayItem;
 
@@ -28,6 +28,12 @@ public class VideoPanel extends JPanel {
     private int batchCaptureInterval = 2; // Capturar a cada N frames
     private String batchCapturePath = null;
 
+    // NOVO: Referências aos itens do menu de layout
+    private JRadioButtonMenuItem linearLayoutMenuItem;
+    private JRadioButtonMenuItem circularLayoutMenuItem;
+    private JRadioButtonMenuItem waveLayoutMenuItem;
+
+    public AudioSpectrumPanel spectrumPanel;
     private  SubtitleManager subtitleManager;
     private AudioLoudnessManager audioLoudnessManager;
 
@@ -69,6 +75,42 @@ public class VideoPanel extends JPanel {
     }
 
     // ==================== MÉTODOS PÚBLICOS NA VideoPanel ====================
+
+    public void setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode mode){
+        if(spectrumPanel != null){
+            spectrumPanel.setLayoutMode(mode);
+        }
+    }
+    public AudioSpectrumPanel.LayoutMode getSpectrumLayoutMode(){
+        if(spectrumPanel != null){
+         return spectrumPanel.getLayoutMode();
+        }
+        return null;
+    }
+
+    // NOVO: Método para atualizar menu de acordo com o layout atual
+    public void updateLayoutMenuSelection() {
+        if (spectrumPanel == null) return;
+
+        AudioSpectrumPanel.LayoutMode currentMode = spectrumPanel.getLayoutMode();
+
+        SwingUtilities.invokeLater(() -> {
+            if (linearLayoutMenuItem != null && circularLayoutMenuItem != null && waveLayoutMenuItem != null) {
+                switch (currentMode) {
+                    case LINEAR:
+                        linearLayoutMenuItem.setSelected(true);
+                        break;
+                    case CIRCULAR:
+                        circularLayoutMenuItem.setSelected(true);
+                        break;
+                    case WAVEFORM:
+                        waveLayoutMenuItem.setSelected(true);
+                        break;
+                }
+            }
+        });
+    }
+
     public void setSpectrumColorMode(AudioSpectrumPanel.ColorMode mode) {
         if (spectrumPanel != null) {
             spectrumPanel.setColorMode(mode);
@@ -153,9 +195,7 @@ public class VideoPanel extends JPanel {
         openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
 
         autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
-        autoPlayItem.addActionListener(e -> {
-            autoPlayNext = autoPlayItem.isSelected();
-        });
+        autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
 
         playlistMenu.add(openPlaylistItem);
         playlistMenu.addSeparator();
@@ -199,25 +239,51 @@ public class VideoPanel extends JPanel {
         JMenu spectrumMenu = new JMenu("Equalizador de áudio Animado");
         spectrumMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
+        // === Submenu: Layout do Spectrum ===
+        JMenu spectrumLayoutMenu = new JMenu("Formato do equalizador");
+
+        ButtonGroup layoutGroup = new ButtonGroup();
+
+        linearLayoutMenuItem = new JRadioButtonMenuItem("Linear", true);
+        linearLayoutMenuItem.addActionListener(e ->  setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.LINEAR));
+
+        circularLayoutMenuItem = new JRadioButtonMenuItem("Circular");
+        circularLayoutMenuItem.addActionListener(e -> setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.CIRCULAR));
+
+        waveLayoutMenuItem = new JRadioButtonMenuItem("Wave");
+        waveLayoutMenuItem.addActionListener(e -> {
+            setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.WAVEFORM);
+            spectrumPanel.setWaveformLayers(5);        // 5 linhas
+            spectrumPanel.setWaveformAmplitude(180);
+            spectrumPanel.setWaveformLayerSpacing(0.8f); // Espaçamento entre camadas
+            spectrumPanel.setWaveformFilled(false);     // Preencher a camada externa
+         });
+
+        layoutGroup.add(linearLayoutMenuItem);
+        layoutGroup.add(circularLayoutMenuItem);
+        layoutGroup.add(waveLayoutMenuItem);
+
+        spectrumLayoutMenu.add(linearLayoutMenuItem);
+        spectrumLayoutMenu.add(circularLayoutMenuItem);
+        spectrumLayoutMenu.add(waveLayoutMenuItem);
+
         // === Submenu: Modo de Cor ===
         JMenu colorModeMenu = new JMenu("Modo de Cor");
 
         ButtonGroup colorGroup1 = new ButtonGroup();
 
         JRadioButtonMenuItem defaultColorItem = new JRadioButtonMenuItem("Padrão (Verde-Amarelo-Vermelho)");
-        defaultColorItem.addActionListener(e -> {
-            setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT);
-        });
+        defaultColorItem.addActionListener(e -> setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT));
 
         JRadioButtonMenuItem coverColorItem = new JRadioButtonMenuItem("Baseado na Capa", true);
         coverColorItem.addActionListener(e -> {
+            spectrumPanel.setCoverColorDifferenceMultiplier(2.0f);
             setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
+
         });
 
         JRadioButtonMenuItem customColorItem = new JRadioButtonMenuItem("Personalizado...");
-        customColorItem.addActionListener(e -> {
-            showCustomColorDialog();
-        });
+        customColorItem.addActionListener(e -> showCustomColorDialog());
 
         colorGroup1.add(defaultColorItem);
         colorGroup1.add(coverColorItem);
@@ -279,18 +345,15 @@ public class VideoPanel extends JPanel {
         colorModeMenu.add(iceItem);
 
         // === Checkboxes de Visibilidade ===
+        spectrumMenu.add(spectrumLayoutMenu);
         spectrumMenu.add(colorModeMenu);
         spectrumMenu.addSeparator();
 
         JCheckBoxMenuItem showSpectrumItem = new JCheckBoxMenuItem("Mostrar Equalizador", true);
-        showSpectrumItem.addActionListener(e -> {
-            setSpectrumVisible(showSpectrumItem.isSelected());
-        });
+        showSpectrumItem.addActionListener(e -> setSpectrumVisible(showSpectrumItem.isSelected()));
 
         JCheckBoxMenuItem showCoverItem = new JCheckBoxMenuItem("Mostrar Capa", true);
-        showCoverItem.addActionListener(e -> {
-            setCoverArtVisible(showCoverItem.isSelected());
-        });
+        showCoverItem.addActionListener(e -> setCoverArtVisible(showCoverItem.isSelected()));
 
         spectrumMenu.add(showSpectrumItem);
         spectrumMenu.add(showCoverItem);
@@ -365,38 +428,26 @@ public class VideoPanel extends JPanel {
 
         JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
         streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
-        streamingItem.addActionListener(e -> {
-            audioLoudnessManager.setTargetLoudness(-14.0f);
-        });
+        streamingItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-14.0f));
 
         JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
         quietItem.setToolTipText("Música ambiente, uso casual");
-        quietItem.addActionListener(e -> {
-            audioLoudnessManager.setTargetLoudness(-18.0f);
-        });
+        quietItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-18.0f));
 
         JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
         broadcastItem.setToolTipText("TV, Rádio");
-        broadcastItem.addActionListener(e -> {
-            audioLoudnessManager.setTargetLoudness(-23.0f);
-        });
+        broadcastItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-23.0f));
 
         JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
         cinemaItem.setToolTipText("Padrão de cinema");
-        cinemaItem.addActionListener(e -> {
-            audioLoudnessManager.setTargetLoudness(-24.0f);
-        });
+        cinemaItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-24.0f));
 
         JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
         loudItem.setToolTipText("Festas, clubs");
-        loudItem.addActionListener(e -> {
-            audioLoudnessManager.setTargetLoudness(-11.0f);
-        });
+        loudItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-11.0f));
 
         JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
-        customLoudnessItem.addActionListener(e -> {
-            showCustomLoudnessDialog(videoPlayer);
-        });
+        customLoudnessItem.addActionListener(e -> showCustomLoudnessDialog());
 
         loudnessGroup.add(streamingItem);
         loudnessGroup.add(quietItem);
@@ -485,6 +536,9 @@ public class VideoPanel extends JPanel {
 
                 spectrumMenu.setEnabled(true);
                 audioMenu2.setEnabled(true);
+
+                // NOVO: Atualizar seleção do menu baseado no layout atual
+                updateLayoutMenuSelection();
 
             }
 
@@ -935,7 +989,7 @@ public class VideoPanel extends JPanel {
     }
 
     // Diálogo para loudness personalizado
-    private void showCustomLoudnessDialog(VideoPlayer videoPlayer) {
+    private void showCustomLoudnessDialog() {
         String input = JOptionPane.showInputDialog(this,
                 "Digite o target loudness em dBFS:\n" +
                         "(Valores típicos: -30 a 0)\n" +

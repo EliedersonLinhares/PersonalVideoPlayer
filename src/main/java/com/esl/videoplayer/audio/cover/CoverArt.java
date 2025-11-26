@@ -9,18 +9,54 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 
+/**
+ * Manages the extraction and storage of cover art (album art) from audio files
+ * using an external FFmpeg process.
+ *
+ * The extraction process runs on a separate thread to avoid blocking the
+ * Event Dispatch Thread (EDT) or main application flow.
+ *
+ * @author Eliederson Linhares
+ * @version 1.0
+ * @since 2025-11-25
+ */
 public class CoverArt {
 
+    /**
+     * Stores the extracted audio cover art as a BufferedImage.
+     * This value is null if no cover art was found or extracted successfully.
+     */
     private BufferedImage audioCoverArt = null;
 
+    /**
+     * Retrieves the currently loaded audio cover art.
+     *
+     * @return The {@link BufferedImage} representing the cover art, or {@code null} if not available.
+     */
     public BufferedImage getAudioCoverArt() {
         return audioCoverArt;
     }
 
+    /**
+     * Sets the audio cover art image.
+     *
+     * @param audioCoverArt The {@link BufferedImage} to set as the current cover art.
+     */
     public void setAudioCoverArt(BufferedImage audioCoverArt) {
         this.audioCoverArt = audioCoverArt;
     }
 
+    /**
+     * Initiates the extraction of cover art from a specified audio file using FFmpeg.
+     *
+     * The extraction runs asynchronously on a new thread. Upon completion or failure,
+     * it updates the provided {@link VideoPanel} on the Event Dispatch Thread (EDT).
+     *
+     * @param audioFilePath The absolute path to the input audio file (e.g., MP3, FLAC).
+     * @param ffmpegPath The absolute path to the FFmpeg executable.
+     * @param videoPanel The {@link VideoPanel} instance that needs to be updated with the extracted cover art.
+     * @throws NullPointerException if {@code audioFilePath}, {@code ffmpegPath}, or {@code videoPanel} is {@code null}.
+     */
     public void extractCoverArt(String audioFilePath, String ffmpegPath, VideoPanel videoPanel) {
         System.out.println("=== Tentando extrair cover art ===");
 
@@ -29,7 +65,7 @@ public class CoverArt {
 
         new Thread(() -> {
             try {
-                // Criar arquivo temporário para a capa
+                // Create temporary file for the cover art
                 File tempCover = File.createTempFile("cover_", ".jpg");
                 tempCover.deleteOnExit();
 
@@ -38,8 +74,8 @@ public class CoverArt {
                 ProcessBuilder pb = new ProcessBuilder(
                         ffmpegPath,
                         "-i", audioFilePath,
-                        "-an",              // Sem áudio
-                        "-vcodec", "copy",  // Copiar stream de vídeo (capa) sem recodificar
+                        "-an",              // Without áudio
+                        "-vcodec", "copy",  // Copy video stream image(cover) without recode
                         "-y",
                         tempCover.getAbsolutePath()
                 );
@@ -102,7 +138,7 @@ public class CoverArt {
             } catch (Exception e) {
                 System.err.println("Erro ao extrair cover art: " + e.getMessage());
                 e.printStackTrace();
-                // Em caso de erro, garantir que não há cover art
+                //If there's an error, don`t use cover image
                 SwingUtilities.invokeLater(() -> {
                     videoPanel.setCoverArt(null);
                     videoPanel.repaint();

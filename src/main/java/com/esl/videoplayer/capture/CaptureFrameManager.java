@@ -13,24 +13,45 @@ import java.io.IOException;
 
 public class CaptureFrameManager {
 
-    public void captureFrame(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, VideoPanel videoPanel,
-                             String customCapturePath, String videoFilePath, long currentFrame, boolean silentCapture ) {
+    private Thread batchCaptureThread = null;
+    private volatile boolean batchCapturePaused = false;
+    private volatile boolean batchCaptureCancelled = false;
+
+    public Thread getBatchCaptureThread() {
+        return batchCaptureThread;
+    }
+
+    public void setBatchCaptureThread(Thread batchCaptureThread) {
+        this.batchCaptureThread = batchCaptureThread;
+    }
+
+    public boolean isBatchCapturePaused() {
+        return batchCapturePaused;
+    }
+
+    public void setBatchCapturePaused(boolean batchCapturePaused) {
+        this.batchCapturePaused = batchCapturePaused;
+    }
+
+    public boolean isBatchCaptureCancelled() {
+        return batchCaptureCancelled;
+    }
+
+    public void setBatchCaptureCancelled(boolean batchCaptureCancelled) {
+        this.batchCaptureCancelled = batchCaptureCancelled;
+    }
+
+    public void captureFrame(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, VideoPanel videoPanel, String customCapturePath, String videoFilePath, long currentFrame, boolean silentCapture) {
         // Verificar se há um vídeo carregado
         if (grabber == null) {
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Nenhum vídeo carregado.\nAbra um vídeo primeiro.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // Verificar se há uma imagem atual no painel
         BufferedImage currentImage = videoPanel.getCurrentImage();
         if (currentImage == null) {
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Nenhum frame disponível para captura.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Nenhum frame disponível para captura.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -72,14 +93,7 @@ public class CaptureFrameManager {
 
             // Mostrar mensagem de sucesso (se não estiver em modo silencioso)
             if (!silentCapture) {
-                int response = JOptionPane.showConfirmDialog(videoPlayer,
-                        "Frame capturado com sucesso!\n" +
-                                "Arquivo: " + imageName + "\n" +
-                                "Local: " + targetDirectory + "\n\n" +
-                                "Deseja abrir a pasta?",
-                        "Captura Realizada",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.INFORMATION_MESSAGE);
+                int response = JOptionPane.showConfirmDialog(videoPlayer, "Frame capturado com sucesso!\n" + "Arquivo: " + imageName + "\n" + "Local: " + targetDirectory + "\n\n" + "Deseja abrir a pasta?", "Captura Realizada", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
 
                 // Abrir a pasta se o usuário confirmar
                 if (response == JOptionPane.YES_OPTION) {
@@ -94,10 +108,7 @@ public class CaptureFrameManager {
 
         } catch (IOException ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Erro ao salvar a imagem:\n" + ex.getMessage(),
-                    "Erro",
-                    JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Erro ao salvar a imagem:\n" + ex.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -120,28 +131,23 @@ public class CaptureFrameManager {
             File selectedFolder = folderChooser.getSelectedFile();
             customCapturePath = selectedFolder.getAbsolutePath();
 
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Pasta de captura definida:\n" + customCapturePath,
-                    "Configuração Salva",
-                    JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Pasta de captura definida:\n" + customCapturePath, "Configuração Salva", JOptionPane.INFORMATION_MESSAGE);
 
             System.out.println("Pasta de captura definida: " + customCapturePath);
         }
     }
-//
-public void resetCaptureFolder(String customCapturePath, VideoPlayer videoPlayer) {
+
+    //
+    public void resetCaptureFolder(String customCapturePath, VideoPlayer videoPlayer) {
         customCapturePath = null;
-        JOptionPane.showMessageDialog(videoPlayer,
-                "A pasta de captura foi redefinida.\n" +
-                        "As capturas serão salvas na pasta do vídeo.",
-                "Configuração Restaurada",
-                JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(videoPlayer, "A pasta de captura foi redefinida.\n" + "As capturas serão salvas na pasta do vídeo.", "Configuração Restaurada", JOptionPane.INFORMATION_MESSAGE);
         System.out.println("Pasta de captura restaurada para padrão");
     }
-//
+
+    //
 //    // ========== CAPTURA EM LOTE ==========
 //
-public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePath, VideoPlayer videoPlayer) {
+    public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePath, VideoPlayer videoPlayer) {
         JFileChooser folderChooser = new JFileChooser();
         folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         folderChooser.setDialogTitle("Selecionar Pasta para Captura em Lote");
@@ -159,10 +165,7 @@ public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePa
             File selectedFolder = folderChooser.getSelectedFile();
             batchCapturePath = selectedFolder.getAbsolutePath();
 
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Pasta para captura em lote definida:\n" + batchCapturePath,
-                    "Configuração Salva",
-                    JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Pasta para captura em lote definida:\n" + batchCapturePath, "Configuração Salva", JOptionPane.INFORMATION_MESSAGE);
 
             System.out.println("Pasta de captura em lote definida: " + batchCapturePath);
         }
@@ -170,31 +173,20 @@ public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePa
 
     public void resetBatchCaptureFolder(String batchCapturePath, VideoPlayer videoPlayer) {
         batchCapturePath = null;
-        JOptionPane.showMessageDialog(videoPlayer,
-                "A pasta de captura em lote foi redefinida.\n" +
-                        "As capturas serão salvas na pasta do vídeo.",
-                "Configuração Restaurada",
-                JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(videoPlayer, "A pasta de captura em lote foi redefinida.\n" + "As capturas serão salvas na pasta do vídeo.", "Configuração Restaurada", JOptionPane.INFORMATION_MESSAGE);
         System.out.println("Pasta de captura em lote restaurada para padrão");
     }
 
-    public void batchCaptureFrames(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, Thread batchCaptureThread, boolean isPlaying,
-                                   long totalFrames, int batchCaptureInterval, double frameRate, String batchCapturePath, String videoFilePath) {
+    public void batchCaptureFrames(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, Thread batchCaptureThread, boolean isPlaying, long totalFrames, int batchCaptureInterval, double frameRate, String batchCapturePath, String videoFilePath) {
         // Verificar se há um vídeo carregado
         if (grabber == null) {
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Nenhum vídeo carregado.\nAbra um vídeo primeiro.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // Verificar se já há uma captura em andamento
         if (batchCaptureThread != null && batchCaptureThread.isAlive()) {
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Já existe uma captura em lote em andamento.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(videoPlayer, "Já existe uma captura em lote em andamento.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -248,11 +240,7 @@ public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePa
 
         message.append("Continuar com a captura?");
 
-        int response = JOptionPane.showConfirmDialog(videoPlayer,
-                message.toString(),
-                "Confirmar Captura em Lote",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
+        int response = JOptionPane.showConfirmDialog(videoPlayer, message.toString(), "Confirmar Captura em Lote", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
 
         if (response != JOptionPane.YES_OPTION) {
             if (wasPlaying) {
@@ -262,6 +250,7 @@ public void selectBatchCaptureFolder(String batchCapturePath, String videoFilePa
         }
 
         // Iniciar captura em lote
-       videoPlayer.startBatchCapture(targetDirectory, totalFramesToCapture, wasPlaying);
+        videoPlayer.startBatchCapture(targetDirectory, totalFramesToCapture, wasPlaying);
     }
+
 }
