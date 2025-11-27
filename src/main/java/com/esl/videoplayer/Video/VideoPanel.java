@@ -6,6 +6,7 @@ import com.esl.videoplayer.audio.AudioLoudnessManager;
 import com.esl.videoplayer.capture.CaptureFrameManager;
 import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.subtitle.SubtitleManager;
+import com.esl.videoplayer.theme.ThemeManager;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 
 import javax.swing.*;
@@ -14,9 +15,12 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Map;
+import java.util.List;
 
 public class VideoPanel extends JPanel {
     private BufferedImage currentImage;
+    private RecentFilesManager recentFilesManager;
+    private ThemeManager themeManager;
 
     private BufferedImage coverArt; // NOVO: Cover art do áudio
     JCheckBoxMenuItem autoPlayItem;
@@ -36,6 +40,7 @@ public class VideoPanel extends JPanel {
     public AudioSpectrumPanel spectrumPanel;
     private  SubtitleManager subtitleManager;
     private AudioLoudnessManager audioLoudnessManager;
+    private BackgroundImageLoader backgroundImageLoader;
 
     public BufferedImage getCurrentImage() {
         return currentImage;
@@ -44,6 +49,7 @@ public class VideoPanel extends JPanel {
 
         this.subtitleManager = subtitleManager;
         this.audioLoudnessManager = audioLoudnessManager;
+        backgroundImageLoader = new BackgroundImageLoader();
 
         setBackground(Color.BLACK);
         setDoubleBuffered(true);
@@ -72,6 +78,11 @@ public class VideoPanel extends JPanel {
                 }
             }
         });
+    }
+
+    public void setThemeManager(ThemeManager manager) {
+        this.themeManager = manager;
+        themeManager.printDebugInfo();
     }
 
     // ==================== MÉTODOS PÚBLICOS NA VideoPanel ====================
@@ -184,54 +195,458 @@ public class VideoPanel extends JPanel {
         }
     }
 
-    private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-        JPopupMenu contextMenu = new JPopupMenu();
-        // === Submenu: Playlist ===
+    public void setRecentFilesManager(RecentFilesManager manager) {
+        this.recentFilesManager = manager;
+    }
+
+
+//    private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+//        JPopupMenu contextMenu = new JPopupMenu();
+//        // === Submenu: Playlist ===
+//        JMenu playlistMenu = new JMenu("Playlist");
+//        playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+//
+//        JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
+//        openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+//        openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
+//
+//        autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+//        autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
+//
+//        playlistMenu.add(openPlaylistItem);
+//        playlistMenu.addSeparator();
+//        playlistMenu.add(autoPlayItem);
+//
+//        contextMenu.add(playlistMenu);
+//
+//        // Atualizar estado ao abrir menu
+//        contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+//            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+//                if (grabber == null) {
+//                    SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
+//                }
+//            }
+//
+//            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+//            }
+//
+//            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+//            }
+//        });
+//        // Adicionar menu ao painel
+//        addMouseListener(new MouseAdapter() {
+//            public void mousePressed(MouseEvent e) {
+//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
+//                }
+//            }
+//
+//            public void mouseReleased(MouseEvent e) {
+//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
+//                }
+//            }
+//        });
+//    }
+
+//// MODIFICAR o método setupContextMenu para incluir arquivos recentes e temas
+//private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+//    JPopupMenu contextMenu = new JPopupMenu();
+//
+//    // === Submenu: Playlist ===
+//    JMenu playlistMenu = new JMenu("Playlist");
+//    playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+//
+//    JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
+//    openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+//    openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
+//
+//    autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+//    autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
+//
+//    playlistMenu.add(openPlaylistItem);
+//    playlistMenu.addSeparator();
+//    playlistMenu.add(autoPlayItem);
+//
+//    contextMenu.add(playlistMenu);
+//
+//    // === NOVO: Submenu de Temas ===
+//    JMenu themeMenu = new JMenu("🎨 Temas");
+//    themeMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+//    contextMenu.add(themeMenu);
+//
+//    // Atualizar estado ao abrir menu
+//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+//            if (grabber == null) {
+//                // Atualizar menu de temas
+//                updateThemeMenu(themeMenu, videoPlayer);
+//
+//                // ADICIONAR arquivos recentes dinamicamente ao menu principal
+//                addRecentFilesToMenu(contextMenu, videoPlayer);
+//                SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
+//            }
+//        }
+//
+//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+//            // LIMPAR itens de arquivos recentes ao fechar
+//            removeRecentFilesFromMenu(contextMenu);
+//        }
+//
+//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+//            // LIMPAR itens de arquivos recentes ao cancelar
+//            removeRecentFilesFromMenu(contextMenu);
+//        }
+//    });
+//
+//    // Adicionar menu ao painel
+//    addMouseListener(new MouseAdapter() {
+//        public void mousePressed(MouseEvent e) {
+//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
+//            }
+//        }
+//
+//        public void mouseReleased(MouseEvent e) {
+//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
+//            }
+//        }
+//    });
+//}
+
+
+private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+
+    // Listener global – quando clicar com o botão direito, criamos o menu NA HORA
+    addMouseListener(new MouseAdapter() {
+        @Override
+        public void mousePressed(MouseEvent e) {
+            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                buildAndShowPopup(e, videoPlayer, grabber);
+            }
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                buildAndShowPopup(e, videoPlayer, grabber);
+            }
+        }
+    });
+}
+//    private void buildAndShowPopup(MouseEvent e, VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+//        JPopupMenu contextMenu = new JPopupMenu();
+//
+//        // Criar tudo aqui, com o tema já atualizado!
+//        JMenu playlistMenu = new JMenu("Playlist");
+//        JMenu themeMenu = new JMenu("🎨 Temas");
+//
+//
+//
+//        // Atualizar estado ao abrir menu
+//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+//            if (grabber == null) {
+//                // Atualizar menu de temas
+//                updateThemeMenu(themeMenu, videoPlayer);
+//
+//                // ADICIONAR arquivos recentes dinamicamente ao menu principal
+//                addRecentFilesToMenu(contextMenu, videoPlayer);
+//                SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
+//            }
+//        }
+//
+//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+//            // LIMPAR itens de arquivos recentes ao fechar
+//            removeRecentFilesFromMenu(contextMenu);
+//        }
+//
+//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+//            // LIMPAR itens de arquivos recentes ao cancelar
+//            removeRecentFilesFromMenu(contextMenu);
+//        }
+//    });
+//
+//
+//        updateThemeMenu(themeMenu, videoPlayer);
+//
+//        contextMenu.add(playlistMenu);
+//        contextMenu.add(themeMenu);
+//
+//        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+//    }
+
+    private void buildAndShowPopup(MouseEvent e, VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+
+        // Criar JPopupMenu do zero — necessário para atualizar tema
+        JPopupMenu menu = new JPopupMenu();
+
+        // === PLAYLIST ===
+        menu.add(buildPlaylistMenu(videoPlayer));
+
+        // === TEMAS ===
+        menu.add(buildThemeMenu(videoPlayer));
+
+        // === ARQUIVOS RECENTES ===
+        addRecentFilesToMenu(menu, videoPlayer);
+
+        // Mostrar menu
+        menu.show(e.getComponent(), e.getX(), e.getY());
+    }
+    private JMenu buildPlaylistMenu(VideoPlayer videoPlayer) {
         JMenu playlistMenu = new JMenu("Playlist");
-        playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
         JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
-        openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
         openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
 
-        autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+        JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", autoPlayNext);
         autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
 
         playlistMenu.add(openPlaylistItem);
         playlistMenu.addSeparator();
         playlistMenu.add(autoPlayItem);
 
-        contextMenu.add(playlistMenu);
-
-        // Atualizar estado ao abrir menu
-        contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-                if (grabber == null) {
-                    SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
-                }
-            }
-
-            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-            }
-
-            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-            }
-        });
-        // Adicionar menu ao painel
-        addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-                }
-            }
-
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-                }
-            }
-        });
+        return playlistMenu;
     }
+    private JMenu buildThemeMenu(VideoPlayer videoPlayer) {
+
+        JMenu themeMenu = new JMenu("🎨 Temas");
+
+        if (themeManager == null) {
+            JMenuItem noTheme = new JMenuItem("Gerenciador de temas indisponível");
+            noTheme.setEnabled(false);
+            themeMenu.add(noTheme);
+            return themeMenu;
+        }
+
+        String currentTheme = themeManager.getCurrentTheme();
+        ButtonGroup group = new ButtonGroup();
+
+        for (Map.Entry<String, ThemeManager.ThemeInfo> entry : themeManager.getAvailableThemes().entrySet()) {
+
+            String themeName = entry.getKey();
+            ThemeManager.ThemeInfo info = entry.getValue();
+
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(info.getDisplayName());
+            item.setSelected(themeName.equals(currentTheme));
+
+            item.addActionListener(ev -> {
+                if (!themeName.equals(themeManager.getCurrentTheme())) {
+
+                    JFrame frame = videoPlayer.getFrame();
+
+                    // Trocar o tema silenciosamente
+                    themeManager.changeThemeSilent(themeName, frame);
+
+                    // Atualizar apenas o painel
+                    VideoPanel.this.revalidate();
+                    VideoPanel.this.repaint();
+                }
+            });
+
+            group.add(item);
+            themeMenu.add(item);
+        }
+
+        themeMenu.addSeparator();
+
+        JMenuItem info = new JMenuItem("Tema Atual: " + themeManager.getCurrentThemeInfo().getDisplayName());
+        info.setEnabled(false);
+        themeMenu.add(info);
+
+        return themeMenu;
+    }
+
+
+
+
+
+// ADICIONAR este novo método para atualizar o menu de temas
+ private void updateThemeMenu(JMenu themeMenu, VideoPlayer videoPlayer) {
+    themeMenu.removeAll();
+
+    if (themeManager == null) {
+        JMenuItem noThemeItem = new JMenuItem("Gerenciador de temas não disponível");
+        noThemeItem.setEnabled(false);
+        themeMenu.add(noThemeItem);
+        return;
+    }
+
+    String currentTheme = themeManager.getCurrentTheme();
+    ButtonGroup themeGroup = new ButtonGroup();
+
+    // Adicionar cada tema disponível
+    for (Map.Entry<String, ThemeManager.ThemeInfo> entry : themeManager.getAvailableThemes().entrySet()) {
+        String themeName = entry.getKey();
+        ThemeManager.ThemeInfo themeInfo = entry.getValue();
+
+        JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(themeInfo.getDisplayName());
+        themeItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+
+        // Marcar o tema atual
+        if (themeName.equals(currentTheme)) {
+            themeItem.setSelected(true);
+        }
+
+        // Ação ao selecionar tema
+        themeItem.addActionListener(e -> {
+            System.out.println("\n>>> MenuItem de tema clicado: " + themeName);
+            System.out.println(">>> Tema atual: " + themeManager.getCurrentTheme());
+
+            if (!themeName.equals(themeManager.getCurrentTheme())) {
+                System.out.println(">>> Temas diferentes, iniciando troca...");
+
+                // Obter o JFrame para atualizar a UI
+                JFrame frame = videoPlayer.getFrame();
+                System.out.println(">>> Frame obtido: " + frame);
+
+                if (frame == null) {
+                    System.err.println("✗ Frame é null! Não é possível trocar tema.");
+                    return;
+                }
+                SwingUtilities.invokeLater(() -> {
+                    // Usar versão silenciosa (sem dialog) para evitar problemas de layout
+                    themeManager.changeThemeSilent(themeName, frame);
+                });
+
+
+                // Atualizar o VideoPanel especificamente
+                VideoPanel.this.revalidate();
+                VideoPanel.this.repaint();
+
+                System.out.println(">>> VideoPanel atualizado\n");
+            } else {
+                System.out.println(">>> Mesmo tema já selecionado, ignorando.\n");
+            }
+        });
+
+        themeGroup.add(themeItem);
+        themeMenu.add(themeItem);
+    }
+
+    themeMenu.addSeparator();
+
+    // Informação sobre o tema atual
+    JMenuItem currentThemeInfo = new JMenuItem("Tema Atual: " +
+            themeManager.getCurrentThemeInfo().getDisplayName());
+    currentThemeInfo.setEnabled(false);
+    currentThemeInfo.setFont(new Font("Segoe UI", Font.ITALIC, 12));
+    themeMenu.add(currentThemeInfo);
+}
+
+    // ADICIONAR este método para inserir arquivos recentes no menu principal
+    private void addRecentFilesToMenu(JPopupMenu contextMenu, VideoPlayer videoPlayer) {
+        if (recentFilesManager == null) {
+            return;
+        }
+
+        List<RecentFilesManager.RecentFile> recentFiles = recentFilesManager.getRecentFiles();
+
+        if (!recentFiles.isEmpty()) {
+            // Adicionar separador antes dos arquivos recentes
+            contextMenu.addSeparator();
+
+            // Adicionar título (desabilitado, apenas visual)
+            JMenuItem titleItem = new JMenuItem("Arquivos Recentes:");
+            titleItem.setEnabled(false);
+            titleItem.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            contextMenu.add(titleItem);
+
+            // Adicionar cada arquivo recente
+            int index = 1;
+            for (RecentFilesManager.RecentFile recentFile : recentFiles) {
+                String menuText = recentFile.getIcon() + " " + index + ". " + recentFile.getDisplayName();
+
+                JMenuItem fileItem = new JMenuItem(menuText);
+                fileItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+                fileItem.setToolTipText(recentFile.getFilePath());
+
+                // Adicionar atalho de teclado para os primeiros 5
+                if (index <= 5) {
+                    fileItem.setAccelerator(KeyStroke.getKeyStroke(
+                            KeyEvent.VK_0 + index,
+                            InputEvent.CTRL_DOWN_MASK
+                    ));
+                }
+
+                // Ação ao clicar
+                fileItem.addActionListener(e -> {
+                    File file = new File(recentFile.getFilePath());
+                    if (file.exists()) {
+                        videoPlayer.loadFromRecentFile(file);
+                    } else {
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "Arquivo não encontrado:\n" + recentFile.getFilePath(),
+                                "Erro",
+                                JOptionPane.ERROR_MESSAGE
+                        );
+                        // Remover da lista se não existe
+                        recentFilesManager.removeRecentFile(recentFile.getFilePath());
+                    }
+                });
+
+                contextMenu.add(fileItem);
+                index++;
+            }
+
+            // Adicionar separador e opção para limpar lista
+            contextMenu.addSeparator();
+
+            JMenuItem clearItem = new JMenuItem(" Limpar Lista de Recentes");
+            clearItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            clearItem.addActionListener(e -> {
+                int confirm = JOptionPane.showConfirmDialog(
+                        this,
+                        "Deseja limpar todos os arquivos recentes?",
+                        "Confirmar",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE
+                );
+
+                if (confirm == JOptionPane.YES_OPTION) {
+                    recentFilesManager.clearRecentFiles();
+                    JOptionPane.showMessageDialog(
+                            this,
+                            "Lista de arquivos recentes limpa!",
+                            "Sucesso",
+                            JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            });
+
+            contextMenu.add(clearItem);
+        }
+    }
+
+    // ADICIONAR este método para remover itens dinâmicos ao fechar o menu
+    private void removeRecentFilesFromMenu(JPopupMenu contextMenu) {
+        // Remove todos os componentes após o menu Playlist
+        // Mantém apenas os menus fixos (Playlist)
+        Component[] components = contextMenu.getComponents();
+        int playlistMenuIndex = -1;
+
+        // Encontrar o índice do menu Playlist
+        for (int i = 0; i < components.length; i++) {
+            if (components[i] instanceof JMenu) {
+                JMenu menu = (JMenu) components[i];
+                if (menu.getText().equals("Playlist")) {
+                    playlistMenuIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // Remover tudo após o menu Playlist
+        if (playlistMenuIndex >= 0) {
+            while (contextMenu.getComponentCount() > playlistMenuIndex + 1) {
+                contextMenu.remove(playlistMenuIndex + 1);
+            }
+        }
+    }
+
+
 
     public void setupAudioContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
         JPopupMenu contextMenu = new JPopupMenu();
@@ -533,7 +948,8 @@ public class VideoPanel extends JPanel {
                     SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
                     return;
                 }
-
+                // ADICIONAR arquivos recentes dinamicamente ao menu principal
+                addRecentFilesToMenu(contextMenu, videoPlayer);
                 spectrumMenu.setEnabled(true);
                 audioMenu2.setEnabled(true);
 
@@ -543,9 +959,13 @@ public class VideoPanel extends JPanel {
             }
 
             public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+                // LIMPAR itens de arquivos recentes ao fechar
+                removeRecentFilesFromMenu(contextMenu);
             }
 
             public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+                // LIMPAR itens de arquivos recentes ao cancelar
+                removeRecentFilesFromMenu(contextMenu);
             }
         });
         // Adicionar menu ao painel
@@ -933,12 +1353,18 @@ public class VideoPanel extends JPanel {
                 fullscreenItem.setEnabled(true);
                 subtitleSettingsMenu.setEnabled(true);
 
+                // ADICIONAR arquivos recentes dinamicamente ao menu principal
+                addRecentFilesToMenu(contextMenu, videoPlayer);
             }
 
             public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
+                // LIMPAR itens de arquivos recentes ao fechar
+                removeRecentFilesFromMenu(contextMenu);
             }
 
             public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
+                // LIMPAR itens de arquivos recentes ao cancelar
+                removeRecentFilesFromMenu(contextMenu);
             }
         });
         // Adicionar menu ao painel
@@ -1113,15 +1539,21 @@ public class VideoPanel extends JPanel {
             return;
         }
 
+//        if (currentImage == null) {
+//            // Mensagem padrão quando não há vídeo nem áudio
+//            g.setColor(Color.WHITE);
+//            g.setFont(new Font("Arial", Font.BOLD, 16));
+//            String msg = "Clique em 'Abrir Vídeo' para começar";
+//            FontMetrics fm = g.getFontMetrics();
+//            int x = (getWidth() - fm.stringWidth(msg)) / 2;
+//            int y = getHeight() / 2;
+//            g.drawString(msg, x, y);
+//            return;
+//        }
         if (currentImage == null) {
-            // Mensagem padrão quando não há vídeo nem áudio
-            g.setColor(Color.WHITE);
-            g.setFont(new Font("Arial", Font.BOLD, 16));
-            String msg = "Clique em 'Abrir Vídeo' para começar";
-            FontMetrics fm = g.getFontMetrics();
-            int x = (getWidth() - fm.stringWidth(msg)) / 2;
-            int y = getHeight() / 2;
-            g.drawString(msg, x, y);
+            // SUBSTITUIR: Desenhar imagem de fundo em vez de texto simples
+            Graphics2D g2d = (Graphics2D) g;
+            backgroundImageLoader.drawBackground(g2d, getWidth(), getHeight());
             return;
         }
 
@@ -1159,6 +1591,8 @@ public class VideoPanel extends JPanel {
             subtitleManager.drawSubtitles(g2d, panelWidth, panelHeight, getHeight());
         }
     }
+
+
 
     public String getBatchCapturePath() {
         return batchCapturePath;

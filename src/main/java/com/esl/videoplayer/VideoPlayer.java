@@ -1,6 +1,9 @@
 package com.esl.videoplayer;
 
 
+import com.esl.videoplayer.Video.RecentFilesManager;
+import com.esl.videoplayer.Video.ScreenMode;
+import com.esl.videoplayer.theme.ThemeManager;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.Video.VideoPanel;
 import com.esl.videoplayer.audio.AudioLoudnessAnalyzer;
@@ -15,7 +18,6 @@ import com.esl.videoplayer.subtitle.SubtitleEntry;
 import com.esl.videoplayer.subtitle.SubtitleManager;
 import com.formdev.flatlaf.intellijthemes.FlatArcDarkOrangeIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatArcOrangeIJTheme;
-import com.formdev.flatlaf.intellijthemes.FlatDarkFlatIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
 import org.bytedeco.javacv.*;
@@ -51,6 +53,9 @@ public class VideoPlayer extends JFrame {
     private CaptureFrameManager captureFrameManager;
     private FiltersManager filtersManager;
     private CoverArt coverArt;
+    private ScreenMode screenMode;
+    private RecentFilesManager recentFilesManager;
+    private ThemeManager themeManager;
 
     public VideoPanel videoPanel;
     private JPanel controlPanel;
@@ -143,8 +148,17 @@ public class VideoPlayer extends JFrame {
         loudnessAnalyzer = new AudioLoudnessAnalyzer();
         audioLoudnessManager = new AudioLoudnessManager();
         coverArt = new CoverArt();
+        screenMode = new ScreenMode();
+
 
         videoPanel = new VideoPanel(grabber, subtitleManager, this,audioLoudnessManager);
+        recentFilesManager = new RecentFilesManager();
+        themeManager = new ThemeManager();
+
+        // DEBUG: Verificar estado inicial
+       // recentFilesManager.printDebugInfo();
+        videoPanel.setRecentFilesManager(recentFilesManager);
+        videoPanel.setThemeManager(themeManager);
         // CRIAR PLAYLIST MANAGER E DIALOG ANTES DE initComponents
         playlistManager = new PlaylistManager();
         // Criar o PlaylistDialog com callback
@@ -200,7 +214,8 @@ public class VideoPlayer extends JFrame {
                 case KeyEvent.VK_ESCAPE:
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                     if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                        exitFullScreen();
+                        screenMode.exitFullScreen(VideoPlayer.this,  audioLine, controlPanel,normalBounds,
+                                grabber, isPlaying, playbackThread,currentVideoPath);
                         return true; // Consumir evento
                     }
                     break;
@@ -269,7 +284,8 @@ public class VideoPlayer extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                     if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                        exitFullScreen();
+                        screenMode.exitFullScreen(VideoPlayer.this,  audioLine, controlPanel,normalBounds,
+                                grabber, isPlaying, playbackThread,currentVideoPath);
                     }
                 } else if (e.getKeyCode() == KeyEvent.VK_F11) {
                     toggleFullScreen();
@@ -423,146 +439,15 @@ public class VideoPlayer extends JFrame {
         GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
 
         if (gd.getFullScreenWindow() == this) {
-            exitFullScreen();
+            screenMode.exitFullScreen(this,  audioLine, controlPanel,normalBounds,
+                    grabber, isPlaying, playbackThread,currentVideoPath);
         } else {
-            enterFullScreen();
+            screenMode.enterFullScreen(this,  audioLine, controlPanel,normalBounds,
+                    grabber, isPlaying, playbackThread,currentVideoPath);
         }
     }
 
-    private void enterFullScreen() {
-        System.out.println("Entrando em modo tela cheia...");
-
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-
-        if (!gd.isFullScreenSupported()) {
-            System.out.println("Tela cheia não suportada neste dispositivo");
-            JOptionPane.showMessageDialog(this,
-                    "Tela cheia não é suportada neste dispositivo.",
-                    "Aviso", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        try {
-            // Salvar estado do vídeo atual
-            saveVideoState();
-
-            // Salvar geometria da janela
-            normalBounds = getBounds();
-
-            // Fechar vídeo atual
-            if (grabber != null) {
-                try {
-                    if (isPlaying) {
-                        isPlaying = false;
-                        if (playbackThread != null) {
-                            playbackThread.interrupt();
-                            playbackThread.join(500);
-                        }
-                    }
-                    grabber.stop();
-                    grabber.release();
-                    grabber = null;
-                } catch (Exception e) {
-                    System.err.println("Erro ao fechar grabber: " + e.getMessage());
-                }
-            }
-
-            if (audioLine != null && audioLine.isOpen()) {
-                audioLine.close();
-                audioLine = null;
-            }
-
-            // Transição para tela cheia
-            dispose();
-            setUndecorated(true);
-            gd.setFullScreenWindow(this);
-            setVisible(true);
-            controlPanel.setVisible(false);
-            System.out.println("Modo tela cheia ativado");
-
-            // Recarregar vídeo na posição salva
-            if (currentVideoPath != null) {
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        Thread.sleep(200); // Pequeno delay para estabilizar
-                        restoreVideoState();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-
-        } catch (Exception e) {
-            System.err.println("Erro ao entrar em tela cheia: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void exitFullScreen() {
-        System.out.println("Saindo do modo tela cheia...");
-
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-
-        try {
-            // Salvar estado do vídeo atual
-            saveVideoState();
-
-            // Fechar vídeo atual
-            if (grabber != null) {
-                try {
-                    if (isPlaying) {
-                        isPlaying = false;
-                        if (playbackThread != null) {
-                            playbackThread.interrupt();
-                            playbackThread.join(500);
-                        }
-                    }
-                    grabber.stop();
-                    grabber.release();
-                    grabber = null;
-                } catch (Exception e) {
-                    System.err.println("Erro ao fechar grabber: " + e.getMessage());
-                }
-            }
-
-            if (audioLine != null && audioLine.isOpen()) {
-                audioLine.close();
-                audioLine = null;
-            }
-
-            // Sair de tela cheia
-            gd.setFullScreenWindow(null);
-            dispose();
-            setUndecorated(false);
-            controlPanel.setVisible(true);
-            // Restaurar geometria
-            if (normalBounds != null) {
-                setBounds(normalBounds);
-            }
-
-            setVisible(true);
-
-            System.out.println("Modo tela cheia desativado");
-
-            // Recarregar vídeo na posição salva
-            if (currentVideoPath != null) {
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        Thread.sleep(200); // Pequeno delay para estabilizar
-                        restoreVideoState();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-
-        } catch (Exception e) {
-            System.err.println("Erro ao sair de tela cheia: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void saveVideoState() {
+    public void saveVideoState() {
         if (videoFilePath != null) {
             currentVideoPath = videoFilePath;
             savedFramePosition = currentFrame;
@@ -598,7 +483,7 @@ public class VideoPlayer extends JFrame {
         }
     }
 
-    private void restoreVideoState() {
+    public void restoreVideoState() {
         if (currentVideoPath == null) {
             System.out.println("Nenhum vídeo para restaurar");
             return;
@@ -1456,6 +1341,22 @@ public class VideoPlayer extends JFrame {
         }
     }
 
+    public void loadFromRecentFile(File file) {
+        if (isPlaying) {
+            pauseVideo();
+        }
+            if (file.getName().endsWith("mp3")
+                    || file.getName().endsWith("flac")
+                    || file.getName().endsWith("wav")
+                    || file.getName().endsWith("ogg")
+                    || file.getName().endsWith("m4a")
+                    || file.getName().endsWith("aac")) {
+                loadAudio(file.getAbsolutePath());
+            } else {
+                loadVideo(file.getAbsolutePath());
+            }
+        }
+
     private void loadVideo(String filepath) {
         isAudioOnly = false;
 
@@ -1466,6 +1367,9 @@ public class VideoPlayer extends JFrame {
         System.out.println("=== INÍCIO loadVideo ===");
         // Limpar playlist e fechar dialog
         clearPlaylistAndCloseDialog();
+
+        // ADICIONAR: Registrar arquivo como recente
+        recentFilesManager.addRecentFile(filepath, false);
 
         loadVideoBase(filepath);
     }
@@ -1905,7 +1809,6 @@ public class VideoPlayer extends JFrame {
             System.out.println("Erro ao detectar codec: " + e.getMessage());
         }
     }
-
     /**
      * Verifica se o vídeo é AV1 com resolução acima de 1080p e bloqueia reprodução
      * Retorna true se o vídeo pode ser reproduzido, false se deve ser bloqueado
@@ -2257,6 +2160,9 @@ public class VideoPlayer extends JFrame {
 
         // NOVO: Limpar playlist e fechar dialog
         clearPlaylistAndCloseDialog();
+
+        // ADICIONAR: Registrar arquivo como recente
+        recentFilesManager.addRecentFile(filepath, false);
 
         loadAudioBase(filepath);
     }
@@ -3279,14 +3185,42 @@ public class VideoPlayer extends JFrame {
         super.dispose();
     }
 
+//    // ADICIONAR método público para obter o JFrame (necessário para atualizar UI ao trocar tema)
+//    public JFrame getFrame() {
+//        // Assumindo que VideoPlayer extends JFrame
+//        // Se VideoPlayer não é JFrame, ajuste conforme necessário
+//        return this;
+//    }
+// ADICIONAR método público para obter o JFrame (necessário para atualizar UI ao trocar tema)
+public JFrame getFrame() {
+    // OPÇÃO 1: Se VideoPlayer extends JFrame
+    if (this instanceof JFrame) {
+        return (JFrame) this;
+    }
+    System.err.println("⚠️ AVISO: Não foi possível encontrar JFrame!");
+    return null;
+}
+
     public static void main(String[] args) {
+
         SwingUtilities.invokeLater(() -> {
-            FlatDraculaIJTheme.setup();
-            FlatDarkFlatIJTheme.setup();
-            FlatArcDarkOrangeIJTheme.setup();
-            FlatArcOrangeIJTheme.setup();
+         ThemeManager themeManager2 = new ThemeManager();
+
+          //Para iniciar com o tema dependendo do que foi escolhido previamente
+            if(themeManager2.getCurrentTheme().contentEquals("FlatArcOrangeIJTheme")){
+                FlatArcOrangeIJTheme.setup();
+            }else if(themeManager2.getCurrentTheme().contentEquals("FlatArcDarkOrangeIJTheme")) {
+                FlatArcDarkOrangeIJTheme.setup();
+            }else if(themeManager2.getCurrentTheme().contentEquals("FlatDraculaIJTheme")){
+                FlatDraculaIJTheme.setup();
+            }else{
+                FlatArcDarkOrangeIJTheme.setup();
+            }
+            //Botoes redondos
             UIManager.put("Button.arc", 999);
+
             VideoPlayer player = new VideoPlayer();
+
             player.setVisible(true);
         });
     }

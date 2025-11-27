@@ -27,6 +27,8 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 🎨 Show image cover if the audio have on
 - ✅ 🎧 Volume normalization for audio files
 - ✅ 📃 Add playlist system with work in .m3u files for music or videos
+- ✅ 💹 Add possibility to change theme`s (light, dark...)
+- ✅ 🎛️ Memorize the last 5 files played to fast access 
  
 ## 🚀 Features to be implemented
 - ℹ️ Add one helper to explain program functions 

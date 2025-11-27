@@ -44,8 +44,8 @@ public class PlaylistDialog extends JDialog {
         setSize(400, 500);
         setDefaultCloseOperation(HIDE_ON_CLOSE);
 
-        int newX = parent.getX() + (parent.getWidth() + 25);
-        int newY = parent.getY() - (parent.getHeight() / 2 - 45);
+        int newX = parent.getX() + (parent.getWidth()  - 10);
+        int newY = parent.getY() - (parent.getHeight() / 2 - 250);
         setLocation(newX, newY);
 
         initComponents();
@@ -264,30 +264,6 @@ public class PlaylistDialog extends JDialog {
             playlistList.setSelectedIndex(selected + 1);
         }
     }
-
-//    private void savePlaylist() {
-//        JFileChooser fc = new JFileChooser();
-//        fc.setSelectedFile(new File("playlist.m3u"));
-//
-//        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-//            File file = fc.getSelectedFile();
-//            String path = file.getAbsolutePath();
-//            if (!path.toLowerCase().endsWith(".m3u")) {
-//                path += ".m3u";
-//            }
-//
-//            try {
-//                playlistManager.saveM3U(path);
-//                JOptionPane.showMessageDialog(this,
-//                        "Playlist salva com sucesso!",
-//                        "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-//            } catch (IOException e) {
-//                JOptionPane.showMessageDialog(this,
-//                        "Erro ao salvar playlist:\n" + e.getMessage(),
-//                        "Erro", JOptionPane.ERROR_MESSAGE);
-//            }
-//        }
-//    }
 
     private void savePlaylist() {
         JnaFileChooser fc = new JnaFileChooser();
