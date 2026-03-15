@@ -21,7 +21,7 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 📦 Can capture all frames in video and save in the computer📸,
 - ✅ 📺 Support to fullscreen mode,
 - ✅ 🔆 Can apply filters on video, but with limited resolutions(Brightness)
-- ✅ 🎵 Support to audio (mp3)
+- ✅ 🎵 Support to audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac)
 - ✅ 🌈 Advanced audio spectrum animation 
 - ✅ 🌈 You can personalize the colors, and other options.
 - ✅ 🎨 Show image cover if the audio have on

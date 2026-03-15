@@ -355,7 +355,10 @@ public class SubtitleManager {
         // Extrair legenda embutida usando FFmpeg em thread separada
         new Thread(() -> {
             try {
-                videoPlayer.togglePlayPause();
+                if(videoPlayer.isPlaying){
+                    videoPlayer.togglePlayPause();
+                }
+
                 // Sempre extrair como SRT para normalizar formato
                 File tempSubtitle = File.createTempFile("subtitle_", ".srt");
                 tempSubtitle.deleteOnExit();
@@ -418,7 +421,10 @@ public class SubtitleManager {
                 } else {
                     throw new Exception("Falha ao extrair legenda (código: " + exitCode + ", tamanho: " + tempSubtitle.length() + ")");
                 }
-                videoPlayer.togglePlayPause();
+                if(!videoPlayer.isPlaying){
+                    videoPlayer.togglePlayPause();
+                }
+
             } catch (Exception e) {
                 e.printStackTrace();
                 System.err.println("Erro detalhado: " + e.getMessage());

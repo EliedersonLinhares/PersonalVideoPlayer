@@ -1,10 +1,11 @@
 package com.esl.videoplayer.Video;
 
-import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
+import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.capture.CaptureFrameManager;
 import com.esl.videoplayer.filters.FiltersManager;
+import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.subtitle.SubtitleManager;
 import com.esl.videoplayer.theme.ThemeManager;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
@@ -14,37 +15,135 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.util.Map;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
-public class VideoPanel extends JPanel {
+public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
+    public AudioSpectrumPanel spectrumPanel;
+    // JCheckBoxMenuItem autoPlayItem;
     private BufferedImage currentImage;
     private RecentFilesManager recentFilesManager;
     private ThemeManager themeManager;
-
     private BufferedImage coverArt; // NOVO: Cover art do áudio
-    JCheckBoxMenuItem autoPlayItem;
-
     private boolean autoPlayNext;
     private int framesToSkip = 1; // Quantidade de frames para avançar
     private boolean silentCapture = false;
     private String customCapturePath = null;
     private int batchCaptureInterval = 2; // Capturar a cada N frames
     private String batchCapturePath = null;
-
     // NOVO: Referências aos itens do menu de layout
-    private JRadioButtonMenuItem linearLayoutMenuItem;
-    private JRadioButtonMenuItem circularLayoutMenuItem;
-    private JRadioButtonMenuItem waveLayoutMenuItem;
-
-    public AudioSpectrumPanel spectrumPanel;
-    private  SubtitleManager subtitleManager;
+    private SubtitleManager subtitleManager;
     private AudioLoudnessManager audioLoudnessManager;
     private BackgroundImageLoader backgroundImageLoader;
 
-    public BufferedImage getCurrentImage() {
-        return currentImage;
-    }
+    // Referências aos menus e itens que precisam ser traduzidos
+    private JMenu audioMenu;
+    private JMenu subtitleMenu;
+    private JMenu subtitleSettingsMenu;
+    private JMenu performanceMenu;
+    private JMenu captureMenu;
+    private JMenu batchCaptureMenu;
+    private JMenu filtersMenu;
+    private JMenu playlistMenu;
+
+//    // Menu de idioma para vídeo
+//    private JMenu videoLanguageMenu;
+//    private JMenuItem videoUsItem;
+//    private JMenuItem videoPtItem;
+//
+//    // Menu de idioma para áudio
+//    private JMenu audioLanguageMenu;
+//    private JMenuItem audioUsItem;
+//    private JMenuItem audioPtItem;
+
+
+    // Menu de idioma para vídeo
+    private JMenu videoLanguageMenu;
+    private JRadioButtonMenuItem videoUsItem;
+    private JRadioButtonMenuItem videoPtItem;
+    private ButtonGroup videoLanguageGroup;
+
+    // Menu de idioma para áudio
+    private JMenu audioLanguageMenu;
+    private JRadioButtonMenuItem audioUsItem;
+    private JRadioButtonMenuItem audioPtItem;
+    private ButtonGroup audioLanguageGroup;
+
+
+    // Itens de menu
+    private JMenuItem noSubtitle;
+    private JMenuItem loadExternal;
+    private JMenu sizeMenu;
+    private JMenu colorMenu;
+    private JRadioButtonMenuItem whiteColor;
+    private JRadioButtonMenuItem yellowColor;
+    private JCheckBoxMenuItem hwAccelItem;
+    private JMenu frameSkipMenu;
+    private JCheckBoxMenuItem silentCaptureItem;
+    private JMenuItem selectFolderItem;
+    private JMenuItem resetFolderItem;
+    private JMenuItem showCurrentFolder;
+    private JMenu intervalMenu;
+    private JMenuItem selectBatchFolderItem;
+    private JMenuItem resetBatchFolderItem;
+    private JMenuItem showBatchFolder;
+    private JMenuItem brightnessItem;
+    private JMenuItem resetFiltersItem;
+    private JMenuItem showFiltersItem;
+    private JCheckBoxMenuItem fullscreenItem;
+    private JMenuItem openPlaylistItem;
+    private JCheckBoxMenuItem autoPlayItem;
+    private JMenuItem titleItem;
+    private JMenuItem clearItem;
+    private JMenuItem noAudio;
+
+
+    // NOVOS: Atributos para setupAudioContextMenu
+    private JMenu spectrumMenu;
+    private JMenu spectrumLayoutMenu;
+    private JRadioButtonMenuItem linearLayoutMenuItem;
+    private JRadioButtonMenuItem circularLayoutMenuItem;
+    private JRadioButtonMenuItem waveLayoutMenuItem;
+    private JMenu colorModeMenu;
+    private JRadioButtonMenuItem defaultColorItem;
+    private JRadioButtonMenuItem coverColorItem;
+    private JRadioButtonMenuItem customColorItem;
+    private JMenuItem synthwaveItem;
+    private JMenuItem matrixItem;
+    private JMenuItem fireItem;
+    private JMenuItem iceItem;
+    private JCheckBoxMenuItem showSpectrumItem;
+    private JCheckBoxMenuItem showCoverItem;
+    private JMenu reflectionMenu;
+    private JCheckBoxMenuItem enableReflectionItem;
+    private JMenu reflectionHeightMenu;
+    private JMenu reflectionOpacityMenu;
+    private JMenu audioMenu2;
+    private JCheckBoxMenuItem enableNormalizationItem;
+    private JMenu loudnessMenu;
+    private JRadioButtonMenuItem streamingItem;
+    private JRadioButtonMenuItem quietItem;
+    private JRadioButtonMenuItem broadcastItem;
+    private JRadioButtonMenuItem cinemaItem;
+    private JRadioButtonMenuItem loudItem;
+    private JRadioButtonMenuItem customLoudnessItem;
+    private JMenu volumeGainMenu;
+    private JMenuItem audioInfoItem;
+    private JMenu audioPlaylistMenu;
+    private JMenuItem audioOpenPlaylistItem;
+    private JCheckBoxMenuItem audioAutoPlayItem;
+
+    // NOVOS: Atributos para buildAndShowPopup
+    private JMenu mainPlaylistMenu;
+    private JMenuItem mainOpenPlaylistItem;
+    private JMenu themeMenu;
+    private JMenuItem recentFilesTitle;
+    private JMenuItem clearRecentItem;
+
+    private int videoWidth = 0;
+    private int videoHeight = 0;
+
     public VideoPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager, VideoPlayer videoPlayer, AudioLoudnessManager audioLoudnessManager) {
 
         this.subtitleManager = subtitleManager;
@@ -54,7 +153,7 @@ public class VideoPanel extends JPanel {
         setBackground(Color.BLACK);
         setDoubleBuffered(true);
 
-      //setLayout(new BorderLayout());
+        //setLayout(new BorderLayout());
 
         // NÃO usar BorderLayout aqui, usar null layout para controle manual
         setLayout(null);
@@ -63,10 +162,15 @@ public class VideoPanel extends JPanel {
         spectrumPanel = new AudioSpectrumPanel();
         spectrumPanel.setVisible(false);
 
+        //Parte do menu colocada no construtor para setar o auto-play
+        setAutoPlayNext(true);
+        autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", autoPlayNext);
+        autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
+
         add(spectrumPanel, BorderLayout.CENTER);
 
         if (grabber == null) {
-            setupContextMenu(videoPlayer,grabber);
+            setupContextMenu(videoPlayer);
         }
 
         // Listener para redimensionar spectrum quando o VideoPanel mudar
@@ -78,6 +182,11 @@ public class VideoPanel extends JPanel {
                 }
             }
         });
+
+    }
+
+    public BufferedImage getCurrentImage() {
+        return currentImage;
     }
 
     public void setThemeManager(ThemeManager manager) {
@@ -87,16 +196,17 @@ public class VideoPanel extends JPanel {
 
     // ==================== MÉTODOS PÚBLICOS NA VideoPanel ====================
 
-    public void setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode mode){
-        if(spectrumPanel != null){
-            spectrumPanel.setLayoutMode(mode);
-        }
-    }
-    public AudioSpectrumPanel.LayoutMode getSpectrumLayoutMode(){
-        if(spectrumPanel != null){
-         return spectrumPanel.getLayoutMode();
+    public AudioSpectrumPanel.LayoutMode getSpectrumLayoutMode() {
+        if (spectrumPanel != null) {
+            return spectrumPanel.getLayoutMode();
         }
         return null;
+    }
+
+    public void setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode mode) {
+        if (spectrumPanel != null) {
+            spectrumPanel.setLayoutMode(mode);
+        }
     }
 
     // NOVO: Método para atualizar menu de acordo com o layout atual
@@ -199,187 +309,27 @@ public class VideoPanel extends JPanel {
         this.recentFilesManager = manager;
     }
 
-
-//    private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-//        JPopupMenu contextMenu = new JPopupMenu();
-//        // === Submenu: Playlist ===
-//        JMenu playlistMenu = new JMenu("Playlist");
-//        playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-//
-//        JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
-//        openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
-//        openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
-//
-//        autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
-//        autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
-//
-//        playlistMenu.add(openPlaylistItem);
-//        playlistMenu.addSeparator();
-//        playlistMenu.add(autoPlayItem);
-//
-//        contextMenu.add(playlistMenu);
-//
-//        // Atualizar estado ao abrir menu
-//        contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//                if (grabber == null) {
-//                    SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
-//                }
-//            }
-//
-//            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-//            }
-//
-//            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-//            }
-//        });
-//        // Adicionar menu ao painel
-//        addMouseListener(new MouseAdapter() {
-//            public void mousePressed(MouseEvent e) {
-//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//                }
-//            }
-//
-//            public void mouseReleased(MouseEvent e) {
-//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//                }
-//            }
-//        });
-//    }
-
-//// MODIFICAR o método setupContextMenu para incluir arquivos recentes e temas
-//private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-//    JPopupMenu contextMenu = new JPopupMenu();
-//
-//    // === Submenu: Playlist ===
-//    JMenu playlistMenu = new JMenu("Playlist");
-//    playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-//
-//    JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
-//    openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
-//    openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
-//
-//    autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
-//    autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
-//
-//    playlistMenu.add(openPlaylistItem);
-//    playlistMenu.addSeparator();
-//    playlistMenu.add(autoPlayItem);
-//
-//    contextMenu.add(playlistMenu);
-//
-//    // === NOVO: Submenu de Temas ===
-//    JMenu themeMenu = new JMenu("🎨 Temas");
-//    themeMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-//    contextMenu.add(themeMenu);
-//
-//    // Atualizar estado ao abrir menu
-//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//            if (grabber == null) {
-//                // Atualizar menu de temas
-//                updateThemeMenu(themeMenu, videoPlayer);
-//
-//                // ADICIONAR arquivos recentes dinamicamente ao menu principal
-//                addRecentFilesToMenu(contextMenu, videoPlayer);
-//                SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
-//            }
-//        }
-//
-//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-//            // LIMPAR itens de arquivos recentes ao fechar
-//            removeRecentFilesFromMenu(contextMenu);
-//        }
-//
-//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-//            // LIMPAR itens de arquivos recentes ao cancelar
-//            removeRecentFilesFromMenu(contextMenu);
-//        }
-//    });
-//
-//    // Adicionar menu ao painel
-//    addMouseListener(new MouseAdapter() {
-//        public void mousePressed(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//
-//        public void mouseReleased(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//    });
-//}
-
-
-private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-
-    // Listener global – quando clicar com o botão direito, criamos o menu NA HORA
-    addMouseListener(new MouseAdapter() {
-        @Override
-        public void mousePressed(MouseEvent e) {
-            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                buildAndShowPopup(e, videoPlayer, grabber);
+    private void setupContextMenu(VideoPlayer videoPlayer) {
+        // Listener global – quando clicar com o botão direito, criamos o menu NA HORA
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                    buildAndShowPopup(e, videoPlayer);
+                }
             }
-        }
 
-        @Override
-        public void mouseReleased(MouseEvent e) {
-            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-                buildAndShowPopup(e, videoPlayer, grabber);
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
+                    buildAndShowPopup(e, videoPlayer);
+                }
             }
-        }
-    });
-}
-//    private void buildAndShowPopup(MouseEvent e, VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-//        JPopupMenu contextMenu = new JPopupMenu();
-//
-//        // Criar tudo aqui, com o tema já atualizado!
-//        JMenu playlistMenu = new JMenu("Playlist");
-//        JMenu themeMenu = new JMenu("🎨 Temas");
-//
-//
-//
-//        // Atualizar estado ao abrir menu
-//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//            if (grabber == null) {
-//                // Atualizar menu de temas
-//                updateThemeMenu(themeMenu, videoPlayer);
-//
-//                // ADICIONAR arquivos recentes dinamicamente ao menu principal
-//                addRecentFilesToMenu(contextMenu, videoPlayer);
-//                SwingUtilities.invokeLater(() -> contextMenu.setVisible(true));
-//            }
-//        }
-//
-//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-//            // LIMPAR itens de arquivos recentes ao fechar
-//            removeRecentFilesFromMenu(contextMenu);
-//        }
-//
-//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-//            // LIMPAR itens de arquivos recentes ao cancelar
-//            removeRecentFilesFromMenu(contextMenu);
-//        }
-//    });
-//
-//
-//        updateThemeMenu(themeMenu, videoPlayer);
-//
-//        contextMenu.add(playlistMenu);
-//        contextMenu.add(themeMenu);
-//
-//        contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//    }
+        });
+    }
 
-    private void buildAndShowPopup(MouseEvent e, VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-
-        // Criar JPopupMenu do zero — necessário para atualizar tema
+    private void buildAndShowPopup(MouseEvent e, VideoPlayer videoPlayer) {
+        // Criar JPopupMenu do zero
         JPopupMenu menu = new JPopupMenu();
 
         // === PLAYLIST ===
@@ -388,34 +338,43 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         // === TEMAS ===
         menu.add(buildThemeMenu(videoPlayer));
 
+        //getJLanguageMenu(menu);
+        // Menu de idioma dinâmico (usa I18N.get diretamente)
+        getMainLanguageMenu(menu);
+
         // === ARQUIVOS RECENTES ===
         addRecentFilesToMenu(menu, videoPlayer);
+
+        // Atualizar textos do menu de playlist e temas
+        updateMainPopupTexts();
 
         // Mostrar menu
         menu.show(e.getComponent(), e.getX(), e.getY());
     }
+
     private JMenu buildPlaylistMenu(VideoPlayer videoPlayer) {
-        JMenu playlistMenu = new JMenu("Playlist");
+        mainPlaylistMenu = new JMenu();
 
-        JMenuItem openPlaylistItem = new JMenuItem("📋 Nova Playlist...");
-        openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
+        mainOpenPlaylistItem = new JMenuItem();
+        mainOpenPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
 
-        JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", autoPlayNext);
+        autoPlayItem = new JCheckBoxMenuItem("", true);
         autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
 
-        playlistMenu.add(openPlaylistItem);
-        playlistMenu.addSeparator();
-        playlistMenu.add(autoPlayItem);
+        mainPlaylistMenu.add(mainOpenPlaylistItem);
+        mainPlaylistMenu.addSeparator();
+        mainPlaylistMenu.add(autoPlayItem);
 
-        return playlistMenu;
+        return mainPlaylistMenu;
     }
-    private JMenu buildThemeMenu(VideoPlayer videoPlayer) {
 
-        JMenu themeMenu = new JMenu("🎨 Temas");
+    private JMenu buildThemeMenu(VideoPlayer videoPlayer) {
+        themeMenu = new JMenu();
 
         if (themeManager == null) {
-            JMenuItem noTheme = new JMenuItem("Gerenciador de temas indisponível");
+            JMenuItem noTheme = new JMenuItem();
             noTheme.setEnabled(false);
+            noTheme.setText(I18N.get("theme.unavailable"));
             themeMenu.add(noTheme);
             return themeMenu;
         }
@@ -424,7 +383,6 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         ButtonGroup group = new ButtonGroup();
 
         for (Map.Entry<String, ThemeManager.ThemeInfo> entry : themeManager.getAvailableThemes().entrySet()) {
-
             String themeName = entry.getKey();
             ThemeManager.ThemeInfo info = entry.getValue();
 
@@ -433,13 +391,8 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
             item.addActionListener(ev -> {
                 if (!themeName.equals(themeManager.getCurrentTheme())) {
-
                     JFrame frame = videoPlayer.getFrame();
-
-                    // Trocar o tema silenciosamente
                     themeManager.changeThemeSilent(themeName, frame);
-
-                    // Atualizar apenas o painel
                     VideoPanel.this.revalidate();
                     VideoPanel.this.repaint();
                 }
@@ -451,91 +404,14 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
         themeMenu.addSeparator();
 
-        JMenuItem info = new JMenuItem("Tema Atual: " + themeManager.getCurrentThemeInfo().getDisplayName());
+        JMenuItem info = new JMenuItem(I18N.get("theme.current") + ": " +
+                themeManager.getCurrentThemeInfo().getDisplayName());
         info.setEnabled(false);
         themeMenu.add(info);
 
         return themeMenu;
     }
 
-
-
-
-
-// ADICIONAR este novo método para atualizar o menu de temas
- private void updateThemeMenu(JMenu themeMenu, VideoPlayer videoPlayer) {
-    themeMenu.removeAll();
-
-    if (themeManager == null) {
-        JMenuItem noThemeItem = new JMenuItem("Gerenciador de temas não disponível");
-        noThemeItem.setEnabled(false);
-        themeMenu.add(noThemeItem);
-        return;
-    }
-
-    String currentTheme = themeManager.getCurrentTheme();
-    ButtonGroup themeGroup = new ButtonGroup();
-
-    // Adicionar cada tema disponível
-    for (Map.Entry<String, ThemeManager.ThemeInfo> entry : themeManager.getAvailableThemes().entrySet()) {
-        String themeName = entry.getKey();
-        ThemeManager.ThemeInfo themeInfo = entry.getValue();
-
-        JRadioButtonMenuItem themeItem = new JRadioButtonMenuItem(themeInfo.getDisplayName());
-        themeItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-
-        // Marcar o tema atual
-        if (themeName.equals(currentTheme)) {
-            themeItem.setSelected(true);
-        }
-
-        // Ação ao selecionar tema
-        themeItem.addActionListener(e -> {
-            System.out.println("\n>>> MenuItem de tema clicado: " + themeName);
-            System.out.println(">>> Tema atual: " + themeManager.getCurrentTheme());
-
-            if (!themeName.equals(themeManager.getCurrentTheme())) {
-                System.out.println(">>> Temas diferentes, iniciando troca...");
-
-                // Obter o JFrame para atualizar a UI
-                JFrame frame = videoPlayer.getFrame();
-                System.out.println(">>> Frame obtido: " + frame);
-
-                if (frame == null) {
-                    System.err.println("✗ Frame é null! Não é possível trocar tema.");
-                    return;
-                }
-                SwingUtilities.invokeLater(() -> {
-                    // Usar versão silenciosa (sem dialog) para evitar problemas de layout
-                    themeManager.changeThemeSilent(themeName, frame);
-                });
-
-
-                // Atualizar o VideoPanel especificamente
-                VideoPanel.this.revalidate();
-                VideoPanel.this.repaint();
-
-                System.out.println(">>> VideoPanel atualizado\n");
-            } else {
-                System.out.println(">>> Mesmo tema já selecionado, ignorando.\n");
-            }
-        });
-
-        themeGroup.add(themeItem);
-        themeMenu.add(themeItem);
-    }
-
-    themeMenu.addSeparator();
-
-    // Informação sobre o tema atual
-    JMenuItem currentThemeInfo = new JMenuItem("Tema Atual: " +
-            themeManager.getCurrentThemeInfo().getDisplayName());
-    currentThemeInfo.setEnabled(false);
-    currentThemeInfo.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-    themeMenu.add(currentThemeInfo);
-}
-
-    // ADICIONAR este método para inserir arquivos recentes no menu principal
     private void addRecentFilesToMenu(JPopupMenu contextMenu, VideoPlayer videoPlayer) {
         if (recentFilesManager == null) {
             return;
@@ -544,16 +420,14 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         List<RecentFilesManager.RecentFile> recentFiles = recentFilesManager.getRecentFiles();
 
         if (!recentFiles.isEmpty()) {
-            // Adicionar separador antes dos arquivos recentes
             contextMenu.addSeparator();
 
-            // Adicionar título (desabilitado, apenas visual)
-            JMenuItem titleItem = new JMenuItem("Arquivos Recentes:");
-            titleItem.setEnabled(false);
-            titleItem.setFont(new Font("Segoe UI", Font.BOLD, 12));
-            contextMenu.add(titleItem);
+            recentFilesTitle = new JMenuItem();
+            recentFilesTitle.setEnabled(false);
+            recentFilesTitle.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            recentFilesTitle.setText(I18N.get("recent.title"));
+            contextMenu.add(recentFilesTitle);
 
-            // Adicionar cada arquivo recente
             int index = 1;
             for (RecentFilesManager.RecentFile recentFile : recentFiles) {
                 String menuText = recentFile.getIcon() + " " + index + ". " + recentFile.getDisplayName();
@@ -562,7 +436,6 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 fileItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
                 fileItem.setToolTipText(recentFile.getFilePath());
 
-                // Adicionar atalho de teclado para os primeiros 5
                 if (index <= 5) {
                     fileItem.setAccelerator(KeyStroke.getKeyStroke(
                             KeyEvent.VK_0 + index,
@@ -570,19 +443,17 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                     ));
                 }
 
-                // Ação ao clicar
-                fileItem.addActionListener(e -> {
+                fileItem.addActionListener(ev -> {
                     File file = new File(recentFile.getFilePath());
                     if (file.exists()) {
                         videoPlayer.loadFromRecentFile(file);
                     } else {
                         JOptionPane.showMessageDialog(
                                 this,
-                                "Arquivo não encontrado:\n" + recentFile.getFilePath(),
-                                "Erro",
+                                I18N.get("recent.notfound") + "\n" + recentFile.getFilePath(),
+                                I18N.get("dialog.error"),
                                 JOptionPane.ERROR_MESSAGE
                         );
-                        // Remover da lista se não existe
                         recentFilesManager.removeRecentFile(recentFile.getFilePath());
                     }
                 });
@@ -591,16 +462,16 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 index++;
             }
 
-            // Adicionar separador e opção para limpar lista
             contextMenu.addSeparator();
 
-            JMenuItem clearItem = new JMenuItem(" Limpar Lista de Recentes");
-            clearItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-            clearItem.addActionListener(e -> {
+            clearRecentItem = new JMenuItem();
+            //clearRecentItem.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            clearRecentItem.setText("🗑️ " + I18N.get("recent.clear"));
+            clearRecentItem.addActionListener(ev -> {
                 int confirm = JOptionPane.showConfirmDialog(
                         this,
-                        "Deseja limpar todos os arquivos recentes?",
-                        "Confirmar",
+                        I18N.get("recent.clear.confirm"),
+                        I18N.get("dialog.confirm"),
                         JOptionPane.YES_NO_OPTION,
                         JOptionPane.QUESTION_MESSAGE
                 );
@@ -609,21 +480,18 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                     recentFilesManager.clearRecentFiles();
                     JOptionPane.showMessageDialog(
                             this,
-                            "Lista de arquivos recentes limpa!",
-                            "Sucesso",
+                            I18N.get("recent.clear.success"),
+                            I18N.get("dialog.success"),
                             JOptionPane.INFORMATION_MESSAGE
                     );
                 }
             });
 
-            contextMenu.add(clearItem);
+            contextMenu.add(clearRecentItem);
         }
     }
 
-    // ADICIONAR este método para remover itens dinâmicos ao fechar o menu
     private void removeRecentFilesFromMenu(JPopupMenu contextMenu) {
-        // Remove todos os componentes após o menu Playlist
-        // Mantém apenas os menus fixos (Playlist)
         Component[] components = contextMenu.getComponents();
         int playlistMenuIndex = -1;
 
@@ -631,7 +499,10 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         for (int i = 0; i < components.length; i++) {
             if (components[i] instanceof JMenu) {
                 JMenu menu = (JMenu) components[i];
-                if (menu.getText().equals("Playlist")) {
+                String menuText = menu.getText();
+                // Verificar em ambos os idiomas
+                if (menuText.equals("Playlist") ||
+                        menuText.equals(I18N.get("menu.playlist"))) {
                     playlistMenuIndex = i;
                     break;
                 }
@@ -646,33 +517,31 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         }
     }
 
-
-
     public void setupAudioContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        JMenu spectrumMenu = new JMenu("Equalizador de áudio Animado");
+        // === Menu de Espectro ===
+        spectrumMenu = new JMenu();
         spectrumMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-        // === Submenu: Layout do Spectrum ===
-        JMenu spectrumLayoutMenu = new JMenu("Formato do equalizador");
-
+        // Submenu: Layout do Spectrum
+        spectrumLayoutMenu = new JMenu();
         ButtonGroup layoutGroup = new ButtonGroup();
 
-        linearLayoutMenuItem = new JRadioButtonMenuItem("Linear", true);
-        linearLayoutMenuItem.addActionListener(e ->  setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.LINEAR));
+        linearLayoutMenuItem = new JRadioButtonMenuItem("", true);
+        linearLayoutMenuItem.addActionListener(e -> setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.LINEAR));
 
-        circularLayoutMenuItem = new JRadioButtonMenuItem("Circular");
+        circularLayoutMenuItem = new JRadioButtonMenuItem("");
         circularLayoutMenuItem.addActionListener(e -> setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.CIRCULAR));
 
-        waveLayoutMenuItem = new JRadioButtonMenuItem("Wave");
+        waveLayoutMenuItem = new JRadioButtonMenuItem("");
         waveLayoutMenuItem.addActionListener(e -> {
             setSpectrumLayoutMode(AudioSpectrumPanel.LayoutMode.WAVEFORM);
-            spectrumPanel.setWaveformLayers(5);        // 5 linhas
+            spectrumPanel.setWaveformLayers(5);
             spectrumPanel.setWaveformAmplitude(180);
-            spectrumPanel.setWaveformLayerSpacing(0.8f); // Espaçamento entre camadas
-            spectrumPanel.setWaveformFilled(false);     // Preencher a camada externa
-         });
+            spectrumPanel.setWaveformLayerSpacing(0.8f);
+            spectrumPanel.setWaveformFilled(false);
+        });
 
         layoutGroup.add(linearLayoutMenuItem);
         layoutGroup.add(circularLayoutMenuItem);
@@ -682,22 +551,20 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         spectrumLayoutMenu.add(circularLayoutMenuItem);
         spectrumLayoutMenu.add(waveLayoutMenuItem);
 
-        // === Submenu: Modo de Cor ===
-        JMenu colorModeMenu = new JMenu("Modo de Cor");
-
+        // Submenu: Modo de Cor
+        colorModeMenu = new JMenu();
         ButtonGroup colorGroup1 = new ButtonGroup();
 
-        JRadioButtonMenuItem defaultColorItem = new JRadioButtonMenuItem("Padrão (Verde-Amarelo-Vermelho)");
+        defaultColorItem = new JRadioButtonMenuItem("");
         defaultColorItem.addActionListener(e -> setSpectrumColorMode(AudioSpectrumPanel.ColorMode.DEFAULT));
 
-        JRadioButtonMenuItem coverColorItem = new JRadioButtonMenuItem("Baseado na Capa", true);
+        coverColorItem = new JRadioButtonMenuItem("", true);
         coverColorItem.addActionListener(e -> {
             spectrumPanel.setCoverColorDifferenceMultiplier(2.0f);
             setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
-
         });
 
-        JRadioButtonMenuItem customColorItem = new JRadioButtonMenuItem("Personalizado...");
+        customColorItem = new JRadioButtonMenuItem("");
         customColorItem.addActionListener(e -> showCustomColorDialog());
 
         colorGroup1.add(defaultColorItem);
@@ -710,7 +577,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         colorModeMenu.addSeparator();
 
         // Paletas pré-definidas
-        JMenuItem synthwaveItem = new JMenuItem("Paleta: Synthwave");
+        synthwaveItem = new JMenuItem("");
         synthwaveItem.addActionListener(e -> {
             setSpectrumCustomColors(
                     new Color(100, 0, 200),
@@ -721,7 +588,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             customColorItem.setSelected(true);
         });
 
-        JMenuItem matrixItem = new JMenuItem("Paleta: Matrix");
+        matrixItem = new JMenuItem("");
         matrixItem.addActionListener(e -> {
             setSpectrumCustomColors(
                     new Color(0, 255, 0),
@@ -732,7 +599,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             customColorItem.setSelected(true);
         });
 
-        JMenuItem fireItem = new JMenuItem("Paleta: Fogo");
+        fireItem = new JMenuItem("");
         fireItem.addActionListener(e -> {
             setSpectrumCustomColors(
                     new Color(255, 100, 0),
@@ -743,7 +610,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             customColorItem.setSelected(true);
         });
 
-        JMenuItem iceItem = new JMenuItem("Paleta: Gelo");
+        iceItem = new JMenuItem("");
         iceItem.addActionListener(e -> {
             setSpectrumCustomColors(
                     new Color(0, 100, 200),
@@ -759,56 +626,49 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         colorModeMenu.add(fireItem);
         colorModeMenu.add(iceItem);
 
-        // === Checkboxes de Visibilidade ===
         spectrumMenu.add(spectrumLayoutMenu);
         spectrumMenu.add(colorModeMenu);
         spectrumMenu.addSeparator();
 
-        JCheckBoxMenuItem showSpectrumItem = new JCheckBoxMenuItem("Mostrar Equalizador", true);
+        // Checkboxes de Visibilidade
+        showSpectrumItem = new JCheckBoxMenuItem("", true);
         showSpectrumItem.addActionListener(e -> setSpectrumVisible(showSpectrumItem.isSelected()));
 
-        JCheckBoxMenuItem showCoverItem = new JCheckBoxMenuItem("Mostrar Capa", true);
+        showCoverItem = new JCheckBoxMenuItem("", true);
         showCoverItem.addActionListener(e -> setCoverArtVisible(showCoverItem.isSelected()));
 
         spectrumMenu.add(showSpectrumItem);
         spectrumMenu.add(showCoverItem);
-
         spectrumMenu.addSeparator();
 
-        // === Submenu: Reflexo ===
-        JMenu reflectionMenu = new JMenu("Reflexo");
+        // Submenu: Reflexo
+        reflectionMenu = new JMenu();
 
-        JCheckBoxMenuItem enableReflectionItem = new JCheckBoxMenuItem("Ativar Reflexo", true);
-        enableReflectionItem.addActionListener(e -> {
-            setSpectrumReflection(enableReflectionItem.isSelected());
-        });
+        enableReflectionItem = new JCheckBoxMenuItem("", true);
+        enableReflectionItem.addActionListener(e -> setSpectrumReflection(enableReflectionItem.isSelected()));
 
-        JMenu reflectionHeightMenu = new JMenu("Altura do Reflexo");
+        reflectionHeightMenu = new JMenu();
         String[] heightLabels = {"25%", "50%", "75%", "100%"};
         float[] heightValues = {0.25f, 0.5f, 0.75f, 1.0f};
 
         ButtonGroup heightGroup = new ButtonGroup();
         for (int i = 0; i < heightLabels.length; i++) {
             final float height = heightValues[i];
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(heightLabels[i], i == 1); // 50% selecionado
-            item.addActionListener(e -> {
-                setSpectrumReflectionHeight(height);
-            });
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(heightLabels[i], i == 1);
+            item.addActionListener(e -> setSpectrumReflectionHeight(height));
             heightGroup.add(item);
             reflectionHeightMenu.add(item);
         }
 
-        JMenu reflectionOpacityMenu = new JMenu("Opacidade do Reflexo");
+        reflectionOpacityMenu = new JMenu();
         String[] opacityLabels = {"25%", "50%", "75%", "100%"};
         int[] opacityValues = {64, 128, 192, 255};
 
         ButtonGroup opacityGroup = new ButtonGroup();
         for (int i = 0; i < opacityLabels.length; i++) {
             final int opacity = opacityValues[i];
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(opacityLabels[i], i == 1); // 50% selecionado
-            item.addActionListener(e -> {
-                setSpectrumReflectionAlpha(opacity);
-            });
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(opacityLabels[i], i == 1);
+            item.addActionListener(e -> setSpectrumReflectionAlpha(opacity));
             opacityGroup.add(item);
             reflectionOpacityMenu.add(item);
         }
@@ -818,50 +678,40 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         reflectionMenu.add(reflectionOpacityMenu);
 
         spectrumMenu.add(reflectionMenu);
-
-
         contextMenu.add(spectrumMenu);
-        // ========== FIM: Menu de Modos de cor do Spectrum ==========
 
-
-        JMenu audioMenu2 = new JMenu("Áudio");
+        // === Menu de Áudio ===
+        audioMenu2 = new JMenu();
         audioMenu2.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-        // === Normalização ===
-        JCheckBoxMenuItem enableNormalizationItem = new JCheckBoxMenuItem("Ativar Normalização", false);
-        enableNormalizationItem.addActionListener(e -> {
-            audioLoudnessManager.setAudioNormalizationEnabled(enableNormalizationItem.isSelected());
-        });
+        // Normalização
+        enableNormalizationItem = new JCheckBoxMenuItem("", false);
+        enableNormalizationItem.addActionListener(e ->
+                audioLoudnessManager.setAudioNormalizationEnabled(enableNormalizationItem.isSelected()));
 
         audioMenu2.add(enableNormalizationItem);
         audioMenu2.addSeparator();
 
-        // === Submenu: Presets de Loudness ===
-        JMenu loudnessMenu = new JMenu("Intensidade Sonora");
-
+        // Submenu: Presets de Loudness
+        loudnessMenu = new JMenu();
         ButtonGroup loudnessGroup = new ButtonGroup();
 
-        JRadioButtonMenuItem streamingItem = new JRadioButtonMenuItem("Streaming (-14 LUFS)");
-        streamingItem.setToolTipText("Spotify, YouTube, Apple Music");
+        streamingItem = new JRadioButtonMenuItem("");
         streamingItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-14.0f));
 
-        JRadioButtonMenuItem quietItem = new JRadioButtonMenuItem("Quiet (-18 LUFS)", true);
-        quietItem.setToolTipText("Música ambiente, uso casual");
+        quietItem = new JRadioButtonMenuItem("", true);
         quietItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-18.0f));
 
-        JRadioButtonMenuItem broadcastItem = new JRadioButtonMenuItem("Broadcast (-23 LUFS)");
-        broadcastItem.setToolTipText("TV, Rádio");
+        broadcastItem = new JRadioButtonMenuItem("");
         broadcastItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-23.0f));
 
-        JRadioButtonMenuItem cinemaItem = new JRadioButtonMenuItem("Cinema (-24 LUFS)");
-        cinemaItem.setToolTipText("Padrão de cinema");
+        cinemaItem = new JRadioButtonMenuItem("");
         cinemaItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-24.0f));
 
-        JRadioButtonMenuItem loudItem = new JRadioButtonMenuItem("Loud (-11 LUFS)");
-        loudItem.setToolTipText("Festas, clubs");
+        loudItem = new JRadioButtonMenuItem("");
         loudItem.addActionListener(e -> audioLoudnessManager.setTargetLoudness(-11.0f));
 
-        JRadioButtonMenuItem customLoudnessItem = new JRadioButtonMenuItem("Personalizado...");
+        customLoudnessItem = new JRadioButtonMenuItem("");
         customLoudnessItem.addActionListener(e -> showCustomLoudnessDialog());
 
         loudnessGroup.add(streamingItem);
@@ -882,9 +732,8 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         audioMenu2.add(loudnessMenu);
         audioMenu2.addSeparator();
 
-        // === Submenu: Volume Global ===
-        JMenu volumeGainMenu = new JMenu("Volume Global");
-
+        // Submenu: Volume Global
+        volumeGainMenu = new JMenu();
         ButtonGroup volumeGroup = new ButtonGroup();
 
         String[] volumeLabels = {"20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"};
@@ -892,10 +741,8 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
         for (int i = 0; i < volumeLabels.length; i++) {
             final float vol = volumeValues[i];
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0); // 50% selecionado
-            item.addActionListener(e -> {
-                audioLoudnessManager.setGlobalAudioGain(vol);
-            });
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(volumeLabels[i], i == 0);
+            item.addActionListener(e -> audioLoudnessManager.setGlobalAudioGain(vol));
             volumeGroup.add(item);
             volumeGainMenu.add(item);
         }
@@ -903,72 +750,71 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         audioMenu2.add(volumeGainMenu);
         audioMenu2.addSeparator();
 
-        // === Informações ===
-        JMenuItem infoItem = new JMenuItem("Informações de Áudio");
-        infoItem.addActionListener(e -> {
+        // Informações
+        audioInfoItem = new JMenuItem("");
+        audioInfoItem.addActionListener(e -> {
             String info = audioLoudnessManager.getNormalizationInfo();
             JOptionPane.showMessageDialog(this,
                     info + "\n\n" +
-                            "Normalização: " + (audioLoudnessManager.isAudioNormalizationEnabled() ? "Ativada" : "Desativada") + "\n" +
-                            "Volume Global: " + (int) (audioLoudnessManager.getGlobalAudioGain() * 100) + "%",
-                    "Informações de Áudio",
+                            I18N.get("audio.normalization") + ": " +
+                            (audioLoudnessManager.isAudioNormalizationEnabled() ?
+                                    I18N.get("audio.enabled") : I18N.get("audio.disabled")) + "\n" +
+                            I18N.get("audio.globalvolume") + ": " +
+                            (int) (audioLoudnessManager.getGlobalAudioGain() * 100) + "%",
+                    I18N.get("audio.info.title"),
                     JOptionPane.INFORMATION_MESSAGE);
         });
 
-        audioMenu2.add(infoItem);
+        audioMenu2.add(audioInfoItem);
         contextMenu.add(audioMenu2);
 
-        // === Submenu: Playlist ===
-        JMenu playlistMenu = new JMenu("Playlist");
-        playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        // === Menu de Playlist ===
+        audioPlaylistMenu = new JMenu();
+        audioPlaylistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-        JMenuItem openPlaylistItem = new JMenuItem("📋 Gerenciar Playlist...");
-        openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
-        openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
+        audioOpenPlaylistItem = new JMenuItem();
+        audioOpenPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+        audioOpenPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
 
-        JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
-        autoPlayItem.addActionListener(e -> {
-            autoPlayNext = autoPlayItem.isSelected();
-        });
+        audioAutoPlayItem = new JCheckBoxMenuItem("", true);
+        audioAutoPlayItem.addActionListener(e -> autoPlayNext = audioAutoPlayItem.isSelected());
 
-        playlistMenu.add(openPlaylistItem);
-        playlistMenu.addSeparator();
-        playlistMenu.add(autoPlayItem);
+        audioPlaylistMenu.add(audioOpenPlaylistItem);
+        audioPlaylistMenu.addSeparator();
+        audioPlaylistMenu.add(audioAutoPlayItem);
 
-        contextMenu.add(playlistMenu);
+        //Menu de mudança de idioma
+        getAudioLanguageMenu(contextMenu);
 
+        contextMenu.add(audioPlaylistMenu);
 
-        // Atualizar estado ao abrir menu
+        // Listener do popup
         contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
                 if (grabber == null) {
                     JOptionPane.showMessageDialog(videoPlayer,
-                            "Nenhum audio carregado.\nAbra um audio primeiro.",
-                            "Aviso", JOptionPane.INFORMATION_MESSAGE);
+                            I18N.get("audio.noaudio.message"),
+                            I18N.get("dialog.warning"),
+                            JOptionPane.INFORMATION_MESSAGE);
                     SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
                     return;
                 }
-                // ADICIONAR arquivos recentes dinamicamente ao menu principal
                 addRecentFilesToMenu(contextMenu, videoPlayer);
                 spectrumMenu.setEnabled(true);
                 audioMenu2.setEnabled(true);
-
-                // NOVO: Atualizar seleção do menu baseado no layout atual
                 updateLayoutMenuSelection();
-
             }
 
             public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-                // LIMPAR itens de arquivos recentes ao fechar
                 removeRecentFilesFromMenu(contextMenu);
             }
 
             public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-                // LIMPAR itens de arquivos recentes ao cancelar
                 removeRecentFilesFromMenu(contextMenu);
             }
         });
-        // Adicionar menu ao painel
+
+        // Adicionar listener de mouse
         addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
                 if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
@@ -982,20 +828,31 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 }
             }
         });
+
+        // IMPORTANTE: Atualizar textos pela primeira vez
+        updateAudioMenuTexts();
+
+        // IMPORTANTE: Registrar listener já foi feito no setupVideoContextMenu
+        // Não precisa registrar novamente
+
+        // IMPORTANTE: Registrar listener APÓS criar tudo
+        I18N.addLanguageChangeListener(this);
     }
 
-    public void setupVideoContextMenu(SubtitleManager subtitleManager, CaptureFrameManager captureFrameManager, VideoPlayer videoPlayer,
-                                      FiltersManager filtersManager, String videoFilePath, FFmpegFrameGrabber grabber, JButton nextFrameButton,
-                                      int totalAudioStreams, int currentAudioStream, Map<Integer, String> audioStreamNames, String ffmpegPath) {
+    public void setupVideoContextMenu(SubtitleManager subtitleManager, CaptureFrameManager captureFrameManager,
+                                      VideoPlayer videoPlayer, FiltersManager filtersManager, String videoFilePath,
+                                      FFmpegFrameGrabber grabber, JButton nextFrameButton, int totalAudioStreams,
+                                      int currentAudioStream, Map<Integer, String> audioStreamNames, String ffmpegPath) {
+
         JPopupMenu contextMenu = new JPopupMenu();
 
         // Menu de áudio
-        JMenu audioMenu = new JMenu("Faixa de Áudio");
+        audioMenu = new JMenu();
         contextMenu.add(audioMenu);
 
         // Menu de legendas
-        JMenu subtitleMenu = new JMenu("Legendas");
-        JMenuItem noSubtitle = new JMenuItem("Desabilitado");
+        subtitleMenu = new JMenu();
+        noSubtitle = new JMenuItem();
         noSubtitle.addActionListener(e -> {
             subtitleManager.setCurrentSubtitleStream(-1);
             subtitleManager.setCurrentSubtitleText("");
@@ -1003,17 +860,17 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         });
         subtitleMenu.add(noSubtitle);
 
-        JMenuItem loadExternal = new JMenuItem("Carregar arquivo externo...");
+        loadExternal = new JMenuItem();
         loadExternal.addActionListener(e -> subtitleManager.loadExternalSubtitle(videoFilePath, videoPlayer));
         subtitleMenu.add(loadExternal);
 
         contextMenu.add(subtitleMenu);
 
         // Menu de configurações de legenda
-        JMenu subtitleSettingsMenu = new JMenu("Configurações de Legenda");
+        subtitleSettingsMenu = new JMenu();
 
         // Submenu de tamanho
-        JMenu sizeMenu = new JMenu("Tamanho da Fonte");
+        sizeMenu = new JMenu();
         int[] sizes = {16, 20, 24, 28, 32, 36, 40, 48, 56, 64};
         ButtonGroup sizeGroup = new ButtonGroup();
 
@@ -1032,54 +889,48 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         subtitleSettingsMenu.add(sizeMenu);
 
         // Submenu de cor
-        JMenu colorMenu = new JMenu("Cor da Legenda");
+        colorMenu = new JMenu();
         ButtonGroup colorGroup = new ButtonGroup();
 
-        JRadioButtonMenuItem whiteColor = new JRadioButtonMenuItem("Branco");
+        whiteColor = new JRadioButtonMenuItem();
         whiteColor.setSelected(subtitleManager.getSubtitleColor().equals(Color.WHITE));
         whiteColor.addActionListener(e -> {
             subtitleManager.setSubtitleColor(Color.WHITE);
-            System.out.println("Cor da legenda alterada para: Branco");
             repaint();
         });
         colorGroup.add(whiteColor);
         colorMenu.add(whiteColor);
 
-        JRadioButtonMenuItem yellowColor = new JRadioButtonMenuItem("Amarelo");
-        yellowColor.setSelected( subtitleManager.getSubtitleColor().equals(Color.YELLOW));
+        yellowColor = new JRadioButtonMenuItem();
+        yellowColor.setSelected(subtitleManager.getSubtitleColor().equals(Color.YELLOW));
         yellowColor.addActionListener(e -> {
             subtitleManager.setSubtitleColor(Color.YELLOW);
-            System.out.println("Cor da legenda alterada para: Amarelo");
             repaint();
         });
         colorGroup.add(yellowColor);
         colorMenu.add(yellowColor);
 
         subtitleSettingsMenu.add(colorMenu);
-
         contextMenu.add(subtitleSettingsMenu);
 
-        // NOVO: Menu de Performance
-        JMenu performanceMenu = new JMenu("Performance");
+        // Menu de Performance
+        performanceMenu = new JMenu();
 
-        JCheckBoxMenuItem hwAccelItem = new JCheckBoxMenuItem("Aceleração GPU");
+        hwAccelItem = new JCheckBoxMenuItem();
         hwAccelItem.setSelected(videoPlayer.hardwareAccelerationEnabled);
         hwAccelItem.addActionListener(e -> {
             videoPlayer.hardwareAccelerationEnabled = hwAccelItem.isSelected();
-            System.out.println("Aceleração GPU: " + (videoPlayer.hardwareAccelerationEnabled ? "Habilitada" : "Desabilitada"));
-
             if (grabber != null) {
                 JOptionPane.showMessageDialog(videoPlayer,
-                        "A aceleração GPU será aplicada ao recarregar o vídeo.",
-                        "Aviso", JOptionPane.INFORMATION_MESSAGE);
+                        I18N.get("menu.performance.hwaccel.restart"),
+                        I18N.get("dialog.warning"),
+                        JOptionPane.INFORMATION_MESSAGE);
             }
         });
-
         performanceMenu.add(hwAccelItem);
 
-// NOVO: Submenu para configurar quantidade de frames
         performanceMenu.addSeparator();
-        JMenu frameSkipMenu = new JMenu("Frames por Avanço");
+        frameSkipMenu = new JMenu();
 
         ButtonGroup frameSkipGroup = new ButtonGroup();
         int[] skipValues = {1, 2, 3, 5, 10, 15, 30};
@@ -1091,11 +942,8 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             final int value = skipValue;
             skipItem.addActionListener(e -> {
                 framesToSkip = value;
-                System.out.println("Frames por avanço alterado para: " + framesToSkip);
-
-                // Atualizar tooltip do botão nextFrame
                 if (nextFrameButton != null) {
-                    nextFrameButton.setToolTipText("Avançar " + framesToSkip + " frame" + (framesToSkip > 1 ? "s" : ""));
+                    nextFrameButton.setToolTipText(I18N.get("button.nextframe.tooltip") + " " + framesToSkip + " frame" + (framesToSkip > 1 ? "s" : ""));
                 }
             });
 
@@ -1104,37 +952,31 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         }
 
         performanceMenu.add(frameSkipMenu);
-
         contextMenu.add(performanceMenu);
 
-        // ========== NOVO: Menu de Captura ==========
-        JMenu captureMenu = new JMenu("Captura");
+        // Menu de Captura
+        captureMenu = new JMenu();
 
-        // Opção de captura silenciosa
-        JCheckBoxMenuItem silentCaptureItem = new JCheckBoxMenuItem("Captura Silenciosa");
+        silentCaptureItem = new JCheckBoxMenuItem();
         silentCaptureItem.setSelected(silentCapture);
         silentCaptureItem.addActionListener(e -> {
             silentCapture = silentCaptureItem.isSelected();
-            System.out.println("Captura silenciosa: " + (silentCapture ? "Ativada" : "Desativada"));
         });
         captureMenu.add(silentCaptureItem);
 
         captureMenu.addSeparator();
 
-        // Opção de definir pasta personalizada
-        JMenuItem selectFolderItem = new JMenuItem("Definir Pasta...");
-        selectFolderItem.addActionListener(e -> captureFrameManager.selectCaptureFolder(customCapturePath,videoFilePath, videoPlayer));
+        selectFolderItem = new JMenuItem();
+        selectFolderItem.addActionListener(e -> captureFrameManager.selectCaptureFolder(customCapturePath, videoFilePath, videoPlayer));
         captureMenu.add(selectFolderItem);
 
-        // Opção de resetar para pasta padrão
-        JMenuItem resetFolderItem = new JMenuItem("Usar Pasta do Vídeo");
-        resetFolderItem.addActionListener(e -> captureFrameManager.resetCaptureFolder(customCapturePath, videoPlayer));
+        resetFolderItem = new JMenuItem();
+        resetFolderItem.addActionListener(e -> captureFrameManager.resetCaptureFolder( videoPlayer));
         captureMenu.add(resetFolderItem);
 
         captureMenu.addSeparator();
 
-        // Mostrar pasta atual
-        JMenuItem showCurrentFolder = new JMenuItem("Pasta Atual");
+        showCurrentFolder = new JMenuItem();
         showCurrentFolder.addActionListener(e -> {
             String currentFolder;
             if (customCapturePath != null && !customCapturePath.isEmpty()) {
@@ -1143,35 +985,32 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 File videoFile = new File(videoFilePath);
                 currentFolder = videoFile.getParent();
             } else {
-                currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
+                currentFolder = I18N.get("menu.capture.nofolder");
             }
 
             JOptionPane.showMessageDialog(videoPlayer,
-                    "Pasta atual para capturas:\n" + currentFolder,
-                    "Pasta de Captura",
+                    I18N.get("menu.capture.currentfolder") + "\n" + currentFolder,
+                    I18N.get("menu.capture.title"),
                     JOptionPane.INFORMATION_MESSAGE);
         });
         captureMenu.add(showCurrentFolder);
 
         contextMenu.add(captureMenu);
-        // ========== FIM: Menu de Captura ==========
 
-        // ========== NOVO: Menu de Captura em Lote ==========
-        JMenu batchCaptureMenu = new JMenu("Captura em Lote");
+        // Menu de Captura em Lote
+        batchCaptureMenu = new JMenu();
 
-        // Intervalo de frames
-        JMenu intervalMenu = new JMenu("Intervalo de Captura");
+        intervalMenu = new JMenu();
         ButtonGroup intervalGroup = new ButtonGroup();
         int[] intervals = {2, 3, 5, 10, 15, 30, 60, 120};
 
         for (int interval : intervals) {
-            JRadioButtonMenuItem intervalItem = new JRadioButtonMenuItem("A cada " + interval + " frame" + (interval > 2 ? "s" : ""));
+            JRadioButtonMenuItem intervalItem = new JRadioButtonMenuItem(I18N.get("menu.batch.every") + " " + interval + " frame" + (interval > 2 ? "s" : ""));
             intervalItem.setSelected(interval == batchCaptureInterval);
 
             final int value = interval;
             intervalItem.addActionListener(e -> {
                 batchCaptureInterval = value;
-                System.out.println("Intervalo de captura em lote alterado para: " + batchCaptureInterval);
             });
 
             intervalGroup.add(intervalItem);
@@ -1179,23 +1018,19 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
         }
 
         batchCaptureMenu.add(intervalMenu);
-
         batchCaptureMenu.addSeparator();
 
-        // Definir pasta personalizada
-        JMenuItem selectBatchFolderItem = new JMenuItem("Definir Pasta...");
+        selectBatchFolderItem = new JMenuItem();
         selectBatchFolderItem.addActionListener(e -> captureFrameManager.selectBatchCaptureFolder(batchCapturePath, videoFilePath, videoPlayer));
         batchCaptureMenu.add(selectBatchFolderItem);
 
-        // Resetar para pasta padrão
-        JMenuItem resetBatchFolderItem = new JMenuItem("Usar Pasta do Vídeo");
-        resetBatchFolderItem.addActionListener(e -> captureFrameManager.resetBatchCaptureFolder(batchCapturePath, videoPlayer));
+        resetBatchFolderItem = new JMenuItem();
+        resetBatchFolderItem.addActionListener(e -> captureFrameManager.resetCaptureFolder(videoPlayer));
         batchCaptureMenu.add(resetBatchFolderItem);
 
         batchCaptureMenu.addSeparator();
 
-        // Mostrar pasta atual
-        JMenuItem showBatchFolder = new JMenuItem("Pasta Atual");
+        showBatchFolder = new JMenuItem();
         showBatchFolder.addActionListener(e -> {
             String currentFolder;
             if (batchCapturePath != null && !batchCapturePath.isEmpty()) {
@@ -1204,40 +1039,32 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 File videoFile = new File(videoFilePath);
                 currentFolder = videoFile.getParent();
             } else {
-                currentFolder = "Nenhuma pasta definida (vídeo não carregado)";
+                currentFolder = I18N.get("menu.batch.nofolder");
             }
 
             JOptionPane.showMessageDialog(videoPlayer,
-                    "Pasta atual para captura em lote:\n" + currentFolder,
-                    "Pasta de Captura em Lote",
+                    I18N.get("menu.batch.currentfolder") + "\n" + currentFolder,
+                    I18N.get("menu.batch.title"),
                     JOptionPane.INFORMATION_MESSAGE);
         });
         batchCaptureMenu.add(showBatchFolder);
 
         contextMenu.add(batchCaptureMenu);
-        // ========== FIM: Menu de Captura em Lote ==========
 
-        // ========== NOVO: Menu de Filtros (apenas para resoluções <= 1280x720) ==========
-        JMenu filtersMenu = new JMenu("Filtros");
-
-        // Ajuste de brilho
-        JMenuItem brightnessItem = new JMenuItem("Brilho...");
+        // Menu de Filtros
+        filtersMenu = new JMenu();
+        videoResolutionCheck( grabber);
+        brightnessItem = new JMenuItem();
         brightnessItem.addActionListener(e -> filtersManager.showBrightnessDialog(videoPlayer));
         filtersMenu.add(brightnessItem);
 
-        // TODO: Adicionar outros filtros depois
-        // JMenuItem contrastItem = new JMenuItem("Contraste...");
-        // JMenuItem gammaItem = new JMenuItem("Gamma...");
-        // JMenuItem saturationItem = new JMenuItem("Saturação...");
-
         filtersMenu.addSeparator();
 
-        // Resetar todos os filtros
-        JMenuItem resetFiltersItem = new JMenuItem("Resetar Filtros");
+        resetFiltersItem = new JMenuItem();
         resetFiltersItem.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(videoPlayer,
-                    "Deseja resetar todos os filtros aplicados?",
-                    "Confirmar Reset",
+                    I18N.get("menu.filters.reset.confirm"),
+                    I18N.get("dialog.confirm"),
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
@@ -1249,52 +1076,62 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
         filtersMenu.addSeparator();
 
-        // Mostrar filtros ativos
-        JMenuItem showFiltersItem = new JMenuItem("Filtros Ativos");
+        showFiltersItem = new JMenuItem();
+
+
+
         showFiltersItem.addActionListener(e -> {
             StringBuilder info = new StringBuilder();
-            info.append("Filtros atualmente aplicados:\n\n");
+            info.append(I18N.get("menu.filters.active.title")).append("\n\n");
 
             if (!filtersManager.isFiltersEnabled() || filtersManager.buildFilterString() == null) {
-                info.append("Nenhum filtro ativo");
+                info.append(I18N.get("menu.filters.active.none"));
             } else {
                 if (filtersManager.getBrightness() != 0.0) {
-                    info.append(String.format("• Brilho: %.2f\n", filtersManager.getBrightness()));
+                    info.append(String.format("• %s: %.2f\n", I18N.get("filter.brightness"), filtersManager.getBrightness()));
                 }
                 if (filtersManager.getContrast() != 1.0) {
-                    info.append(String.format("• Contraste: %.2f\n", filtersManager.getContrast()));
+                    info.append(String.format("• %s: %.2f\n", I18N.get("filter.contrast"), filtersManager.getContrast()));
                 }
                 if (filtersManager.getGamma() != 1.0) {
-                    info.append(String.format("• Gamma: %.2f\n",filtersManager.getGamma()));
+                    info.append(String.format("• %s: %.2f\n", I18N.get("filter.gamma"), filtersManager.getGamma()));
                 }
                 if (filtersManager.getSaturation() != 1.0) {
-                    info.append(String.format("• Saturação: %.2f\n", filtersManager.getSaturation()));
+                    info.append(String.format("• %s: %.2f\n", I18N.get("filter.saturation"), filtersManager.getSaturation()));
                 }
 
-                info.append("\nString FFmpeg:\n").append(filtersManager.buildFilterString());
+                info.append("\n").append(I18N.get("menu.filters.active.ffmpeg")).append(":\n").append(filtersManager.buildFilterString());
             }
 
             JOptionPane.showMessageDialog(videoPlayer,
                     info.toString(),
-                    "Filtros Ativos",
+                    I18N.get("menu.filters.active"),
                     JOptionPane.INFORMATION_MESSAGE);
         });
         filtersMenu.add(showFiltersItem);
 
-        // Adicionar menu de filtros ao contexto (será habilitado/desabilitado dinamicamente)
         contextMenu.add(filtersMenu);
-        // ========== FIM: Menu de Filtros ==========
 
+        // Tela cheia
+        fullscreenItem = new JCheckBoxMenuItem();
+        fullscreenItem.addActionListener(e -> {
+            videoPlayer.toggleFullScreen();
+        });
+        contextMenu.add(fullscreenItem);
 
-        // === Submenu: Playlist ===
-        JMenu playlistMenu = new JMenu("Playlist");
+        //Menu de mudança de idioma
+        getVideoLanguageMenu(contextMenu);
+
+        // Menu de Playlist
+        playlistMenu = new JMenu();
         playlistMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
-        JMenuItem openPlaylistItem = new JMenuItem("📋 Gerenciar Playlist...");
+        openPlaylistItem = new JMenuItem();
         openPlaylistItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
         openPlaylistItem.addActionListener(e -> videoPlayer.showPlaylistDialog());
 
-        JCheckBoxMenuItem autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", true);
+        autoPlayItem = new JCheckBoxMenuItem();
+        autoPlayItem.setSelected(true);
         autoPlayItem.addActionListener(e -> {
             autoPlayNext = autoPlayItem.isSelected();
         });
@@ -1305,46 +1142,15 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
         contextMenu.add(playlistMenu);
 
-        // Opção de tela cheia
-        JCheckBoxMenuItem fullscreenItem = new JCheckBoxMenuItem("Tela Cheia");
-        fullscreenItem.addActionListener(e -> {
-            videoPlayer.toggleFullScreen();
-        });
-        contextMenu.add(fullscreenItem);
-
-        // Atualizar estado ao abrir menu
+        //Atualizar estado ao abrir menu
         contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-                if (grabber == null) {
-                    JOptionPane.showMessageDialog(videoPlayer,
-                            "Nenhum vídeo carregado.\nAbra um vídeo primeiro.",
-                            "Aviso", JOptionPane.INFORMATION_MESSAGE);
-                    SwingUtilities.invokeLater(() -> contextMenu.setVisible(false));
-                    return;
-                }
-
-                updateContextMenus(audioMenu, subtitleMenu, videoPlayer, subtitleManager, totalAudioStreams, currentAudioStream, audioStreamNames, videoFilePath,ffmpegPath);
+                updateContextMenus(audioMenu, subtitleMenu, videoPlayer, subtitleManager, totalAudioStreams, currentAudioStream, audioStreamNames, videoFilePath, ffmpegPath);
                 GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                 fullscreenItem.setSelected(gd.getFullScreenWindow() == videoPlayer);
 
-                // Verificar resolução do vídeo e habilitar/desabilitar menu de filtros
-                int videoWidth = grabber.getImageWidth();
-                int videoHeight = grabber.getImageHeight();
-                boolean isHighResolution = (videoWidth > 1280 || videoHeight > 720);
-
-                if (isHighResolution) {
-                    filtersMenu.setEnabled(false);
-                    filtersMenu.setToolTipText(String.format(
-                            "Filtros desabilitados para vídeos com resolução superior a 1280x720 (Atual: %dx%d)",
-                            videoWidth, videoHeight
-                    ));
-                } else {
-                    filtersMenu.setEnabled(true);
-                    filtersMenu.setToolTipText(null);
-                }
 
                 subtitleMenu.setEnabled(true);
-                filtersMenu.setEnabled(true);
                 audioMenu.setEnabled(true);
                 captureMenu.setEnabled(true);
                 batchCaptureMenu.setEnabled(true);
@@ -1381,33 +1187,512 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 }
             }
         });
+
+        // IMPORTANTE: Atualizar textos pela primeira vez
+        updateVideoMenuTexts();
+
+        // IMPORTANTE: Registrar listener APÓS criar tudo
+        I18N.addLanguageChangeListener(this);
     }
+
+    private void videoResolutionCheck(FFmpegFrameGrabber grabber) {
+
+
+        // Verificar resolução do vídeo e habilitar/desabilitar menu de filtros
+        videoWidth = grabber.getImageWidth();
+        videoHeight = grabber.getImageHeight();
+        boolean isHighResolution = (videoWidth > 1280 || videoHeight > 720);
+
+        if (isHighResolution) {
+            System.out.println("-----------------------HIGHRESOLUTION");
+            filtersMenu.setEnabled(false);
+
+        } else {
+            filtersMenu.setEnabled(true);
+            filtersMenu.setToolTipText(null);
+        }
+    }
+
+    // Método para criar menu de idioma para VÍDEO
+    private JMenu getVideoLanguageMenu(JPopupMenu contextMenu) {
+        videoLanguageMenu = new JMenu();
+        videoLanguageMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        videoLanguageGroup = new ButtonGroup();
+
+        videoUsItem = new JRadioButtonMenuItem();
+        videoUsItem.addActionListener(e -> changeLanguage(Locale.of("en", "US")));
+
+        videoPtItem = new JRadioButtonMenuItem();
+        videoPtItem.addActionListener(e -> changeLanguage(Locale.of("pt", "BR")));
+
+        videoLanguageGroup.add(videoUsItem);
+        videoLanguageGroup.add(videoPtItem);
+
+        videoLanguageMenu.add(videoUsItem);
+        videoLanguageMenu.add(videoPtItem);
+        contextMenu.add(videoLanguageMenu);
+
+        // Atualizar estados iniciais
+        updateVideoLanguageMenuState();
+
+        return videoLanguageMenu;
+    }
+
+    // Método para criar menu de idioma para ÁUDIO
+    private JMenu getAudioLanguageMenu(JPopupMenu contextMenu) {
+        audioLanguageMenu = new JMenu();
+        audioLanguageMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        audioLanguageGroup = new ButtonGroup();
+
+        audioUsItem = new JRadioButtonMenuItem();
+        audioUsItem.addActionListener(e -> changeLanguage(Locale.of("en", "US")));
+
+        audioPtItem = new JRadioButtonMenuItem();
+        audioPtItem.addActionListener(e -> changeLanguage(Locale.of("pt", "BR")));
+
+        audioLanguageGroup.add(audioUsItem);
+        audioLanguageGroup.add(audioPtItem);
+
+        audioLanguageMenu.add(audioUsItem);
+        audioLanguageMenu.add(audioPtItem);
+        contextMenu.add(audioLanguageMenu);
+
+        // Atualizar estados iniciais
+        updateAudioLanguageMenuState();
+
+        return audioLanguageMenu;
+    }
+
+    // Atualizar estado do menu de idioma de VÍDEO (com JRadioButtonMenuItem)
+    private void updateVideoLanguageMenuState() {
+        if (videoUsItem == null || videoPtItem == null) {
+            return;
+        }
+
+        Locale currentLocale = I18N.getCurrentLocale();
+        String currentLang = currentLocale.getLanguage();
+
+        videoUsItem.setText(I18N.get("language.item1"));
+        videoPtItem.setText(I18N.get("language.item2"));
+
+        // Selecionar o idioma atual
+        if ("en".equals(currentLang)) {
+            videoUsItem.setSelected(true);
+        } else if ("pt".equals(currentLang)) {
+            videoPtItem.setSelected(true);
+        }
+    }
+
+    // Atualizar estado do menu de idioma de ÁUDIO (com JRadioButtonMenuItem)
+    private void updateAudioLanguageMenuState() {
+        if (audioUsItem == null || audioPtItem == null) {
+            return;
+        }
+
+        Locale currentLocale = I18N.getCurrentLocale();
+        String currentLang = currentLocale.getLanguage();
+
+        audioUsItem.setText(I18N.get("language.item1"));
+        audioPtItem.setText(I18N.get("language.item2"));
+
+        // Selecionar o idioma atual
+        if ("en".equals(currentLang)) {
+            audioUsItem.setSelected(true);
+        } else if ("pt".equals(currentLang)) {
+            audioPtItem.setSelected(true);
+        }
+    }
+
+    // Menu dinâmico (popup principal) com JRadioButtonMenuItem
+    private JMenu getMainLanguageMenu(JPopupMenu contextMenu) {
+
+        JMenu languageMenu = new JMenu(I18N.get("language.text"));
+        languageMenu.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        Locale currentLocale = I18N.getCurrentLocale();
+        String currentLang = currentLocale.getLanguage();
+
+        ButtonGroup languageGroup = new ButtonGroup();
+
+        JRadioButtonMenuItem usItem = new JRadioButtonMenuItem(I18N.get("language.item1"));
+        usItem.setSelected("en".equals(currentLang));
+        usItem.addActionListener(e -> changeLanguage(Locale.of("en", "US")));
+
+        JRadioButtonMenuItem ptItem = new JRadioButtonMenuItem(I18N.get("language.item2"));
+        ptItem.setSelected("pt".equals(currentLang));
+        ptItem.addActionListener(e -> changeLanguage(Locale.of("pt", "BR")));
+
+        languageGroup.add(usItem);
+        languageGroup.add(ptItem);
+
+        languageMenu.add(usItem);
+        languageMenu.add(ptItem);
+        contextMenu.add(languageMenu);
+        return languageMenu;
+    }
+
+    private void updateVideoMenuTexts() {
+        // Verificar se os componentes foram inicializados
+        if (audioMenu != null) {
+            audioMenu.setText(I18N.get("menu.audio"));
+        }
+
+        if (subtitleMenu != null) {
+            subtitleMenu.setText(I18N.get("menu.subtitle"));
+        }
+
+        if (noSubtitle != null) {
+            noSubtitle.setText(I18N.get("menu.subtitle.disabled"));
+        }
+
+        if (loadExternal != null) {
+            loadExternal.setText(I18N.get("menu.subtitle.loadexternal"));
+        }
+
+        if (subtitleSettingsMenu != null) {
+            subtitleSettingsMenu.setText(I18N.get("menu.subtitle.settings"));
+        }
+
+        if (sizeMenu != null) {
+            sizeMenu.setText(I18N.get("menu.subtitle.fontsize"));
+        }
+
+        if (colorMenu != null) {
+            colorMenu.setText(I18N.get("menu.subtitle.color"));
+        }
+
+        if (whiteColor != null) {
+            whiteColor.setText(I18N.get("color.white"));
+        }
+
+        if (yellowColor != null) {
+            yellowColor.setText(I18N.get("color.yellow"));
+        }
+
+        if (performanceMenu != null) {
+            performanceMenu.setText(I18N.get("menu.performance"));
+        }
+
+        if (hwAccelItem != null) {
+            hwAccelItem.setText(I18N.get("menu.performance.hwaccel"));
+        }
+
+        if (frameSkipMenu != null) {
+            frameSkipMenu.setText(I18N.get("menu.performance.frameskip"));
+        }
+
+        if (captureMenu != null) {
+            captureMenu.setText(I18N.get("menu.capture"));
+        }
+
+        if (silentCaptureItem != null) {
+            silentCaptureItem.setText(I18N.get("menu.capture.silent"));
+        }
+
+        if (selectFolderItem != null) {
+            selectFolderItem.setText(I18N.get("menu.capture.selectfolder"));
+        }
+
+        if (resetFolderItem != null) {
+            resetFolderItem.setText(I18N.get("menu.capture.resetfolder"));
+        }
+
+        if (showCurrentFolder != null) {
+            showCurrentFolder.setText(I18N.get("menu.capture.showcurrent"));
+        }
+
+        if (batchCaptureMenu != null) {
+            batchCaptureMenu.setText(I18N.get("menu.batch"));
+        }
+
+        if (intervalMenu != null) {
+            intervalMenu.setText(I18N.get("menu.batch.interval"));
+        }
+
+        if (selectBatchFolderItem != null) {
+            selectBatchFolderItem.setText(I18N.get("menu.batch.selectfolder"));
+        }
+
+        if (resetBatchFolderItem != null) {
+            resetBatchFolderItem.setText(I18N.get("menu.batch.resetfolder"));
+        }
+
+        if (showBatchFolder != null) {
+            showBatchFolder.setText(I18N.get("menu.batch.showcurrent"));
+        }
+
+        if (filtersMenu != null) {
+            filtersMenu.setText(I18N.get("menu.filters"));
+        }
+
+        if (brightnessItem != null) {
+            brightnessItem.setText(I18N.get("menu.filters.brightness"));
+        }
+
+        if (resetFiltersItem != null) {
+            resetFiltersItem.setText(I18N.get("menu.filters.reset"));
+        }
+
+        if (showFiltersItem != null) {
+            showFiltersItem.setText(I18N.get("menu.filters.active"));
+        }
+
+        if (fullscreenItem != null) {
+            fullscreenItem.setText(I18N.get("menu.fullscreen"));
+        }
+
+        if (playlistMenu != null) {
+            playlistMenu.setText(I18N.get("menu.playlist"));
+        }
+
+        if (openPlaylistItem != null) {
+            openPlaylistItem.setText(I18N.get("menu.playlist.manage"));
+        }
+
+        if (autoPlayItem != null) {
+            autoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
+        }
+
+        // Menu de idioma do vídeo
+        if (videoLanguageMenu != null) {
+            videoLanguageMenu.setText(I18N.get("language.text"));
+        }
+        if (videoUsItem != null) {
+            videoUsItem.setText(I18N.get("language.item1"));
+        }
+        if (videoPtItem != null) {
+            videoPtItem.setText(I18N.get("language.item2"));
+        }
+
+        // Textos do menu de vídeo (já existente)
+        if (audioMenu != null) {
+            audioMenu.setText(I18N.get("menu.audio"));
+        }
+
+        if(filtersMenu != null) {
+            filtersMenu.setToolTipText(String.format(
+                    I18N.get("video.highResolutionFilterBlock.toolTipText") + " %dx%d)",
+                    videoWidth, videoHeight
+            ));
+        }
+
+
+        updateAudioMenuTexts();
+        updateMainPopupTexts();
+
+    }
+
+    // Método específico para atualizar textos do menu de áudio
+    private void updateAudioMenuTexts() {
+        if (spectrumMenu != null) {
+            spectrumMenu.setText(I18N.get("audio.spectrum"));
+        }
+
+        if (spectrumLayoutMenu != null) {
+            spectrumLayoutMenu.setText(I18N.get("audio.spectrum.layout"));
+        }
+
+        if (linearLayoutMenuItem != null) {
+            linearLayoutMenuItem.setText(I18N.get("audio.spectrum.linear"));
+        }
+
+        if (circularLayoutMenuItem != null) {
+            circularLayoutMenuItem.setText(I18N.get("audio.spectrum.circular"));
+        }
+
+        if (waveLayoutMenuItem != null) {
+            waveLayoutMenuItem.setText(I18N.get("audio.spectrum.wave"));
+        }
+
+        if (colorModeMenu != null) {
+            colorModeMenu.setText(I18N.get("audio.spectrum.colormode"));
+        }
+
+        if (defaultColorItem != null) {
+            defaultColorItem.setText(I18N.get("audio.spectrum.color.default"));
+        }
+
+        if (coverColorItem != null) {
+            coverColorItem.setText(I18N.get("audio.spectrum.color.cover"));
+        }
+
+        if (customColorItem != null) {
+            customColorItem.setText(I18N.get("audio.spectrum.color.custom"));
+        }
+
+        if (synthwaveItem != null) {
+            synthwaveItem.setText(I18N.get("audio.spectrum.palette.synthwave"));
+        }
+
+        if (matrixItem != null) {
+            matrixItem.setText(I18N.get("audio.spectrum.palette.matrix"));
+        }
+
+        if (fireItem != null) {
+            fireItem.setText(I18N.get("audio.spectrum.palette.fire"));
+        }
+
+        if (iceItem != null) {
+            iceItem.setText(I18N.get("audio.spectrum.palette.ice"));
+        }
+
+        if (showSpectrumItem != null) {
+            showSpectrumItem.setText(I18N.get("audio.spectrum.show"));
+        }
+
+        if (showCoverItem != null) {
+            showCoverItem.setText(I18N.get("audio.spectrum.showcover"));
+        }
+
+        if (reflectionMenu != null) {
+            reflectionMenu.setText(I18N.get("audio.spectrum.reflection"));
+        }
+
+        if (enableReflectionItem != null) {
+            enableReflectionItem.setText(I18N.get("audio.spectrum.reflection.enable"));
+        }
+
+        if (reflectionHeightMenu != null) {
+            reflectionHeightMenu.setText(I18N.get("audio.spectrum.reflection.height"));
+        }
+
+        if (reflectionOpacityMenu != null) {
+            reflectionOpacityMenu.setText(I18N.get("audio.spectrum.reflection.opacity"));
+        }
+
+        if (audioMenu2 != null) {
+            audioMenu2.setText(I18N.get("audio.menu"));
+        }
+
+        if (enableNormalizationItem != null) {
+            enableNormalizationItem.setText(I18N.get("audio.normalization.enable"));
+        }
+
+        if (loudnessMenu != null) {
+            loudnessMenu.setText(I18N.get("audio.loudness"));
+        }
+
+        if (streamingItem != null) {
+            streamingItem.setText(I18N.get("audio.loudness.streaming"));
+            streamingItem.setToolTipText(I18N.get("audio.loudness.streaming.tooltip"));
+        }
+
+        if (quietItem != null) {
+            quietItem.setText(I18N.get("audio.loudness.quiet"));
+            quietItem.setToolTipText(I18N.get("audio.loudness.quiet.tooltip"));
+        }
+
+        if (broadcastItem != null) {
+            broadcastItem.setText(I18N.get("audio.loudness.broadcast"));
+            broadcastItem.setToolTipText(I18N.get("audio.loudness.broadcast.tooltip"));
+        }
+
+        if (cinemaItem != null) {
+            cinemaItem.setText(I18N.get("audio.loudness.cinema"));
+            cinemaItem.setToolTipText(I18N.get("audio.loudness.cinema.tooltip"));
+        }
+
+        if (loudItem != null) {
+            loudItem.setText(I18N.get("audio.loudness.loud"));
+            loudItem.setToolTipText(I18N.get("audio.loudness.loud.tooltip"));
+        }
+
+        if (customLoudnessItem != null) {
+            customLoudnessItem.setText(I18N.get("audio.loudness.custom"));
+        }
+
+        if (volumeGainMenu != null) {
+            volumeGainMenu.setText(I18N.get("audio.globalvolume"));
+        }
+
+        if (audioInfoItem != null) {
+            audioInfoItem.setText(I18N.get("audio.info"));
+        }
+
+        if (audioPlaylistMenu != null) {
+            audioPlaylistMenu.setText(I18N.get("menu.playlist"));
+        }
+
+        if (audioOpenPlaylistItem != null) {
+            audioOpenPlaylistItem.setText(I18N.get("menu.playlist.manage"));
+        }
+
+        if (audioAutoPlayItem != null) {
+            audioAutoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
+        }
+        // Menu de idioma do áudio
+        if (audioLanguageMenu != null) {
+            audioLanguageMenu.setText(I18N.get("language.text"));
+        }
+        if (audioUsItem != null) {
+            audioUsItem.setText(I18N.get("language.item1"));
+        }
+        if (audioPtItem != null) {
+            audioPtItem.setText(I18N.get("language.item2"));
+        }
+
+    }
+
+    // Método específico para atualizar textos do popup principal
+    private void updateMainPopupTexts() {
+        if (mainPlaylistMenu != null) {
+            mainPlaylistMenu.setText("\uD83D\uDCCB " + I18N.get("menu.playlist"));
+        }
+
+        if (mainOpenPlaylistItem != null) {
+            mainOpenPlaylistItem.setText(I18N.get("main.playlist.new"));
+        }
+
+        if (autoPlayItem != null) {
+            autoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
+        }
+
+        if (themeMenu != null) {
+            themeMenu.setText("\uD83C\uDFA8 " + I18N.get("theme.menu"));
+        }
+    }
+
+    private void changeLanguage(Locale locale) {
+        I18N.setLocale(locale);
+    }
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+        System.out.println("VideoPanel: Idioma mudou para: " + newLocale);
+        updateVideoMenuTexts();
+        revalidate();
+        repaint();
+    }
+
+    // Método de limpeza (chamar quando o painel for removido)
+    public void cleanup() {
+        I18N.removeLanguageChangeListener(this);
+    }
+
 
     // Diálogo para escolher cores personalizadas
     private void showCustomColorDialog() {
         Color bottom = JColorChooser.showDialog(this,
-                "Escolha a cor de baixo (Bottom)",
+                I18N.get("audio.CustomColorDialog.Bottom"),
                 new Color(0, 255, 0));
 
         if (bottom != null) {
             Color middle = JColorChooser.showDialog(this,
-                    "Escolha a cor do meio (Middle)",
+                    I18N.get("audio.CustomColorDialog.Middle"),
                     new Color(255, 255, 0));
 
             if (middle != null) {
                 Color top = JColorChooser.showDialog(this,
-                        "Escolha a cor de cima (Top)",
+                        I18N.get("audio.CustomColorDialog.Top"),
                         new Color(255, 0, 0));
 
                 if (top != null) {
                     setSpectrumCustomColors(bottom, middle, top);
                     setSpectrumColorMode(AudioSpectrumPanel.ColorMode.CUSTOM);
                     JOptionPane.showMessageDialog(this,
-                            "Cores personalizadas aplicadas!\n" +
-                                    "Bottom: RGB(" + bottom.getRed() + "," + bottom.getGreen() + "," + bottom.getBlue() + ")\n" +
-                                    "Middle: RGB(" + middle.getRed() + "," + middle.getGreen() + "," + middle.getBlue() + ")\n" +
-                                    "Top: RGB(" + top.getRed() + "," + top.getGreen() + "," + top.getBlue() + ")",
-                            "Cores Definidas",
+                            I18N.get("audio.CustomColorDialog.ConfirmationDialog.text"),
+                            I18N.get("audio.CustomColorDialog.ConfirmationDialog.title"),
                             JOptionPane.INFORMATION_MESSAGE);
                 }
             }
@@ -1417,10 +1702,10 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
     // Diálogo para loudness personalizado
     private void showCustomLoudnessDialog() {
         String input = JOptionPane.showInputDialog(this,
-                "Digite o target loudness em dBFS:\n" +
-                        "(Valores típicos: -30 a 0)\n" +
-                        "Mais negativo = mais silencioso\n" +
-                        "Menos negativo = mais alto",
+                   I18N.get("audio.CustomLoudnessDialog.Text1") + "\n" +
+                           I18N.get("audio.CustomLoudnessDialog.Text2") +"\n" +
+                           I18N.get("audio.CustomLoudnessDialog.Text3") + "\n" +
+                           I18N.get("audio.CustomLoudnessDialog.Text4") ,
                 "-18.0");
 
         if (input != null) {
@@ -1429,19 +1714,19 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 if (loudness >= -30.0f && loudness <= 0.0f) {
                     audioLoudnessManager.setTargetLoudness(loudness);
                     JOptionPane.showMessageDialog(this,
-                            "Target loudness definido: " + loudness + " dBFS",
-                            "Sucesso",
+                            I18N.get("audio.CustomLoudnessDialog.ConfirmationDialog.Text") + loudness + " dBFS",
+                            I18N.get("audio.CustomLoudnessDialog.ConfirmationDialog.Title"),
                             JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     JOptionPane.showMessageDialog(this,
-                            "Valor deve estar entre -30.0 e 0.0 dBFS",
-                            "Valor Inválido",
+                            I18N.get("audio.CustomLoudnessDialog.ConfirmationDialogError.Text"),
+                            I18N.get("audio.CustomLoudnessDialog.ConfirmationDialogError.Title"),
                             JOptionPane.WARNING_MESSAGE);
                 }
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this,
-                        "Valor inválido! Digite um número decimal (ex: -18.0)",
-                        "Erro",
+                        I18N.get("audio.CustomLoudnessDialog.ConfirmationDialogNumberFormatError.Text"),
+                        I18N.get("audio.CustomLoudnessDialog.ConfirmationDialogNumberFormatError.Title"),
                         JOptionPane.ERROR_MESSAGE);
             }
         }
@@ -1459,14 +1744,15 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
 
                 // Tentar obter nome da stream
                 String streamName = audioStreamNames.getOrDefault(i, "Faixa de Áudio " + (i + 1));
-
                 JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
-                item.setSelected(i == currentAudioStream);
+               // item.setSelected(i == currentAudioStream);
+                item.setSelected(i == videoPlayer.getCurrentAudioStream());
                 item.addActionListener(e -> videoPlayer.switchAudioStream(streamIndex));
                 audioMenu.add(item);
             }
         } else {
-            JMenuItem noAudio = new JMenuItem("Apenas uma faixa disponível");
+            noAudio = new JMenuItem();
+            noAudio.setText(I18N.get("audioChannelChange.OneOptionOnly"));
             noAudio.setEnabled(false);
             audioMenu.add(noAudio);
         }
@@ -1491,7 +1777,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
                 String streamName = subtitleManager.getSubtitleStreamNames().getOrDefault(i, "Legenda " + (i + 1));
                 JCheckBoxMenuItem item = new JCheckBoxMenuItem(streamName);
                 item.setSelected(i == subtitleManager.getCurrentSubtitleStream());
-                item.addActionListener(e -> subtitleManager.switchSubtitleStream(streamIndex, videoFilePath, videoPlayer,ffmpegPath));
+                item.addActionListener(e -> subtitleManager.switchSubtitleStream(streamIndex, videoFilePath, videoPlayer, ffmpegPath));
                 subtitleMenu.add(item);
             }
         }
@@ -1539,17 +1825,6 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             return;
         }
 
-//        if (currentImage == null) {
-//            // Mensagem padrão quando não há vídeo nem áudio
-//            g.setColor(Color.WHITE);
-//            g.setFont(new Font("Arial", Font.BOLD, 16));
-//            String msg = "Clique em 'Abrir Vídeo' para começar";
-//            FontMetrics fm = g.getFontMetrics();
-//            int x = (getWidth() - fm.stringWidth(msg)) / 2;
-//            int y = getHeight() / 2;
-//            g.drawString(msg, x, y);
-//            return;
-//        }
         if (currentImage == null) {
             // SUBSTITUIR: Desenhar imagem de fundo em vez de texto simples
             Graphics2D g2d = (Graphics2D) g;
@@ -1591,7 +1866,6 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
             subtitleManager.drawSubtitles(g2d, panelWidth, panelHeight, getHeight());
         }
     }
-
 
 
     public String getBatchCapturePath() {
@@ -1641,6 +1915,7 @@ private void setupContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabbe
     public void setAutoPlayNext(boolean autoPlayNext) {
         this.autoPlayNext = autoPlayNext;
     }
+
     public JCheckBoxMenuItem getAutoPlayItem() {
         return autoPlayItem;
     }

@@ -51,13 +51,6 @@ public class FiltersManager {
     }
 
     public void applyFilters(VideoPlayer videoPlayer) {
-        if (videoPlayer.grabber == null || videoPlayer.videoFilePath == null) {
-            JOptionPane.showMessageDialog(videoPlayer,
-                    "Nenhum vídeo carregado.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
-            return;
-        }
 
         // Apenas notificar que os filtros serão aplicados em tempo real
         String message;

@@ -3,6 +3,9 @@ package com.esl.videoplayer;
 
 import com.esl.videoplayer.Video.RecentFilesManager;
 import com.esl.videoplayer.Video.ScreenMode;
+import com.esl.videoplayer.Video.WindowsCommandLine;
+import com.esl.videoplayer.configuration.ConfigurationFrame;
+import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.theme.ThemeManager;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.Video.VideoPanel;
@@ -35,6 +38,11 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
@@ -44,7 +52,7 @@ import java.util.regex.Pattern;
 import static org.bytedeco.ffmpeg.global.avcodec.AV_CODEC_ID_AV1;
 
 
-public class VideoPlayer extends JFrame {
+public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
     private PlaylistManager playlistManager;
     private PlaylistDialog playlistDialog;
     private SubtitleManager subtitleManager;
@@ -69,6 +77,7 @@ public class VideoPlayer extends JFrame {
     private JButton openButton;
     private JButton volumeButton;
     private JButton loadPlaylistButton;
+    private JButton configButton;
 
     public FFmpegFrameGrabber grabber;
     public Java2DFrameConverter converter;
@@ -135,12 +144,25 @@ public class VideoPlayer extends JFrame {
     private int screenWidth;
     private int screenHeight;
 
+    private String openButtonToolTipText;
+
     public VideoPlayer() {
-        setTitle("Video Player - JavaCV");
+        setTitle("Media Player");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(false);
         setSize(700, 500);
         setLocationRelativeTo(null);
+
+        try {
+            List<Image> icons = new ArrayList<>();
+            icons.add(new ImageIcon(getClass().getResource("/img/icone16.png")).getImage());
+            icons.add(new ImageIcon(getClass().getResource("/img/icone32.png")).getImage());
+            icons.add(new ImageIcon(getClass().getResource("/img/icone64.png")).getImage());
+            icons.add(new ImageIcon(getClass().getResource("/img/icone128.png")).getImage());
+            setIconImages(icons); // Use setIconImages (plural)
+        } catch (NullPointerException e) {
+            System.err.println("Imagem do ícone não encontrada. Verifique o caminho.");
+        }
 
         captureFrameManager = new CaptureFrameManager();
         filtersManager = new FiltersManager();
@@ -159,6 +181,7 @@ public class VideoPlayer extends JFrame {
        // recentFilesManager.printDebugInfo();
         videoPanel.setRecentFilesManager(recentFilesManager);
         videoPanel.setThemeManager(themeManager);
+
         // CRIAR PLAYLIST MANAGER E DIALOG ANTES DE initComponents
         playlistManager = new PlaylistManager();
         // Criar o PlaylistDialog com callback
@@ -195,6 +218,12 @@ public class VideoPlayer extends JFrame {
 
         converter = new Java2DFrameConverter();
         initComponents();
+
+        // IMPORTANTE: Atualizar textos pela primeira vez
+        updateTexts();
+
+        // IMPORTANTE: Registrar listener APÓS criar todos os componentes
+        I18N.addLanguageChangeListener(this);
 
         // NOVO: Adicionar KeyEventDispatcher global para capturar teclas em qualquer lugar
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
@@ -260,14 +289,14 @@ public class VideoPlayer extends JFrame {
                     break;
                 case KeyEvent.VK_C:
                     if (grabber != null) {
-                        captureFrameManager.captureFrame(grabber, VideoPlayer.this, videoPanel,
+                        captureFrameManager.captureFrame(VideoPlayer.this, videoPanel,
                                videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture());
                         return true;
                     }
                     break;
                 case KeyEvent.VK_V:
                     if (grabber != null) {
-                        captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,batchCaptureThread,isPlaying,
+                        captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,isPlaying,
                         totalFrames, videoPanel.getBatchCaptureInterval(),frameRate, videoPanel.getBatchCapturePath(), videoFilePath);
                         return true;
                     }
@@ -300,10 +329,10 @@ public class VideoPlayer extends JFrame {
                 } else if (e.getKeyCode() == KeyEvent.VK_S) {
                     stopVideo();
                 } else if (e.getKeyCode() == KeyEvent.VK_C) {
-                    captureFrameManager.captureFrame(grabber, VideoPlayer.this, videoPanel,
+                    captureFrameManager.captureFrame( VideoPlayer.this, videoPanel,
                             videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture());
                 } else if (e.getKeyCode() == KeyEvent.VK_V) {
-                    captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,batchCaptureThread,isPlaying,
+                    captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this,isPlaying,
                             totalFrames, videoPanel.getBatchCaptureInterval(),frameRate, videoPanel.getBatchCapturePath(), videoFilePath);
                 }
             }
@@ -319,6 +348,15 @@ public class VideoPlayer extends JFrame {
                     }
                 }
                 videoPanel.requestFocusInWindow();
+            }
+        });
+
+
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                dispose(); // chama o dispose() sobrescrito acima
+                System.exit(0);
             }
         });
     }
@@ -609,6 +647,10 @@ public class VideoPlayer extends JFrame {
                 e.printStackTrace();
             }
         }, "VideoStateRestorer").start();
+    }
+
+    public int getCurrentAudioStream() {
+        return currentAudioStream;
     }
 
     private void loadVideoWithAudioStream(String filepath, int audioStream) {
@@ -908,167 +950,334 @@ public class VideoPlayer extends JFrame {
         }
     }
 
-    private void initComponents() {
-        setLayout(new BorderLayout());
 
-        add(videoPanel, BorderLayout.CENTER);
+//    private void initComponents() {
+//        setLayout(new BorderLayout());
+//
+//        add(videoPanel, BorderLayout.CENTER);
+//
+//        // Painel de controles
+//        controlPanel = new JPanel(new BorderLayout());
+//        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+//
+//        // Barra de progresso (PRIMEIRO - no topo)
+//        JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
+//        progressSlider = new JSlider(0, 100, 0);
+//        progressSlider.setEnabled(false);
+//        progressSlider.addChangeListener(e -> {
+//            if (progressSlider.getValueIsAdjusting() && grabber != null) {
+//                isSeeking = true;
+//            } else if (isSeeking) {
+//                seekToPosition(progressSlider.getValue());
+//                isSeeking = false;
+//            }
+//        });
+//
+//        Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
+//
+//        timeLabel = new JLabel("00:00");
+//        timeLabelPassed = new JLabel("00:00");
+//        timeLabel.setFont(mainFont);
+//        timeLabelPassed.setFont(mainFont);
+//
+//        progressPanel.add(timeLabelPassed, BorderLayout.WEST);
+//        progressPanel.add(progressSlider, BorderLayout.CENTER);
+//        progressPanel.add(timeLabel, BorderLayout.EAST);
+//
+//        // Botões (SEGUNDO - embaixo do progressPanel)
+//        JPanel buttonPanel = new JPanel(new BorderLayout());
+//
+//        // Painel central com controles principais (centralizado)
+//        JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 8));
+//
+//        openButton = new JButton("\uD83D\uDCC1");
+//        openButton.setPreferredSize(new Dimension(35, 35));
+//        //openButton.setToolTipText("Abrir nova midia");/////////////////////////////////////////////
+//        openButton.setToolTipText(I18N.get("openButton.ToolTipText"));
+//        openButton.addActionListener(e -> {
+//            try {
+//                openVideoOrAudio();
+//            } catch (Exception ex) {
+//                throw new RuntimeException(ex);
+//            }
+//        });
+//
+//        //loadPlaylist()
+//        loadPlaylistButton = new JButton("📂");
+//        loadPlaylistButton.setEnabled(true);
+//        loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
+//        loadPlaylistButton.setToolTipText("Abrir Playlist");
+//        loadPlaylistButton.addActionListener(e -> loadAndPlayPlaylist());
+//
+//        rewindButton = new JButton("⏪");
+//        rewindButton.setEnabled(false);
+//        rewindButton.setPreferredSize(new Dimension(35, 35));
+//        rewindButton.setToolTipText("Retroceder 10 segundos");
+//        rewindButton.addActionListener(e -> rewind10Seconds());
+//
+//        playPauseButton = new JButton("▶");
+//        playPauseButton.setEnabled(false);
+//        playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
+//        playPauseButton.setToolTipText("Tocar/Pausar");
+//        playPauseButton.addActionListener(e -> togglePlayPause());
+//
+//        forwardButton = new JButton("⏩");
+//        forwardButton.setEnabled(false);
+//        forwardButton.setPreferredSize(new Dimension(35, 35));
+//        forwardButton.setToolTipText("Avançar 10 segundos");
+//        forwardButton.addActionListener(e -> forward10Seconds());
+//
+//        stopButton = new JButton("■");
+//        stopButton.setEnabled(false);
+//        stopButton.setPreferredSize(new Dimension(35, 35));
+//        stopButton.setToolTipText("Parar");
+//        stopButton.addActionListener(e -> stopVideo());
+//
+//        nextFrameButton = new JButton("⏭");
+//        nextFrameButton.setEnabled(false);
+//        nextFrameButton.setPreferredSize(new Dimension(35, 35));
+//        nextFrameButton.setToolTipText("Avançar um frame");
+//        nextFrameButton.addActionListener(e -> nextFrame());
+//
+//        captureFrameButton = new JButton("📷");
+//        captureFrameButton.setEnabled(false);
+//        captureFrameButton.setPreferredSize(new Dimension(35, 35));
+//        captureFrameButton.setToolTipText("Capturar frame atual");
+//        captureFrameButton.addActionListener(e -> captureFrameManager.captureFrame(grabber, this, videoPanel,
+//              videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture()));
+//
+//        captureAllFrameButton = new JButton("\uD83D\uDCE6");
+//        captureAllFrameButton.setEnabled(false);
+//        captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
+//        captureAllFrameButton.setToolTipText("Capturar todos os frames");
+//        captureAllFrameButton.addActionListener(e -> captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this, batchCaptureThread,isPlaying,
+//        totalFrames,videoPanel.getBatchCaptureInterval(),frameRate,videoPanel.getBatchCapturePath(),videoFilePath));
+//
+//        configButton = new JButton("⚙");
+//        configButton.setPreferredSize(new Dimension(35, 35));
+//        configButton.setToolTipText("Configurações");
+//        configButton.addActionListener(e -> {
+//            ConfigurationFrame configFrame = new ConfigurationFrame();
+//            configFrame.setVisible(true);
+//        });
+//
+//        centerButtonPanel.add(openButton);
+//        centerButtonPanel.add(loadPlaylistButton);
+//        centerButtonPanel.add(rewindButton);
+//        centerButtonPanel.add(playPauseButton);
+//        centerButtonPanel.add(forwardButton);
+//        centerButtonPanel.add(stopButton);
+//        centerButtonPanel.add(nextFrameButton);
+//        centerButtonPanel.add(captureFrameButton);
+//        centerButtonPanel.add(captureAllFrameButton);
+//    //    centerButtonPanel.add(configButton); // Funcionando incorretamente
+//
+//        // Painel direito com controle de volume
+//        JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
+//
+//        volumeButton = new JButton("🔊");
+//        volumeButton.setEnabled(false);
+//        volumeButton.setPreferredSize(new Dimension(35, 35));
+//        volumeButton.setToolTipText("Ativar/Desativar Som");
+//
+//        // NOVO: Adicionar ActionListener para mute/unmute
+//        volumeButton.addActionListener(e -> toggleMute());
+//
+//        volumeLabel = new JLabel("100%");
+//        volumeSlider = new JSlider(0, 100, 100);
+//        volumeSlider.setPreferredSize(new Dimension(100, 20));
+//        volumeSlider.addChangeListener(e -> {
+//            // Só processar se não estiver mutado ou se o usuário estiver arrastando o slider
+//            if (volumeSlider.getValueIsAdjusting() || !isMuted) {
+//                int vol = volumeSlider.getValue();
+//                volume = vol / 100.0f;
+//                volumeLabel.setText(vol + "%");
+//
+//                // Se estava mutado e o usuário moveu o slider, desmutar
+//                if (isMuted && volumeSlider.getValueIsAdjusting() && vol > 0) {
+//                    isMuted = false;
+//                    updateVolumeButton();
+//                }
+//
+//                // Se o volume foi para 0, considerar como mutado
+//                if (vol == 0 && !isMuted) {
+//                    isMuted = true;
+//                    previousVolume = 0.5f; // Definir um volume padrão para unmute
+//                    updateVolumeButton();
+//                }
+//            }
+//        });
+//
+//        rightButtonPanel.add(volumeButton);
+//        rightButtonPanel.add(volumeLabel);
+//        rightButtonPanel.add(volumeSlider);
+//
+//        // Montar painel de botões
+//        buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
+//        buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
+//
+//        // Adicionar ao painel de controles
+//        controlPanel.add(progressPanel, BorderLayout.NORTH);
+//        controlPanel.add(buttonPanel, BorderLayout.SOUTH);
+//
+//        add(controlPanel, BorderLayout.SOUTH);
+//
+//
+//    }
+private void initComponents() {
+    setLayout(new BorderLayout());
 
-        // Painel de controles
-        controlPanel = new JPanel(new BorderLayout());
-        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    add(videoPanel, BorderLayout.CENTER);
 
-        // Barra de progresso (PRIMEIRO - no topo)
-        JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
-        progressSlider = new JSlider(0, 100, 0);
-        progressSlider.setEnabled(false);
-        progressSlider.addChangeListener(e -> {
-            if (progressSlider.getValueIsAdjusting() && grabber != null) {
-                isSeeking = true;
-            } else if (isSeeking) {
-                seekToPosition(progressSlider.getValue());
-                isSeeking = false;
+    // Painel de controles
+    controlPanel = new JPanel(new BorderLayout());
+    controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+    // Barra de progresso (PRIMEIRO - no topo)
+    JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
+    progressSlider = new JSlider(0, 100, 0);
+    progressSlider.setEnabled(false);
+    progressSlider.addChangeListener(e -> {
+        if (progressSlider.getValueIsAdjusting() && grabber != null) {
+            isSeeking = true;
+        } else if (isSeeking) {
+            seekToPosition(progressSlider.getValue());
+            isSeeking = false;
+        }
+    });
+
+    Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
+
+    timeLabel = new JLabel("00:00");
+    timeLabelPassed = new JLabel("00:00");
+    timeLabel.setFont(mainFont);
+    timeLabelPassed.setFont(mainFont);
+
+    progressPanel.add(timeLabelPassed, BorderLayout.WEST);
+    progressPanel.add(progressSlider, BorderLayout.CENTER);
+    progressPanel.add(timeLabel, BorderLayout.EAST);
+
+    // Botões (SEGUNDO - embaixo do progressPanel)
+    JPanel buttonPanel = new JPanel(new BorderLayout());
+
+    // Painel central com controles principais (centralizado)
+    JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 8));
+
+    openButton = new JButton("📁");
+    openButton.setPreferredSize(new Dimension(35, 35));
+    openButton.addActionListener(e -> {
+        try {
+            openVideoOrAudio();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    });
+
+    loadPlaylistButton = new JButton("📂");
+    loadPlaylistButton.setEnabled(true);
+    loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
+    loadPlaylistButton.addActionListener(e -> loadAndPlayPlaylist());
+
+    rewindButton = new JButton("⏪");
+    rewindButton.setEnabled(false);
+    rewindButton.setPreferredSize(new Dimension(35, 35));
+    rewindButton.addActionListener(e -> rewind10Seconds());
+
+    playPauseButton = new JButton("▶");
+    playPauseButton.setEnabled(false);
+    playPauseButton.setPreferredSize(new Dimension(50, 50));
+    playPauseButton.addActionListener(e -> togglePlayPause());
+
+    forwardButton = new JButton("⏩");
+    forwardButton.setEnabled(false);
+    forwardButton.setPreferredSize(new Dimension(35, 35));
+    forwardButton.addActionListener(e -> forward10Seconds());
+
+    stopButton = new JButton("■");
+    stopButton.setEnabled(false);
+    stopButton.setPreferredSize(new Dimension(35, 35));
+    stopButton.addActionListener(e -> stopVideo());
+
+    nextFrameButton = new JButton("⏭");
+    nextFrameButton.setEnabled(false);
+    nextFrameButton.setPreferredSize(new Dimension(35, 35));
+    nextFrameButton.addActionListener(e -> nextFrame());
+
+    captureFrameButton = new JButton("📷");
+    captureFrameButton.setEnabled(false);
+    captureFrameButton.setPreferredSize(new Dimension(35, 35));
+    captureFrameButton.addActionListener(e -> captureFrameManager.captureFrame( this, videoPanel,
+            videoPanel.getCustomCapturePath(), videoFilePath, currentFrame, videoPanel.isSilentCapture()));
+
+    captureAllFrameButton = new JButton("📦");
+    captureAllFrameButton.setEnabled(false);
+    captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
+    captureAllFrameButton.addActionListener(e -> captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this, isPlaying,
+            totalFrames, videoPanel.getBatchCaptureInterval(), frameRate, videoPanel.getBatchCapturePath(), videoFilePath));
+
+    configButton = new JButton("⚙");
+    configButton.setPreferredSize(new Dimension(35, 35));
+    configButton.addActionListener(e -> {
+        ConfigurationFrame configFrame = new ConfigurationFrame();
+        configFrame.setVisible(true);
+    });
+
+    volumeButton = new JButton("🔊");
+    volumeButton.setEnabled(false);
+    volumeButton.setPreferredSize(new Dimension(35, 35));
+    volumeButton.addActionListener(e -> toggleMute());
+
+    volumeLabel = new JLabel("100%");
+    volumeSlider = new JSlider(0, 100, 100);
+    volumeSlider.setPreferredSize(new Dimension(100, 20));
+    volumeSlider.addChangeListener(e -> {
+        if (volumeSlider.getValueIsAdjusting() || !isMuted) {
+            int vol = volumeSlider.getValue();
+            volume = vol / 100.0f;
+            volumeLabel.setText(vol + "%");
+
+            if (isMuted && volumeSlider.getValueIsAdjusting() && vol > 0) {
+                isMuted = false;
+                updateVolumeButton();
             }
-        });
 
-        Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
-
-        timeLabel = new JLabel("00:00");
-        timeLabelPassed = new JLabel("00:00");
-        timeLabel.setFont(mainFont);
-        timeLabelPassed.setFont(mainFont);
-
-        progressPanel.add(timeLabelPassed, BorderLayout.WEST);
-        progressPanel.add(progressSlider, BorderLayout.CENTER);
-        progressPanel.add(timeLabel, BorderLayout.EAST);
-
-        // Botões (SEGUNDO - embaixo do progressPanel)
-        JPanel buttonPanel = new JPanel(new BorderLayout());
-
-        // Painel central com controles principais (centralizado)
-        JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 8));
-
-        openButton = new JButton("\uD83D\uDCC1");
-        openButton.setPreferredSize(new Dimension(35, 35));
-        openButton.setToolTipText("Abrir nova midia");
-        openButton.addActionListener(e -> {
-            try {
-                openVideo();
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
+            if (vol == 0 && !isMuted) {
+                isMuted = true;
+                previousVolume = 0.5f;
+                updateVolumeButton();
             }
-        });
+        }
+    });
 
-        //loadPlaylist()
-        loadPlaylistButton = new JButton("📂");
-        loadPlaylistButton.setEnabled(true);
-        loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
-        loadPlaylistButton.setToolTipText("Abrir Playlist");
-        loadPlaylistButton.addActionListener(e -> loadAndPlayPlaylist());
+    centerButtonPanel.add(openButton);
+    centerButtonPanel.add(loadPlaylistButton);
+    centerButtonPanel.add(rewindButton);
+    centerButtonPanel.add(playPauseButton);
+    centerButtonPanel.add(forwardButton);
+    centerButtonPanel.add(stopButton);
+    centerButtonPanel.add(nextFrameButton);
+    centerButtonPanel.add(captureFrameButton);
+    centerButtonPanel.add(captureAllFrameButton);
 
-        rewindButton = new JButton("⏪");
-        rewindButton.setEnabled(false);
-        rewindButton.setPreferredSize(new Dimension(35, 35));
-        rewindButton.setToolTipText("Retroceder 10 segundos");
-        rewindButton.addActionListener(e -> rewind10Seconds());
+    // Painel direito com controle de volume
+    JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
 
-        playPauseButton = new JButton("▶");
-        playPauseButton.setEnabled(false);
-        playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
-        playPauseButton.setToolTipText("Tocar/Pausar");
-        playPauseButton.addActionListener(e -> togglePlayPause());
+    rightButtonPanel.add(volumeButton);
+    rightButtonPanel.add(volumeLabel);
+    rightButtonPanel.add(volumeSlider);
 
-        forwardButton = new JButton("⏩");
-        forwardButton.setEnabled(false);
-        forwardButton.setPreferredSize(new Dimension(35, 35));
-        forwardButton.setToolTipText("Avançar 10 segundos");
-        forwardButton.addActionListener(e -> forward10Seconds());
+    // Montar painel de botões
+    buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
+    buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
 
-        stopButton = new JButton("■");
-        stopButton.setEnabled(false);
-        stopButton.setPreferredSize(new Dimension(35, 35));
-        stopButton.setToolTipText("Parar");
-        stopButton.addActionListener(e -> stopVideo());
+    // Adicionar ao painel de controles
+    controlPanel.add(progressPanel, BorderLayout.NORTH);
+    controlPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        nextFrameButton = new JButton("⏭");
-        nextFrameButton.setEnabled(false);
-        nextFrameButton.setPreferredSize(new Dimension(35, 35));
-        nextFrameButton.setToolTipText("Avançar um frame");
-        nextFrameButton.addActionListener(e -> nextFrame());
+    add(controlPanel, BorderLayout.SOUTH);
+}
 
-        captureFrameButton = new JButton("📷");
-        captureFrameButton.setEnabled(false);
-        captureFrameButton.setPreferredSize(new Dimension(35, 35));
-        captureFrameButton.setToolTipText("Capturar frame atual");
-        captureFrameButton.addActionListener(e -> captureFrameManager.captureFrame(grabber, this, videoPanel,
-              videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture()));
 
-        captureAllFrameButton = new JButton("\uD83D\uDCE6");
-        captureAllFrameButton.setEnabled(false);
-        captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
-        captureAllFrameButton.setToolTipText("Capturar todos os frames");
-        captureAllFrameButton.addActionListener(e -> captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this, batchCaptureThread,isPlaying,
-        totalFrames,videoPanel.getBatchCaptureInterval(),frameRate,videoPanel.getBatchCapturePath(),videoFilePath));
-
-        centerButtonPanel.add(openButton);
-        centerButtonPanel.add(loadPlaylistButton);
-        centerButtonPanel.add(rewindButton);
-        centerButtonPanel.add(playPauseButton);
-        centerButtonPanel.add(forwardButton);
-        centerButtonPanel.add(stopButton);
-        centerButtonPanel.add(nextFrameButton);
-        centerButtonPanel.add(captureFrameButton);
-        centerButtonPanel.add(captureAllFrameButton);
-
-        // Painel direito com controle de volume
-        JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
-
-        volumeButton = new JButton("🔊");
-        volumeButton.setEnabled(false);
-        volumeButton.setPreferredSize(new Dimension(35, 35));
-        volumeButton.setToolTipText("Ativar/Desativar Som");
-
-        // NOVO: Adicionar ActionListener para mute/unmute
-        volumeButton.addActionListener(e -> toggleMute());
-
-        volumeLabel = new JLabel("100%");
-        volumeSlider = new JSlider(0, 100, 100);
-        volumeSlider.setPreferredSize(new Dimension(100, 20));
-        volumeSlider.addChangeListener(e -> {
-            // Só processar se não estiver mutado ou se o usuário estiver arrastando o slider
-            if (volumeSlider.getValueIsAdjusting() || !isMuted) {
-                int vol = volumeSlider.getValue();
-                volume = vol / 100.0f;
-                volumeLabel.setText(vol + "%");
-
-                // Se estava mutado e o usuário moveu o slider, desmutar
-                if (isMuted && volumeSlider.getValueIsAdjusting() && vol > 0) {
-                    isMuted = false;
-                    updateVolumeButton();
-                }
-
-                // Se o volume foi para 0, considerar como mutado
-                if (vol == 0 && !isMuted) {
-                    isMuted = true;
-                    previousVolume = 0.5f; // Definir um volume padrão para unmute
-                    updateVolumeButton();
-                }
-            }
-        });
-
-        rightButtonPanel.add(volumeButton);
-        rightButtonPanel.add(volumeLabel);
-        rightButtonPanel.add(volumeSlider);
-
-        // Montar painel de botões
-        buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
-        buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
-
-        // Adicionar ao painel de controles
-        controlPanel.add(progressPanel, BorderLayout.NORTH);
-        controlPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        add(controlPanel, BorderLayout.SOUTH);
-    }
 
     // NOVO: Método para alternar mute/unmute
     private void toggleMute() {
@@ -1097,16 +1306,8 @@ public class VideoPlayer extends JFrame {
     private void updateVolumeButton() {
         if (isMuted || volume == 0.0f) {
             volumeButton.setText("🔇"); // Mudo
-            volumeButton.setToolTipText("Ativar Som");
-        } else if (volume < 0.33f) {
-            volumeButton.setText("🔈"); // Volume baixo
-            volumeButton.setToolTipText("Desativar Som");
-        } else if (volume < 0.66f) {
-            volumeButton.setText("🔉"); // Volume médio
-            volumeButton.setToolTipText("Desativar Som");
-        } else {
+        }  else {
             volumeButton.setText("🔊"); // Volume alto
-            volumeButton.setToolTipText("Desativar Som");
         }
     }
 
@@ -1232,7 +1433,7 @@ public class VideoPlayer extends JFrame {
                                 SwingUtilities.invokeLater(() -> {
                                     int progress = (int) ((currentFrameIndex * 100) / totalFrames);
                                     progressBar.setValue(progress);
-                                    statusLabel.setText(String.format("Capturando: %d / %d frames (%.1f%%)",
+                                    statusLabel.setText(String.format("Capturando: %d / %d frames (%d%%)",
                                             currentCaptured, totalFramesToCapture, (progress)));
                                 });
                             }
@@ -1319,12 +1520,12 @@ public class VideoPlayer extends JFrame {
         progressDialog.setVisible(true);
     }
 
-    private void openVideo() {
+    private void openVideoOrAudio() {
         if (isPlaying) {
             pauseVideo();
         }
         JnaFileChooser fc = new JnaFileChooser();
-        fc.addFilter("Arquivos de Vídeo (*.mp4, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp");
+        fc.addFilter("Arquivos de Vídeo (*.mp4,*.m4s, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4","m4s", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp");
         fc.addFilter("Arquivos de Audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac )", "mp3", "flac", "wav", "ogg", "m4a", "aac");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
@@ -1461,6 +1662,7 @@ public class VideoPlayer extends JFrame {
                 // Detectar mapeamento ANTES de start() usando um grabber temporário
                 try {
                     FFmpegFrameGrabber tempGrabber = new FFmpegFrameGrabber(filepath);
+
                     tempGrabber.start();
                     tempGrabber.setOption("c:v", "libdav1d");
                     totalAudioStreams = tempGrabber.getAudioStream();
@@ -1474,12 +1676,25 @@ public class VideoPlayer extends JFrame {
                         detectAudioStreamNames(filepath);
                         System.out.println("Mapeamento de áudio detectado: " + logicalToPhysicalAudioStream);
                     }
+//                    // DEPOIS (correto):
+//                    tempGrabber.stop();
+//                    tempGrabber.release();
+//
+//                    detectAudioStreamNames(filepath); // detecta SEMPRE
+                    totalAudioStreams = logicalToPhysicalAudioStream.size(); // usa o que o ffprobe encontrou
+
+                    System.out.println("Total de faixas de áudio pré-detectadas: " + totalAudioStreams);
 
                     // Agora usar o mapeamento para stream lógica 0
                     if (!logicalToPhysicalAudioStream.isEmpty()) {
+
                         int physicalStream0 = logicalToPhysicalAudioStream.get(0);
                         System.out.println("Definindo stream lógica 0 (física " + physicalStream0 + ")");
                         grabber.setAudioStream(physicalStream0);
+
+//                        // DEPOIS (correto):
+//                        grabber.setAudioStream(0); // sempre começa no primeiro áudio lógico
+
                     } else {
                         System.out.println("Mapeamento vazio, não definindo stream de áudio");
                     }
@@ -2330,7 +2545,7 @@ public class VideoPlayer extends JFrame {
 
                     // ATIVAR MODO COVER_PALETTE se houver capa
                     videoPanel.setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);
-                    setTitle("Video Player - " + new File(filepath).getName());
+                    setTitle("Media Player - " + new File(filepath).getName());
 
                     videoPanel.setupAudioContextMenu(this, grabber);
 
@@ -2816,10 +3031,10 @@ public class VideoPlayer extends JFrame {
                         }
 
                         // Mostrar mensagem de sucesso
-                        String streamName = audioStreamNames.getOrDefault(currentAudioStream, "Faixa " + (currentAudioStream + 1));
+                        String streamName = audioStreamNames.getOrDefault(currentAudioStream, "channel "+ (currentAudioStream + 1));
                         JOptionPane.showMessageDialog(this,
-                                "Faixa de áudio alterada:\n" + streamName,
-                                "Áudio Alterado", JOptionPane.INFORMATION_MESSAGE);
+                                 I18N.get("audioChannelChange.dialog.message") + "\n" + streamName,
+                                I18N.get("audioChannelChange.dialog.title"), JOptionPane.INFORMATION_MESSAGE);
 
                     } catch (Exception e) {
                         System.err.println("Erro ao restaurar posição após troca de áudio: " + e.getMessage());
@@ -3177,6 +3392,7 @@ public class VideoPlayer extends JFrame {
             try {
                 grabber.stop();
                 grabber.release();
+                grabber = null;
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -3202,7 +3418,47 @@ public JFrame getFrame() {
 }
 
     public static void main(String[] args) {
+//        // DEBUG TEMPORÁRIO - remover depois
+//        String cleanArg;
+//        for (int i = 0; i < args.length; i++) {
+//            // Replace any character that is NOT a letter (a-z, A-Z),
+//            // a digit (0-9), or a whitespace character (\\s) with an empty string.
+//            cleanArg = args[i].replaceAll("[^a-zA-Z0-9\\s]", "");
+//            args[i] = cleanArg;
+//            System.out.println("Cleaned Argument " + i + ": " + args[i]);
+//        }
+//
+//
+//        StringBuilder debug = new StringBuilder("Args recebidos:\n");
+//        for (int i = 0; i < args.length; i++) {
+//            debug.append("ARG[").append(i).append("] = ").append(args[i]).append("\n");
+//            // Mostra os bytes de cada caractere
+//            debug.append("  bytes: ");
+//            try {
+//                byte[] bytes = args[i].getBytes("UTF-8");
+//                for (byte b : bytes) {
+//                    debug.append(String.format("%02X ", b));
+//                }
+//            } catch (Exception e) { }
+//            debug.append("\n");
+//
+//            // Replace any character that is NOT a letter (a-z, A-Z),
+//            // a digit (0-9), or a whitespace character (\\s) with an empty string.
+//            cleanArg = args[i].replaceAll("[^a-zA-Z0-9\\s]", "");
+//            args[i] = cleanArg;
+//            System.out.println("Cleaned Argument " + i + ": " + args[i]);
+//
+//            debug.append(args[i]);
+//            debug.append("\n");
+//        }
+//        JOptionPane.showMessageDialog(null, debug.toString());
+        // Substitui os args corrompidos pelos args nativos do Windows (UTF-16)
+        String[] safeArgs = getWindowsArgs();
+        if (safeArgs != null && safeArgs.length > 0) {
+            args = safeArgs;
+        }
 
+        final String[] finalArgs = args;
         SwingUtilities.invokeLater(() -> {
          ThemeManager themeManager2 = new ThemeManager();
 
@@ -3220,8 +3476,304 @@ public JFrame getFrame() {
             UIManager.put("Button.arc", 999);
 
             VideoPlayer player = new VideoPlayer();
-
             player.setVisible(true);
+
+//            // Se houver argumentos na linha de comando, abrir o arquivo
+//            if (args.length > 0) {
+//                String filePath = parseFilePath(args);
+//
+//
+//                if (filePath != null && !filePath.isEmpty()) {
+//                    // Tentar abrir o arquivo após a interface estar pronta
+//                    SwingUtilities.invokeLater(() -> {
+//                        try {
+//                            player.openFile(filePath);
+//                        } catch (Exception e) {
+//                            JOptionPane.showMessageDialog(player,
+//                                    "Erro ao abrir o arquivo: " + filePath + "\n" + e.getMessage(),
+//                                    "Erro ao Abrir Arquivo",
+//                                    JOptionPane.ERROR_MESSAGE);
+//                            e.printStackTrace();
+//                        }
+//                    });
+//                }
+//            }
+            if (finalArgs.length > 0) {
+                try {
+                    String filePath = sanitizeFilePath(finalArgs[0]);
+                    player.openFile(filePath);
+                } catch (Exception e) {
+                    JOptionPane.showMessageDialog(player,
+                            "O programa não suporta abrir arquivos com caracteres especiais pelo duplo clique do windows:\n" +
+                                    "Altere o nome do arquivo ou abra o arquivo pelo programa ",
+                            "Erro ao Abrir Arquivo",
+                            JOptionPane.ERROR_MESSAGE);
+                    e.printStackTrace();
+                }
+            }
         });
     }
+    /**
+     * Divide a linha de comando respeitando aspas e espaços.
+     */
+    private static List<String> splitCommandLine(String cmdLine) {
+        List<String> args = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (char c : cmdLine.toCharArray()) {
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ' ' && !inQuotes) {
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(c);
+            }
+        }
+
+        if (current.length() > 0) {
+            args.add(current.toString());
+        }
+
+        return args;
+    }
+    private static String[] getWindowsArgs() {
+        try {
+            // Lê a linha de comando do processo atual via ProcessHandle
+            String commandLine = ProcessHandle.current()
+                    .info()
+                    .commandLine()
+                    .orElse(null);
+
+            if (commandLine == null) return null;
+
+            List<String> argList = splitCommandLine(commandLine);
+
+            // Remove o executável (primeiro elemento)
+            if (argList.size() > 1) {
+                return argList.subList(1, argList.size()).toArray(new String[0]);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+    /**
+     * Sanitiza o caminho do arquivo para lidar com caracteres especiais,
+     * emojis, caracteres Unicode e outros casos problemáticos.
+     */
+    private static String sanitizeFilePath(String filePath) {
+        if (filePath == null || filePath.isEmpty()) {
+            return filePath;
+        }
+
+        try {
+            // 1. Normaliza o Unicode (NFC = forma mais compatível)
+            // Resolve casos como letras acentuadas em formas decompostas
+            String normalized = Normalizer.normalize(filePath, Normalizer.Form.NFC);
+
+            // 2. Converte para Path nativo do sistema operacional
+            // O java.nio lida com Unicode melhor que java.io.File
+            Path path = Paths.get(normalized);
+
+            // 3. Converte para caminho absoluto e resolve ".." e "."
+            Path absolutePath = path.toAbsolutePath().normalize();
+
+            // 4. Retorna como string usando o separador nativo do SO
+            return absolutePath.toString();
+
+        } catch (InvalidPathException e) {
+            // Se ainda falhar, tenta uma limpeza mais agressiva
+            return fallbackSanitize(filePath);
+        }
+    }
+
+    /**
+     * Limpeza mais agressiva como último recurso.
+     * Cria um arquivo temporário com nome seguro apontando para o original.
+     */
+    private static String fallbackSanitize(String filePath) {
+        try {
+            // Extrai só o diretório pai e tenta acessar via listagem
+            // em vez de usar o nome diretamente
+            File originalFile = new File(filePath);
+            File parentDir = originalFile.getParentFile();
+
+            if (parentDir != null && parentDir.exists()) {
+                String originalName = originalFile.getName();
+
+                // Percorre os arquivos do diretório comparando por nome
+                File[] files = parentDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.getName().equals(originalName)) {
+                            return f.getAbsolutePath();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return filePath; // retorna original se tudo falhar
+    }
+    /**
+     * Analisa os argumentos da linha de comando para obter o caminho do arquivo.
+     * Lida com caminhos com espaços que podem ser divididos em múltiplos args.
+     */
+    private static String parseFilePath(String[] args) {
+        if (args.length == 0) {
+            return null;
+        }
+        String[] recodedArgs = new String[args.length];
+        for (int i = 0; i < args.length; i++) {
+            try {
+                // Recodifica de ISO-8859-1 (como o Windows entrega) para UTF-8
+                recodedArgs[i] = new String(args[i].getBytes("ISO-8859-1"), "UTF-8");
+            } catch (Exception e) {
+                recodedArgs[i] = args[i]; // fallback para o original
+            }
+        }
+
+        // Usar recodedArgs no lugar de args daqui em diante
+        if (recodedArgs.length == 1) return recodedArgs[0];
+
+        for (String arg : recodedArgs) {
+            File file = new File(arg);
+            if (file.exists() && isMediaFile(file)) return arg;
+        }
+        // Se for apenas um argumento, retornar diretamente
+        if (args.length == 1) {
+            return args[0];
+        }
+
+        // Se houver múltiplos argumentos, pode ser um caminho com espaços
+        // Tentar juntar os argumentos e verificar se forma um caminho válido
+        StringBuilder fullPath = new StringBuilder();
+
+        // Primeiro, tentar cada argumento individualmente
+        for (String arg : args) {
+            File file = new File(arg);
+            if (file.exists() && isMediaFile(file)) {
+                return arg;
+            }
+        }
+
+        // Se nenhum argumento individual for válido, tentar combinar
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) {
+                fullPath.append(" ");
+            }
+            fullPath.append(args[i]);
+
+            // Testar se o caminho combinado até agora é válido
+            File file = new File(fullPath.toString());
+            if (file.exists() && isMediaFile(file)) {
+                return fullPath.toString();
+            }
+        }
+
+        // Se nada funcionou, retornar o primeiro argumento
+        return args[0];
+    }
+
+
+    /**
+     * Verifica se o arquivo é um arquivo de mídia suportado
+     */
+    private static boolean isMediaFile(File file) {
+        if (!file.isFile()) {
+            return false;
+        }
+
+        String name = file.getName().toLowerCase();
+        String[] supportedFormats = {
+                // Vídeo
+                ".mp4", ".avi", ".mkv", ".mov", ".flv", ".webm",
+                ".gif", ".wmv", ".3gp",
+                // Áudio
+                ".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"
+        };
+
+        for (String format : supportedFormats) {
+            if (name.endsWith(format)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+
+
+
+    /**
+     * Método para abrir um arquivo de vídeo/áudio programaticamente.
+     */
+    private void openFile(String filePath) throws Exception {
+//        File file = new File(filePath);
+       // Path path = Paths.get(filePath);
+        Path path = Paths.get(filePath).toAbsolutePath().normalize();
+        if (!Files.exists(path)) {
+            throw new Exception("O arquivo não existe: " + filePath);
+        }
+
+        if (!isMediaFile(path.toFile())) {
+            throw new Exception("Formato de arquivo não suportado: " + filePath);
+        }
+
+        if (filePath.endsWith("mp3")
+                || filePath.endsWith("flac")
+                || filePath.endsWith("wav")
+                || filePath.endsWith("ogg")
+                || filePath.endsWith("m4a")
+                || filePath.endsWith("aac")) {
+            loadAudio(filePath);
+        } else {
+            loadVideo(filePath);
+        }
+        System.out.println("Abrindo arquivo: " + filePath);
+
+    }
+    private static boolean arquivoExiste(String caminho) {
+        try {
+            Path path = Paths.get(caminho);
+            return Files.exists(path);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    // Método para atualizar todos os textos da interface
+    private void updateTexts() {
+
+        // Atualizar tooltips dos botões
+        openButton.setToolTipText(I18N.get("button.open.tooltip"));
+        loadPlaylistButton.setToolTipText(I18N.get("button.playlist.tooltip"));
+        rewindButton.setToolTipText(I18N.get("button.rewind.tooltip"));
+        playPauseButton.setToolTipText(I18N.get("button.playpause.tooltip"));
+        forwardButton.setToolTipText(I18N.get("button.forward.tooltip"));
+        stopButton.setToolTipText(I18N.get("button.stop.tooltip"));
+        // Considerar o número de frames configurado
+        int frames = videoPanel != null ? videoPanel.getFramesToSkip() : 1;
+        nextFrameButton.setToolTipText(I18N.get("button.nextframe.tooltip") + " " + frames + " frame" + (frames > 1 ? "s" : ""));
+        captureFrameButton.setToolTipText(I18N.get("button.capture.tooltip"));
+        captureAllFrameButton.setToolTipText(I18N.get("button.captureall.tooltip"));
+        configButton.setToolTipText(I18N.get("button.config.tooltip"));
+        volumeButton.setToolTipText(I18N.get("button.volume.tooltip"));
+
+    }
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+        System.out.println("VideoPlayer: Idioma mudou para: " + newLocale);
+        updateTexts();
+        revalidate();
+        repaint();
+    }
+
 }
