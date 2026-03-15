@@ -4,6 +4,7 @@ import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.capture.CaptureFrameManager;
+import com.esl.videoplayer.configuration.ConfigManager;
 import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.subtitle.SubtitleManager;
@@ -36,6 +37,7 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     private SubtitleManager subtitleManager;
     private AudioLoudnessManager audioLoudnessManager;
     private BackgroundImageLoader backgroundImageLoader;
+    private ConfigManager configManager;
 
     // Referências aos menus e itens que precisam ser traduzidos
     private JMenu audioMenu;
@@ -46,16 +48,6 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     private JMenu batchCaptureMenu;
     private JMenu filtersMenu;
     private JMenu playlistMenu;
-
-//    // Menu de idioma para vídeo
-//    private JMenu videoLanguageMenu;
-//    private JMenuItem videoUsItem;
-//    private JMenuItem videoPtItem;
-//
-//    // Menu de idioma para áudio
-//    private JMenu audioLanguageMenu;
-//    private JMenuItem audioUsItem;
-//    private JMenuItem audioPtItem;
 
 
     // Menu de idioma para vídeo
@@ -147,9 +139,12 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     public VideoPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager, VideoPlayer videoPlayer, AudioLoudnessManager audioLoudnessManager) {
 
         this.subtitleManager = subtitleManager;
+
         this.audioLoudnessManager = audioLoudnessManager;
         backgroundImageLoader = new BackgroundImageLoader();
-
+        configManager = new ConfigManager();
+        subtitleManager.setBaseSubtitleFontSize(configManager.getSavedSubtitleSize());
+        subtitleManager.setSubtitleColor(configManager.getSavedSubtitleColor());
         setBackground(Color.BLACK);
         setDoubleBuffered(true);
 
@@ -182,6 +177,9 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
                 }
             }
         });
+
+        Locale savedLocale = configManager.getSavedLocale(); // "en_US" por padrão
+        I18N.setLocale(savedLocale);
 
     }
 
@@ -875,11 +873,14 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
         ButtonGroup sizeGroup = new ButtonGroup();
 
         for (int size : sizes) {
+            int savedSize = configManager.getSavedSubtitleSize();
+
             JRadioButtonMenuItem sizeItem = new JRadioButtonMenuItem(size + "px");
-            sizeItem.setSelected(size == subtitleManager.getBaseSubtitleFontSize());
+            sizeItem.setSelected(size == savedSize);
             sizeItem.addActionListener(e -> {
                 subtitleManager.setBaseSubtitleFontSize(size);
                 System.out.println("Tamanho base da legenda alterado para: " + size);
+                configManager.saveSubtitleSize(size);
                 repaint();
             });
             sizeGroup.add(sizeItem);
@@ -887,24 +888,26 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
         }
 
         subtitleSettingsMenu.add(sizeMenu);
-
+        Color savedColor = configManager.getSavedSubtitleColor();
         // Submenu de cor
         colorMenu = new JMenu();
         ButtonGroup colorGroup = new ButtonGroup();
 
         whiteColor = new JRadioButtonMenuItem();
-        whiteColor.setSelected(subtitleManager.getSubtitleColor().equals(Color.WHITE));
+        whiteColor.setSelected(savedColor.equals(Color.WHITE));
         whiteColor.addActionListener(e -> {
             subtitleManager.setSubtitleColor(Color.WHITE);
+            configManager.saveSubtitleColor(Color.WHITE);
             repaint();
         });
         colorGroup.add(whiteColor);
         colorMenu.add(whiteColor);
 
         yellowColor = new JRadioButtonMenuItem();
-        yellowColor.setSelected(subtitleManager.getSubtitleColor().equals(Color.YELLOW));
+        yellowColor.setSelected(savedColor.equals(Color.YELLOW));
         yellowColor.addActionListener(e -> {
             subtitleManager.setSubtitleColor(Color.YELLOW);
+            configManager.saveSubtitleColor(Color.YELLOW);
             repaint();
         });
         colorGroup.add(yellowColor);
@@ -958,9 +961,10 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
         captureMenu = new JMenu();
 
         silentCaptureItem = new JCheckBoxMenuItem();
-        silentCaptureItem.setSelected(silentCapture);
+        silentCaptureItem.setSelected(configManager.isSilentCapture());
         silentCaptureItem.addActionListener(e -> {
             silentCapture = silentCaptureItem.isSelected();
+            configManager.saveSilentCapture(silentCapture);
         });
         captureMenu.add(silentCaptureItem);
 
@@ -1656,6 +1660,8 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
 
     private void changeLanguage(Locale locale) {
         I18N.setLocale(locale);
+        configManager.saveLocale(locale);
+
     }
     @Override
     public void onLanguageChanged(Locale newLocale) {
@@ -1893,7 +1899,7 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     }
 
     public boolean isSilentCapture() {
-        return silentCapture;
+        return configManager.isSilentCapture();
     }
 
     public void setSilentCapture(boolean silentCapture) {

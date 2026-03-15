@@ -4,6 +4,7 @@ package com.esl.videoplayer;
 import com.esl.videoplayer.Video.RecentFilesManager;
 import com.esl.videoplayer.Video.ScreenMode;
 import com.esl.videoplayer.Video.WindowsCommandLine;
+import com.esl.videoplayer.configuration.ConfigManager;
 import com.esl.videoplayer.configuration.ConfigurationFrame;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.theme.ThemeManager;
@@ -64,6 +65,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
     private ScreenMode screenMode;
     private RecentFilesManager recentFilesManager;
     private ThemeManager themeManager;
+    private ConfigManager configManager;
 
     public VideoPanel videoPanel;
     private JPanel controlPanel;
@@ -176,6 +178,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
         videoPanel = new VideoPanel(grabber, subtitleManager, this,audioLoudnessManager);
         recentFilesManager = new RecentFilesManager();
         themeManager = new ThemeManager();
+        configManager = new ConfigManager();
 
         // DEBUG: Verificar estado inicial
        // recentFilesManager.printDebugInfo();
@@ -1222,6 +1225,8 @@ private void initComponents() {
         configFrame.setVisible(true);
     });
 
+
+
     volumeButton = new JButton("🔊");
     volumeButton.setEnabled(false);
     volumeButton.setPreferredSize(new Dimension(35, 35));
@@ -1246,9 +1251,17 @@ private void initComponents() {
                 previousVolume = 0.5f;
                 updateVolumeButton();
             }
+            configManager.saveVolume(vol);
         }
-    });
 
+    });
+    int savedVolume = configManager.getSavedVolume();
+    volumeSlider.setValue(savedVolume);
+    volume = savedVolume / 100.0f;
+    volumeLabel.setText(savedVolume + "%");
+
+    boolean savedMuted = configManager.isSavedMuted();
+    if (savedMuted) toggleMute();
     centerButtonPanel.add(openButton);
     centerButtonPanel.add(loadPlaylistButton);
     centerButtonPanel.add(rewindButton);
@@ -1289,6 +1302,7 @@ private void initComponents() {
             volumeSlider.setValue(volumePercent);
             volumeLabel.setText(volumePercent + "%");
             System.out.println("Som ativado - Volume restaurado para: " + volumePercent + "%");
+            configManager.saveMuted(isMuted);
         } else {
             // Mutar - salvar volume atual e zerar
             isMuted = true;
@@ -1297,6 +1311,7 @@ private void initComponents() {
             volumeSlider.setValue(0);
             volumeLabel.setText("0%");
             System.out.println("Som desativado - Volume anterior salvo: " + (int) (previousVolume * 100) + "%");
+            configManager.saveMuted(isMuted);
         }
 
         updateVolumeButton();
