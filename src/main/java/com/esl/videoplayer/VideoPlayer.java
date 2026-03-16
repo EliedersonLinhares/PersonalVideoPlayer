@@ -6,6 +6,7 @@ import com.esl.videoplayer.Video.ScreenMode;
 import com.esl.videoplayer.Video.WindowsCommandLine;
 import com.esl.videoplayer.configuration.ConfigManager;
 import com.esl.videoplayer.configuration.ConfigurationFrame;
+import com.esl.videoplayer.configuration.VideoProgressManager;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.theme.ThemeManager;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
@@ -66,6 +67,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
     private RecentFilesManager recentFilesManager;
     private ThemeManager themeManager;
     private ConfigManager configManager;
+    private VideoProgressManager videoProgressManager;
 
     public VideoPanel videoPanel;
     private JPanel controlPanel;
@@ -179,6 +181,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
         recentFilesManager = new RecentFilesManager();
         themeManager = new ThemeManager();
         configManager = new ConfigManager();
+        videoProgressManager = new VideoProgressManager();
 
         // DEBUG: Verificar estado inicial
        // recentFilesManager.printDebugInfo();
@@ -358,6 +361,10 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                // Em windowClosing / dispose
+                if (videoFilePath != null && grabber != null) {
+                    videoProgressManager.saveProgress(videoFilePath, currentFrame, totalFrames);
+                }
                 dispose(); // chama o dispose() sobrescrito acima
                 System.exit(0);
             }
@@ -625,6 +632,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
                                     try {
                                         Thread.sleep(300); // Delay para estabilizar
                                         SwingUtilities.invokeLater(() -> {
+
                                             playVideoOrAudio();
                                             System.out.println("Reprodução retomada");
                                         });
@@ -1888,6 +1896,22 @@ private void initComponents() {
                             filtersManager,videoFilePath, grabber, nextFrameButton, totalAudioStreams,
                             currentAudioStream, audioStreamNames, ffmpegPath);
 
+
+                    // Só para vídeo (não áudio)
+                    long resumeFrame = videoProgressManager.checkAndPromptResume(filepath, totalFrames);
+
+                    if (resumeFrame > 0) {
+                        try {
+                            grabber.setFrameNumber((int) resumeFrame);
+                        } catch (FFmpegFrameGrabber.Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                        currentFrame = resumeFrame;
+                        int progress = (int) ((resumeFrame * 100) / totalFrames);
+                        progressSlider.setValue(progress);
+                        updateTimeLabel();
+                    }
+
                     playVideoOrAudio();
 
                     System.out.println("25. UI HABILITADA - Pronto para reproduzir!");
@@ -2301,6 +2325,12 @@ private void initComponents() {
                                 totalRenderTime = 0;
                                 statsCounter = 0;
                             }
+
+                            // Dentro do loop de reprodução, a cada N frames
+                            if (currentFrame % (int)(frameRate * 30) == 0) {
+                                videoProgressManager.saveProgress(videoFilePath, currentFrame, totalFrames);
+                            }
+
 
                             currentFrame++;
                             frameCount++;
@@ -3236,6 +3266,9 @@ private void initComponents() {
         isStopped = false; // NÃO marcar como stopped, apenas pausado
         playPauseButton.setText("▶");
 
+        // Em pauseVideo() e stopVideo()
+        videoProgressManager.saveProgress(videoFilePath, currentFrame, totalFrames);
+
         if (audioLine != null && audioLine.isRunning()) {
             audioLine.stop();
             audioLine.flush();
@@ -3267,6 +3300,8 @@ private void initComponents() {
         isPlaying = false;
         isStopped = true;
         playPauseButton.setText("▶");
+        // Em pauseVideo() e stopVideo()
+        videoProgressManager.saveProgress(videoFilePath, currentFrame, totalFrames);
 
         if (audioLine != null && audioLine.isRunning()) {
             audioLine.stop();

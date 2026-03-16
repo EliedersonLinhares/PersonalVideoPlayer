@@ -8,8 +8,7 @@ import java.util.Map;
 
 /**
  * Gerencia as configurações do aplicativo.
- * Salva e carrega preferências do usuário em arquivo .properties,
- * seguindo o mesmo padrão do ThemeManager.
+ * Salva e carrega preferências do usuário em arquivo .properties
  */
 public class ConfigManager {
 
@@ -19,9 +18,6 @@ public class ConfigManager {
     // Chaves de configuração disponíveis
     public static final String KEY_VOLUME        = "volume";
     public static final String KEY_MUTED         = "muted";
-    // Para adicionar novas configurações, basta declarar novas constantes aqui:
-    // public static final String KEY_LAST_PATH  = "last_open_path";
-    // public static final String KEY_SUBTITLES  = "subtitles_enabled";
     public static final String KEY_LANGUAGE = "language";
     public static final String KEY_SILENTCAPTURE = "silentcapture";
     public static final String KEY_SUBTITLE_SIZE     = "subtitle_size";     // tamanho em px
@@ -36,9 +32,7 @@ public class ConfigManager {
         DEFAULTS.put(KEY_SILENTCAPTURE, "false");
         DEFAULTS.put(KEY_SUBTITLE_SIZE,  "24");
         DEFAULTS.put(KEY_SUBTITLE_COLOR, String.valueOf(Color.WHITE.getRGB())); // -1 = branco opaco
-        // Adicione novos defaults aqui conforme novas chaves forem criadas:
-        // DEFAULTS.put(KEY_LAST_PATH, "");
-        // DEFAULTS.put(KEY_SUBTITLES, "false");
+
     }
 
     private final File configFile;
