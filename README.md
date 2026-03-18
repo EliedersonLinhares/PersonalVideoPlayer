@@ -29,6 +29,10 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 📃 Add playlist system with work in .m3u files for music or videos
 - ✅ 💹 Add possibility to change theme`s (light, dark...)
 - ✅ 🎛️ Memorize the last 5 files played to fast access 
+- ✅ 📃 Can change language on app
+- ✅ 📃 Save configurations
+- ✅ 📃 Can play media files from context on Windows
+- ✅ 📃 Restart media file from the last time stop when reopen the file
  
 ## 🚀 Features to be implemented
 - ℹ️ Add one helper to explain program functions 
