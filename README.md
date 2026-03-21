@@ -33,6 +33,9 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 📃 Save configurations
 - ✅ 📃 Can play media files from context on Windows
 - ✅ 📃 Restart media file from the last time stop when reopen the file
+- ✅ 🎨 Now support image view for different formats(JPG, PNG , PSD ...)
+- ✅ 🎨 Can apply simple filters brightness and Contrast
+- ✅ 🎨 Can save image in jpg or png
  
 ## 🚀 Features to be implemented
 - ℹ️ Add one helper to explain program functions 

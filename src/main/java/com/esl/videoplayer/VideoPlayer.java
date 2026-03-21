@@ -25,6 +25,7 @@ import com.formdev.flatlaf.intellijthemes.FlatArcDarkOrangeIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatArcOrangeIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 import jnafilechooser.api.JnaFileChooser;
+import mslinks.ShellLink;
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
 
@@ -35,6 +36,10 @@ import javax.sound.sampled.DataLine;
 import javax.sound.sampled.SourceDataLine;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DropTarget;
+import java.awt.dnd.DropTargetDropEvent;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
@@ -369,6 +374,8 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
                 System.exit(0);
             }
         });
+
+        setupDropTarget((JComponent) this.getComponent(0));
     }
 
     // Método para abrir dialog de playlist
@@ -961,180 +968,6 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener{
         }
     }
 
-
-//    private void initComponents() {
-//        setLayout(new BorderLayout());
-//
-//        add(videoPanel, BorderLayout.CENTER);
-//
-//        // Painel de controles
-//        controlPanel = new JPanel(new BorderLayout());
-//        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-//
-//        // Barra de progresso (PRIMEIRO - no topo)
-//        JPanel progressPanel = new JPanel(new BorderLayout(5, 0));
-//        progressSlider = new JSlider(0, 100, 0);
-//        progressSlider.setEnabled(false);
-//        progressSlider.addChangeListener(e -> {
-//            if (progressSlider.getValueIsAdjusting() && grabber != null) {
-//                isSeeking = true;
-//            } else if (isSeeking) {
-//                seekToPosition(progressSlider.getValue());
-//                isSeeking = false;
-//            }
-//        });
-//
-//        Font mainFont = new Font("Segoe UI", Font.PLAIN, 14);
-//
-//        timeLabel = new JLabel("00:00");
-//        timeLabelPassed = new JLabel("00:00");
-//        timeLabel.setFont(mainFont);
-//        timeLabelPassed.setFont(mainFont);
-//
-//        progressPanel.add(timeLabelPassed, BorderLayout.WEST);
-//        progressPanel.add(progressSlider, BorderLayout.CENTER);
-//        progressPanel.add(timeLabel, BorderLayout.EAST);
-//
-//        // Botões (SEGUNDO - embaixo do progressPanel)
-//        JPanel buttonPanel = new JPanel(new BorderLayout());
-//
-//        // Painel central com controles principais (centralizado)
-//        JPanel centerButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 8));
-//
-//        openButton = new JButton("\uD83D\uDCC1");
-//        openButton.setPreferredSize(new Dimension(35, 35));
-//        //openButton.setToolTipText("Abrir nova midia");/////////////////////////////////////////////
-//        openButton.setToolTipText(I18N.get("openButton.ToolTipText"));
-//        openButton.addActionListener(e -> {
-//            try {
-//                openVideoOrAudio();
-//            } catch (Exception ex) {
-//                throw new RuntimeException(ex);
-//            }
-//        });
-//
-//        //loadPlaylist()
-//        loadPlaylistButton = new JButton("📂");
-//        loadPlaylistButton.setEnabled(true);
-//        loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
-//        loadPlaylistButton.setToolTipText("Abrir Playlist");
-//        loadPlaylistButton.addActionListener(e -> loadAndPlayPlaylist());
-//
-//        rewindButton = new JButton("⏪");
-//        rewindButton.setEnabled(false);
-//        rewindButton.setPreferredSize(new Dimension(35, 35));
-//        rewindButton.setToolTipText("Retroceder 10 segundos");
-//        rewindButton.addActionListener(e -> rewind10Seconds());
-//
-//        playPauseButton = new JButton("▶");
-//        playPauseButton.setEnabled(false);
-//        playPauseButton.setPreferredSize(new Dimension(50, 50)); // Maior que os outros
-//        playPauseButton.setToolTipText("Tocar/Pausar");
-//        playPauseButton.addActionListener(e -> togglePlayPause());
-//
-//        forwardButton = new JButton("⏩");
-//        forwardButton.setEnabled(false);
-//        forwardButton.setPreferredSize(new Dimension(35, 35));
-//        forwardButton.setToolTipText("Avançar 10 segundos");
-//        forwardButton.addActionListener(e -> forward10Seconds());
-//
-//        stopButton = new JButton("■");
-//        stopButton.setEnabled(false);
-//        stopButton.setPreferredSize(new Dimension(35, 35));
-//        stopButton.setToolTipText("Parar");
-//        stopButton.addActionListener(e -> stopVideo());
-//
-//        nextFrameButton = new JButton("⏭");
-//        nextFrameButton.setEnabled(false);
-//        nextFrameButton.setPreferredSize(new Dimension(35, 35));
-//        nextFrameButton.setToolTipText("Avançar um frame");
-//        nextFrameButton.addActionListener(e -> nextFrame());
-//
-//        captureFrameButton = new JButton("📷");
-//        captureFrameButton.setEnabled(false);
-//        captureFrameButton.setPreferredSize(new Dimension(35, 35));
-//        captureFrameButton.setToolTipText("Capturar frame atual");
-//        captureFrameButton.addActionListener(e -> captureFrameManager.captureFrame(grabber, this, videoPanel,
-//              videoPanel.getCustomCapturePath(), videoFilePath,currentFrame, videoPanel.isSilentCapture()));
-//
-//        captureAllFrameButton = new JButton("\uD83D\uDCE6");
-//        captureAllFrameButton.setEnabled(false);
-//        captureAllFrameButton.setPreferredSize(new Dimension(35, 35));
-//        captureAllFrameButton.setToolTipText("Capturar todos os frames");
-//        captureAllFrameButton.addActionListener(e -> captureFrameManager.batchCaptureFrames(grabber, VideoPlayer.this, batchCaptureThread,isPlaying,
-//        totalFrames,videoPanel.getBatchCaptureInterval(),frameRate,videoPanel.getBatchCapturePath(),videoFilePath));
-//
-//        configButton = new JButton("⚙");
-//        configButton.setPreferredSize(new Dimension(35, 35));
-//        configButton.setToolTipText("Configurações");
-//        configButton.addActionListener(e -> {
-//            ConfigurationFrame configFrame = new ConfigurationFrame();
-//            configFrame.setVisible(true);
-//        });
-//
-//        centerButtonPanel.add(openButton);
-//        centerButtonPanel.add(loadPlaylistButton);
-//        centerButtonPanel.add(rewindButton);
-//        centerButtonPanel.add(playPauseButton);
-//        centerButtonPanel.add(forwardButton);
-//        centerButtonPanel.add(stopButton);
-//        centerButtonPanel.add(nextFrameButton);
-//        centerButtonPanel.add(captureFrameButton);
-//        centerButtonPanel.add(captureAllFrameButton);
-//    //    centerButtonPanel.add(configButton); // Funcionando incorretamente
-//
-//        // Painel direito com controle de volume
-//        JPanel rightButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 15));
-//
-//        volumeButton = new JButton("🔊");
-//        volumeButton.setEnabled(false);
-//        volumeButton.setPreferredSize(new Dimension(35, 35));
-//        volumeButton.setToolTipText("Ativar/Desativar Som");
-//
-//        // NOVO: Adicionar ActionListener para mute/unmute
-//        volumeButton.addActionListener(e -> toggleMute());
-//
-//        volumeLabel = new JLabel("100%");
-//        volumeSlider = new JSlider(0, 100, 100);
-//        volumeSlider.setPreferredSize(new Dimension(100, 20));
-//        volumeSlider.addChangeListener(e -> {
-//            // Só processar se não estiver mutado ou se o usuário estiver arrastando o slider
-//            if (volumeSlider.getValueIsAdjusting() || !isMuted) {
-//                int vol = volumeSlider.getValue();
-//                volume = vol / 100.0f;
-//                volumeLabel.setText(vol + "%");
-//
-//                // Se estava mutado e o usuário moveu o slider, desmutar
-//                if (isMuted && volumeSlider.getValueIsAdjusting() && vol > 0) {
-//                    isMuted = false;
-//                    updateVolumeButton();
-//                }
-//
-//                // Se o volume foi para 0, considerar como mutado
-//                if (vol == 0 && !isMuted) {
-//                    isMuted = true;
-//                    previousVolume = 0.5f; // Definir um volume padrão para unmute
-//                    updateVolumeButton();
-//                }
-//            }
-//        });
-//
-//        rightButtonPanel.add(volumeButton);
-//        rightButtonPanel.add(volumeLabel);
-//        rightButtonPanel.add(volumeSlider);
-//
-//        // Montar painel de botões
-//        buttonPanel.add(centerButtonPanel, BorderLayout.CENTER);
-//        buttonPanel.add(rightButtonPanel, BorderLayout.EAST);
-//
-//        // Adicionar ao painel de controles
-//        controlPanel.add(progressPanel, BorderLayout.NORTH);
-//        controlPanel.add(buttonPanel, BorderLayout.SOUTH);
-//
-//        add(controlPanel, BorderLayout.SOUTH);
-//
-//
-//    }
 private void initComponents() {
     setLayout(new BorderLayout());
 
@@ -1543,6 +1376,186 @@ private void initComponents() {
         progressDialog.setVisible(true);
     }
 
+
+    /*
+    Metodo para drag and drop de arquivos , simples, sem verificaçao.
+     */
+//    private void setupDropTarget() {
+//        this.setDropTarget(new DropTarget() {
+//            @Override
+//            @SuppressWarnings("unchecked")
+//            public synchronized void drop(DropTargetDropEvent evt) {
+//                try {
+//                    evt.acceptDrop(DnDConstants.ACTION_COPY);
+//                    List<File> droppedFiles = (List<File>) evt
+//                            .getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+//
+//                    for (File file : droppedFiles) {
+//                        if (file.getName().endsWith("mp3")
+//                                || file.getName().endsWith("flac")
+//                                || file.getName().endsWith("wav")
+//                                || file.getName().endsWith("ogg")
+//                                || file.getName().endsWith("m4a")
+//                                || file.getName().endsWith("aac")) {
+//                            loadAudio(file.getAbsolutePath());
+//                            //"mp4","m4s", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp"
+//                        } if(file.getName().endsWith("mp4")
+//                            ||file.getName().endsWith("m4s")
+//                                ||file.getName().endsWith("avi")
+//                                ||file.getName().endsWith("mkv")
+//                                ||file.getName().endsWith("mov")
+//                                ||file.getName().endsWith("flv")
+//                                ||file.getName().endsWith("webm")
+//                                ||file.getName().endsWith("gif")
+//                                ||file.getName().endsWith("wmv")
+//
+//                                ||file.getName().endsWith("jpeg")
+//                                ||file.getName().endsWith("jpg")
+//                                ||file.getName().endsWith("png")
+//                                ||file.getName().endsWith("webp")
+//                        ){
+//                            loadVideo(file.getAbsolutePath());
+//                        }
+//                        else {
+//                            JOptionPane.showMessageDialog(this.getComponent(),
+//                                        "Tipo de arquivo não suportado",
+//                                        "Erro",
+//                                        JOptionPane.ERROR_MESSAGE);
+//                           return;
+//                            }
+//                    }
+//
+//                } catch (Exception ex) {
+//                    ex.printStackTrace();
+//                }
+//            }
+//        });
+//    }
+
+    /*
+     Método para drag and drop de arquivos, com verificação de instância,
+     para confirmar o tipo de objeto.
+   */
+    private void setupDropTarget(JComponent component) {
+        component.setTransferHandler(new TransferHandler() {
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+            }
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support)) return false;
+
+                try {
+                    Object data = support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+
+                    // 1. Verifica se é uma instância de List
+                    if (data instanceof List<?> listaGenerica) {
+                        for (Object item : listaGenerica) {
+                            // 2. Verifica se cada item da lista é um File
+                            if (item instanceof File file) {
+                                if (file.getName().endsWith("mp3")
+                                        || file.getName().endsWith("flac")
+                                        || file.getName().endsWith("wav")
+                                        || file.getName().endsWith("ogg")
+                                        || file.getName().endsWith("m4a")
+                                        || file.getName().endsWith("aac")) {
+                                    loadAudio(file.getAbsolutePath());
+                                }
+                                else if( file.getName().endsWith("jpeg")
+                                        ||file.getName().endsWith("jpg")
+                                        ||file.getName().endsWith("png")
+                                        ||file.getName().endsWith("webp")
+                                        ||file.getName().endsWith("psd")
+                                        ||file.getName().endsWith("bmp")
+                                        ||file.getName().endsWith("tiff")
+                                ){
+                                    loadImage(file.getAbsolutePath());
+                                }
+                                else if(file.getName().endsWith("mp4")
+                                        ||file.getName().endsWith("m4s")
+                                        ||file.getName().endsWith("avi")
+                                        ||file.getName().endsWith("mkv")
+                                        ||file.getName().endsWith("mov")
+                                        ||file.getName().endsWith("flv")
+                                        ||file.getName().endsWith("webm")
+                                        ||file.getName().endsWith("gif")
+                                        ||file.getName().endsWith("wmv")
+                                ){
+                                    loadVideo(file.getAbsolutePath());
+
+                                }else if(file.getName().endsWith("lnk")){
+                                    try {
+                                        // A biblioteca mslinks extrai o caminho real
+                                        String realPath = new ShellLink(file).resolveTarget();
+                                        File arquivoFinal = new File(realPath);
+
+                                        if (arquivoFinal.getName().endsWith("mp3")
+                                                || arquivoFinal.getName().endsWith("flac")
+                                                || arquivoFinal.getName().endsWith("wav")
+                                                || arquivoFinal.getName().endsWith("ogg")
+                                                || arquivoFinal.getName().endsWith("m4a")
+                                                || arquivoFinal.getName().endsWith("aac")) {
+                                            loadAudio(arquivoFinal.getAbsolutePath());
+                                        }
+                                        else if( arquivoFinal.getName().endsWith("jpeg")
+                                                ||arquivoFinal.getName().endsWith("jpg")
+                                                ||arquivoFinal.getName().endsWith("png")
+                                                ||arquivoFinal.getName().endsWith("webp")
+                                                ||arquivoFinal.getName().endsWith("psd")
+                                                ||arquivoFinal.getName().endsWith("bmp")
+                                                ||arquivoFinal.getName().endsWith("tiff")
+                                        ){
+                                            loadImage(arquivoFinal.getAbsolutePath());
+                                        }
+                                        else if(arquivoFinal.getName().endsWith("mp4")
+                                                ||arquivoFinal.getName().endsWith("m4s")
+                                                ||arquivoFinal.getName().endsWith("avi")
+                                                ||arquivoFinal.getName().endsWith("mkv")
+                                                ||arquivoFinal.getName().endsWith("mov")
+                                                ||arquivoFinal.getName().endsWith("flv")
+                                                ||arquivoFinal.getName().endsWith("webm")
+                                                ||arquivoFinal.getName().endsWith("gif")
+                                                ||arquivoFinal.getName().endsWith("wmv")
+                                        ){
+                                            loadVideo(arquivoFinal.getAbsolutePath());
+                                        }
+
+                                        else {
+                                            JOptionPane.showMessageDialog(component,
+                                                    "Tipo de arquivo não suportado",
+                                                    "Erro",
+                                                    JOptionPane.ERROR_MESSAGE);
+                                        }
+
+                                    } catch (Exception e) {
+                                        JOptionPane.showMessageDialog(component,
+                                                "Não foi possível resolver o atalho",
+                                                "Erro",
+                                                JOptionPane.ERROR_MESSAGE);
+                                    }
+
+                                }
+                                else {
+                                    JOptionPane.showMessageDialog(component,
+                                            "Tipo de arquivo não suportado",
+                                            "Erro",
+                                            JOptionPane.ERROR_MESSAGE);
+                                }
+                            }
+                        }
+                        return true;
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return false;
+            }
+        });
+    }
+
+
     private void openVideoOrAudio() {
         if (isPlaying) {
             pauseVideo();
@@ -1550,18 +1563,34 @@ private void initComponents() {
         JnaFileChooser fc = new JnaFileChooser();
         fc.addFilter("Arquivos de Vídeo (*.mp4,*.m4s, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4","m4s", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp");
         fc.addFilter("Arquivos de Audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac )", "mp3", "flac", "wav", "ogg", "m4a", "aac");
+        fc.addFilter("Arquivos de Imagem(*.jpeg,*.jpg,*.png,*.webp)", "jpeg",  "jpg", "png", "webp");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
-            if (f.getName().endsWith("mp3")
-                    || f.getName().endsWith("flac")
-                    || f.getName().endsWith("wav")
-                    || f.getName().endsWith("ogg")
-                    || f.getName().endsWith("m4a")
-                    || f.getName().endsWith("aac")) {
-                loadAudio(f.getAbsolutePath());
-            } else {
-                loadVideo(f.getAbsolutePath());
-            }
+            fileTypesAction(f);
+        }
+    }
+
+    private void fileTypesAction(File f) {
+
+        if (f.getName().endsWith("mp3")
+                || f.getName().endsWith("flac")
+                || f.getName().endsWith("wav")
+                || f.getName().endsWith("ogg")
+                || f.getName().endsWith("m4a")
+                || f.getName().endsWith("aac")) {
+            loadAudio(f.getAbsolutePath());
+        }else if( f.getName().endsWith("jpeg")
+                ||f.getName().endsWith("jpg")
+                ||f.getName().endsWith("png")
+                ||f.getName().endsWith("webp")
+                ||f.getName().endsWith("psd")
+                ||f.getName().endsWith("bmp")
+                ||f.getName().endsWith("tiff")
+        ){
+            loadImage(f.getAbsolutePath());
+        }
+        else {
+            loadVideo(f.getAbsolutePath());
         }
     }
 
@@ -1569,19 +1598,205 @@ private void initComponents() {
         if (isPlaying) {
             pauseVideo();
         }
-            if (file.getName().endsWith("mp3")
-                    || file.getName().endsWith("flac")
-                    || file.getName().endsWith("wav")
-                    || file.getName().endsWith("ogg")
-                    || file.getName().endsWith("m4a")
-                    || file.getName().endsWith("aac")) {
-                loadAudio(file.getAbsolutePath());
-            } else {
-                loadVideo(file.getAbsolutePath());
-            }
+           fileTypesAction(file);
         }
 
+     private void loadImage(String filepath){
+         videoPanel.clearFilteredImage();
+         isAudioOnly = false;
+
+         // Salvar caminho do vídeo
+         currentVideoPath = filepath;
+         videoFilePath = filepath;
+
+         System.out.println("=== INÍCIO loadImage ===");
+         // Limpar playlist e fechar dialog
+         clearPlaylistAndCloseDialog();
+
+         // ADICIONAR: Registrar arquivo como recente
+         recentFilesManager.addRecentFile(filepath, false);
+
+         loadImageBase(filepath);
+     }
+    private void loadImageBase(String filepath) {
+
+        //Limpa os items setados anteriormente
+        cleanUpItems();
+
+        System.out.println("Atualizando título...");
+        setTitle("Media Player - Carregando imagem...");
+
+        // Carregar vídeo em thread separada
+        Thread loaderThread = new Thread(() -> {
+            try {
+
+                grabber = new FFmpegFrameGrabber(filepath);
+                grabber.start();
+                currentFrame = 0;
+
+                int videoWidth = grabber.getImageWidth();
+                int videoHeight = grabber.getImageHeight();
+                int tempVideoWidth = videoWidth;
+                int tempVideoHeight = videoHeight;
+                if (videoWidth <= 500) {
+                    tempVideoWidth = 1080;
+                }
+                if (videoHeight <= 500) {
+                    tempVideoHeight = 720;
+                }
+
+                // Guardar dimensões para usar no SwingUtilities.invokeLater
+                final int finalWidth = tempVideoWidth;
+                final int finalHeight = tempVideoHeight;
+                System.out.println("Resoluçao da Imagem: " + finalHeight + " : " + finalWidth);
+
+                SwingUtilities.invokeLater(() -> {
+                    // Redimensionar e centralizar a janela
+
+                    setSize(finalWidth, finalHeight);
+
+                    // Se a resolução do video for igual ou maior que a resolução da tela maximizar
+                    if (finalWidth >= screenWidth || finalHeight >= screenHeight) {
+                        setExtendedState(JFrame.MAXIMIZED_BOTH);
+                    }
+
+                    setLocationRelativeTo(null); // Centralizar após redimensionar
+                    setResizable(true); // Pode maximizar a janela
+
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    progressSlider.setEnabled(false);
+                    progressSlider.setValue(0);
+                    openButton.setEnabled(true);
+                    rewindButton.setEnabled(false);
+                    forwardButton.setEnabled(false);
+                    nextFrameButton.setEnabled(false);
+                    captureFrameButton.setEnabled(false);
+                    captureAllFrameButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    volumeSlider.setEnabled(false);
+                    updateTimeLabel();
+
+                    setTitle("Media Player - " + new File(filepath).getName());
+
+                    //Menu de contexto especifico para quando estiver usando imagem
+                    videoPanel.setupImageContextMenu(this,
+                           grabber);
+
+                   playImage();
+
+
+                });
+
+                System.out.println("26. Thread de carregamento CONCLUÍDA");
+
+            } catch (Exception e) {
+                System.err.println("ERRO CRÍTICO na thread de carregamento:");
+                e.printStackTrace();
+
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(this,
+                            "Erro ao abrir vídeo:\n" + e.getMessage(),
+                            "Erro", JOptionPane.ERROR_MESSAGE);
+
+                    openButton.setEnabled(true);
+                    playPauseButton.setEnabled(false);
+                    stopButton.setEnabled(false);
+                    volumeButton.setEnabled(false);
+                    setTitle("Media Player");
+                });
+            }
+        }, "VideoLoader");
+
+        loaderThread.start();
+    }
+
+    public void playImage() {
+        if (grabber == null || isPlaying) return;
+
+        isPlaying = true;
+        isStopped = false;
+
+
+
+        playbackThread = new Thread(() -> {
+            try {
+                long startTime = System.currentTimeMillis();
+                long frameDelay = (long) (1000.0 / frameRate);
+                long frameCount = 0;
+
+
+                    while (isPlaying) {
+                        Frame frame = grabber.grab();
+
+//                        // **PROCESSAR VÍDEO**
+//                        if (frame.image != null) {
+//
+//                            BufferedImage img = converter.convert(frame);
+//
+//                            if (img != null) {
+//                                // **OTIMIZAÇÃO: Pular filtros em vídeos pesados se enabled**
+//                                if (filtersManager.isFiltersEnabled() ) {
+//                                    // Para 4K, aplicar filtros apenas a cada 2 frames
+//                                    if ( currentFrame % 2 == 0) {
+//                                        img = filtersManager.applyImageFilters(img);
+//                                    }
+//                                }
+//                                videoPanel.updateImage(img);
+//                            }
+
+                        if (frame != null && frame.image != null) {
+
+                            // Repassa o frame original ao FilterManager na PRIMEIRA captura
+                            // (currentFrame == 0 garante que só acontece uma vez por imagem)
+                            if (currentFrame == 0) {
+                                videoPanel.setOriginalImageFrame(frame);
+                            }
+
+                            BufferedImage img = converter.convert(frame);
+                            if (img != null) {
+                                if (filtersManager.isFiltersEnabled()) {
+                                    if (currentFrame % 2 == 0) {
+                                        img = filtersManager.applyImageFilters(img);
+                                    }
+                                }
+                                videoPanel.updateImage(img);
+                            }
+
+                            currentFrame++;
+                            frameCount++;
+
+
+                            // **SINCRONIZAÇÃO DE TEMPO (ORIGINAL - MANTIDA)**
+                            long expectedTime = startTime + (frameCount * frameDelay);
+                            long currentTime = System.currentTimeMillis();
+                            long sleepTime = expectedTime - currentTime;
+
+                            if (sleepTime > 0) {
+                                Thread.sleep(sleepTime);
+                            } else if (sleepTime < -frameDelay * 3) {
+                                // Se estiver muito atrasado, reajustar referência de tempo
+                                startTime = currentTime - (long) (frameCount * frameDelay * 0.5);
+                            }
+                        }
+                    }
+
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    isPlaying = false;
+                    playPauseButton.setText("▶");
+                });
+            }
+        });
+
+        playbackThread.start();
+    }
+
+
     private void loadVideo(String filepath) {
+        videoPanel.clearFilteredImage();
         isAudioOnly = false;
 
         // Salvar caminho do vídeo
@@ -1888,10 +2103,12 @@ private void initComponents() {
                     captureFrameButton.setEnabled(true);
                     captureAllFrameButton.setEnabled(true);
                     volumeButton.setEnabled(true);
+                    volumeSlider.setEnabled(true);
                     updateTimeLabel();
 
                     setTitle("Video Player - " + new File(filepath).getName());
 
+                    //Menu de contexto especifico para quando estiver usando video
                     videoPanel.setupVideoContextMenu(subtitleManager, captureFrameManager, this,
                             filtersManager,videoFilePath, grabber, nextFrameButton, totalAudioStreams,
                             currentAudioStream, audioStreamNames, ffmpegPath);
@@ -1932,6 +2149,7 @@ private void initComponents() {
                     playPauseButton.setEnabled(false);
                     stopButton.setEnabled(false);
                     volumeButton.setEnabled(false);
+                    volumeSlider.setEnabled(true);
                     setTitle("Video Player - JavaCV");
                 });
             }
@@ -2120,16 +2338,10 @@ private void initComponents() {
                 // Mostrar modal de aviso
                 SwingUtilities.invokeLater(() -> {
                     String message = String.format(
-                            "Este vídeo não pode ser reproduzido:\n\n" +
-                                    "• Codec: AV1 (libaom-av1)\n" +
-                                    "• Resolução: %dx%d\n\n" +
-                                    "O JavaCV está usando o decoder 'libaom-av1' que é muito lento\n" +
-                                    "para vídeos AV1 em alta resolução (acima de 1920x1080).\n\n" +
-                                    "Soluções:\n" +
-                                    "1. Converter o vídeo para H.264/H.265\n" +
-                                    "2. Reduzir a resolução para 1080p ou menos\n" +
-                                    "3. Atualizar o JavaCV para versão com libdav1d\n" +
-                                    "4. Reproduzir com player externo (VLC, MPV, etc.)",
+                                     I18N.get("videoPlayer.AV1CodecError.showMessageDialog.text1") + "\n\n" +
+                                     I18N.get("videoPlayer.AV1CodecError.showMessageDialog.text2") + "\n" +
+                                     I18N.get("videoPlayer.AV1CodecError.showMessageDialog.text3") + " " + width + "x" + height + "\n\n" +
+                                     I18N.get("videoPlayer.AV1CodecError.showMessageDialog.text4") + "\n",
                             width, height
                     );
 
@@ -2412,6 +2624,7 @@ private void initComponents() {
     }
 
     private void loadAudio(String filepath) {
+        videoPanel.clearFilteredImage();
         // Salvar caminho do áudio
         currentVideoPath = filepath;
         videoFilePath = filepath;
@@ -2552,6 +2765,7 @@ private void initComponents() {
                     rewindButton.setEnabled(true);
                     forwardButton.setEnabled(true);
                     volumeButton.setEnabled(true);
+                    volumeSlider.setEnabled(true);
 
                     // Desabilitar controles de vídeo
                     nextFrameButton.setEnabled(false);
@@ -2613,6 +2827,7 @@ private void initComponents() {
                     playPauseButton.setEnabled(false);
                     stopButton.setEnabled(false);
                     volumeButton.setEnabled(false);
+                    volumeSlider.setEnabled(true);
                     setTitle("Video Player - JavaCV");
                 });
             }
@@ -3331,7 +3546,10 @@ private void initComponents() {
                     grabber.setTimestamp(0);
                 } else {
                     // Para vídeo, resetar frame e mostrar primeiro frame
-                    grabber.setFrameNumber(0);
+                    System.out.println("Formato: " + grabber.getFormat());
+                    if(!Objects.equals(grabber.getFormat(), "image2")) {
+                        grabber.setFrameNumber(0);
+                    }
                     Frame firstFrame = grabber.grabImage();
                     if (firstFrame != null && firstFrame.image != null) {
                         BufferedImage img = converter.convert(firstFrame);
@@ -3339,7 +3557,9 @@ private void initComponents() {
                             videoPanel.updateImage(img);
                         }
                     }
-                    grabber.setFrameNumber(0);
+                    if(!Objects.equals(grabber.getFormat(), "image2")) {
+                        grabber.setFrameNumber(0);
+                    }
                 }
             } catch (Exception e) {
                 System.err.println("Erro ao resetar posição: " + e.getMessage());
@@ -3451,12 +3671,7 @@ private void initComponents() {
         super.dispose();
     }
 
-//    // ADICIONAR método público para obter o JFrame (necessário para atualizar UI ao trocar tema)
-//    public JFrame getFrame() {
-//        // Assumindo que VideoPlayer extends JFrame
-//        // Se VideoPlayer não é JFrame, ajuste conforme necessário
-//        return this;
-//    }
+
 // ADICIONAR método público para obter o JFrame (necessário para atualizar UI ao trocar tema)
 public JFrame getFrame() {
     // OPÇÃO 1: Se VideoPlayer extends JFrame
@@ -3468,40 +3683,7 @@ public JFrame getFrame() {
 }
 
     public static void main(String[] args) {
-//        // DEBUG TEMPORÁRIO - remover depois
-//        String cleanArg;
-//        for (int i = 0; i < args.length; i++) {
-//            // Replace any character that is NOT a letter (a-z, A-Z),
-//            // a digit (0-9), or a whitespace character (\\s) with an empty string.
-//            cleanArg = args[i].replaceAll("[^a-zA-Z0-9\\s]", "");
-//            args[i] = cleanArg;
-//            System.out.println("Cleaned Argument " + i + ": " + args[i]);
-//        }
-//
-//
-//        StringBuilder debug = new StringBuilder("Args recebidos:\n");
-//        for (int i = 0; i < args.length; i++) {
-//            debug.append("ARG[").append(i).append("] = ").append(args[i]).append("\n");
-//            // Mostra os bytes de cada caractere
-//            debug.append("  bytes: ");
-//            try {
-//                byte[] bytes = args[i].getBytes("UTF-8");
-//                for (byte b : bytes) {
-//                    debug.append(String.format("%02X ", b));
-//                }
-//            } catch (Exception e) { }
-//            debug.append("\n");
-//
-//            // Replace any character that is NOT a letter (a-z, A-Z),
-//            // a digit (0-9), or a whitespace character (\\s) with an empty string.
-//            cleanArg = args[i].replaceAll("[^a-zA-Z0-9\\s]", "");
-//            args[i] = cleanArg;
-//            System.out.println("Cleaned Argument " + i + ": " + args[i]);
-//
-//            debug.append(args[i]);
-//            debug.append("\n");
-//        }
-//        JOptionPane.showMessageDialog(null, debug.toString());
+
         // Substitui os args corrompidos pelos args nativos do Windows (UTF-16)
         String[] safeArgs = getWindowsArgs();
         if (safeArgs != null && safeArgs.length > 0) {
@@ -3527,38 +3709,16 @@ public JFrame getFrame() {
 
             VideoPlayer player = new VideoPlayer();
             player.setVisible(true);
-
-//            // Se houver argumentos na linha de comando, abrir o arquivo
-//            if (args.length > 0) {
-//                String filePath = parseFilePath(args);
-//
-//
-//                if (filePath != null && !filePath.isEmpty()) {
-//                    // Tentar abrir o arquivo após a interface estar pronta
-//                    SwingUtilities.invokeLater(() -> {
-//                        try {
-//                            player.openFile(filePath);
-//                        } catch (Exception e) {
-//                            JOptionPane.showMessageDialog(player,
-//                                    "Erro ao abrir o arquivo: " + filePath + "\n" + e.getMessage(),
-//                                    "Erro ao Abrir Arquivo",
-//                                    JOptionPane.ERROR_MESSAGE);
-//                            e.printStackTrace();
-//                        }
-//                    });
-//                }
-//            }
             if (finalArgs.length > 0) {
                 try {
                     String filePath = sanitizeFilePath(finalArgs[0]);
                     player.openFile(filePath);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(player,
-                            "O programa não suporta abrir arquivos com caracteres especiais pelo duplo clique do windows:\n" +
-                                    "Altere o nome do arquivo ou abra o arquivo pelo programa ",
-                            "Erro ao Abrir Arquivo",
-                            JOptionPane.ERROR_MESSAGE);
-                    e.printStackTrace();
+                             I18N.get("videoPlayer.IllegalCharacter.showMessageDialog.text1") + ":\n" +
+                                     I18N.get("videoPlayer.IllegalCharacter.showMessageDialog.text2"),
+                            I18N.get("videoPlayer.IllegalCharacter.showMessageDialog.title"),JOptionPane.ERROR_MESSAGE);
+                    //e.printStackTrace();
                 }
             }
         });

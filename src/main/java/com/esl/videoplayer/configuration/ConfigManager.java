@@ -22,6 +22,8 @@ public class ConfigManager {
     public static final String KEY_SILENTCAPTURE = "silentcapture";
     public static final String KEY_SUBTITLE_SIZE     = "subtitle_size";     // tamanho em px
     public static final String KEY_SUBTITLE_COLOR    = "subtitle_color";    // RGB decimal (ex: "-1" = branco)
+    public static final String KEY_FRAME_SKIP_VALUE    = "frame_skip_value";
+    public static final String KEY_CAPTURE_FRAME_INTERVAL    = "capture_frame_interval";
 
     // Valores padrão para cada chave
     private static final Map<String, String> DEFAULTS = new LinkedHashMap<>();
@@ -32,6 +34,8 @@ public class ConfigManager {
         DEFAULTS.put(KEY_SILENTCAPTURE, "false");
         DEFAULTS.put(KEY_SUBTITLE_SIZE,  "24");
         DEFAULTS.put(KEY_SUBTITLE_COLOR, String.valueOf(Color.WHITE.getRGB())); // -1 = branco opaco
+        DEFAULTS.put(KEY_FRAME_SKIP_VALUE,  "1");
+        DEFAULTS.put(KEY_CAPTURE_FRAME_INTERVAL,  "2");
 
     }
 
@@ -257,6 +261,42 @@ public class ConfigManager {
         set(KEY_SUBTITLE_COLOR, String.valueOf(color.getRGB()));
     }
 
+
+// -------------------------------------------------------------------------
+    // Atalhos específicos para configuração de frames por avanço
+    // -------------------------------------------------------------------------
+
+    /**
+     * Retorna o valor padrão. Padrão: 1.
+     */
+    public int getSavedFrameSkipValue() {
+        return getInt(KEY_FRAME_SKIP_VALUE, 1);
+    }
+
+    /**
+     * Salva o volume atual (1, 2, 3, 5, 10, 15, 30).
+     */
+    public void saveFrameSkipValue(int skipValue) {
+        setInt(KEY_FRAME_SKIP_VALUE, skipValue);
+    }
+
+    // -------------------------------------------------------------------------
+    // Atalhos específicos para configuração de intervalo de captura dos frames do video
+    // -------------------------------------------------------------------------
+
+    /**
+     * Retorna o valor padrão. Padrão: 2.
+     */
+    public int getSavedCaptureFrameInterval() {
+        return getInt(KEY_CAPTURE_FRAME_INTERVAL, 2);
+    }
+
+    /**
+     * Salva o volume atual (1, 2, 3, 5, 10, 15, 30).
+     */
+    public void saveCaptureFrameInterval(int frameInterval) {
+        setInt(KEY_CAPTURE_FRAME_INTERVAL, frameInterval);
+    }
 
 
 
