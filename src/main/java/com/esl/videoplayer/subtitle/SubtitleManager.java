@@ -5,10 +5,7 @@ import com.esl.videoplayer.VideoPlayer;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -32,6 +29,20 @@ public class SubtitleManager {
    public  SubtitleManager(){
        parseSubtitles = new ParseSubtitles();
    }
+
+    private Font resolveSubtitleFont(int size) {
+        try {
+            // Carrega a fonte do classpath (pasta resources/)
+            InputStream is = getClass().getResourceAsStream("/fonts/NotoSansCJKtc-Regular.ttf");
+            if (is != null) {
+                Font base = Font.createFont(Font.TRUETYPE_FONT, is);
+                return base.deriveFont(Font.BOLD, size);
+            }
+        } catch (Exception e) {
+            System.err.println("Não foi possível carregar fonte CJK: " + e.getMessage());
+        }
+        return new Font("Dialog", Font.BOLD, size); // fallback
+    }
 
     public void searchExternalSubtitles(String videoPath) {
         System.out.println("21. Iniciando busca de legendas externas...");
@@ -288,7 +299,8 @@ public class SubtitleManager {
 
         // Usar tamanho adaptativo baseado no tamanho da janela
         int adaptiveFontSize = getAdaptiveSubtitleSize(getJPanelHeight);
-        Font subtitleFont = new Font("Arial", Font.BOLD, adaptiveFontSize);
+       // Font subtitleFont = new Font("Arial", Font.BOLD, adaptiveFontSize);
+        Font subtitleFont = resolveSubtitleFont(adaptiveFontSize);
         g2d.setFont(subtitleFont);
 
         // Dividir texto em linhas
