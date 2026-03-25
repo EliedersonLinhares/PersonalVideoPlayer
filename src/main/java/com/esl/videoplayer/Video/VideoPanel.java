@@ -4,6 +4,7 @@ import com.esl.videoplayer.Image.ImageFilterManager;
 import com.esl.videoplayer.Image.ImageSaveManager;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
+import com.esl.videoplayer.audio.ExtractAudio;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.capture.CaptureFrameManager;
 import com.esl.videoplayer.configuration.ConfigManager;
@@ -11,7 +12,10 @@ import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.subtitle.SubtitleManager;
 import com.esl.videoplayer.theme.ThemeManager;
+import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
+import org.bytedeco.javacv.FFmpegFrameRecorder;
+import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.Java2DFrameConverter;
 
 import javax.swing.*;
@@ -19,6 +23,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -156,6 +161,8 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     /** Imagem atual com filtros aplicados (mantida aqui para o salvamento). */
     private BufferedImage currentFilteredImage;
 
+    private ExtractAudio extractAudio;
+
     public VideoPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager, VideoPlayer videoPlayer, AudioLoudnessManager audioLoudnessManager) {
 
         this.subtitleManager = subtitleManager;
@@ -163,6 +170,7 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
         this.audioLoudnessManager = audioLoudnessManager;
         backgroundImageLoader = new BackgroundImageLoader();
         configManager = new ConfigManager();
+        extractAudio = new ExtractAudio();
         subtitleManager.setBaseSubtitleFontSize(configManager.getSavedSubtitleSize());
         subtitleManager.setSubtitleColor(configManager.getSavedSubtitleColor());
         setBackground(Color.BLACK);
@@ -870,12 +878,6 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
                                   float currentVal,
                                   java.util.function.Consumer<Float> onApply) {
 
-        if (!filterManager.hasImage()) {
-            JOptionPane.showMessageDialog(this,
-                    "Nenhuma imagem carregada.", "Aviso", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
         JDialog dialog = new JDialog(
                 SwingUtilities.getWindowAncestor(this),
                 filterName,
@@ -906,8 +908,8 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
         JPanel sliderRow = new JPanel(new BorderLayout(6, 0));
         sliderRow.setBorder(BorderFactory.createEmptyBorder(4, 12, 0, 12));
         sliderRow.add(new JLabel(filterName + ":"), BorderLayout.WEST);
-        sliderRow.add(slider,                       BorderLayout.CENTER);
-        sliderRow.add(valueLabel,                   BorderLayout.EAST);
+        sliderRow.add(slider,BorderLayout.CENTER);
+        sliderRow.add(valueLabel,BorderLayout.EAST);
 
         JButton okBtn     = new JButton(I18N.get("videoPanel.imageMenu.brightnessDialog.confirm"));
         JButton cancelBtn = new JButton(I18N.get("videoPanel.imageMenu.brightnessDialog.cancel"));
@@ -931,7 +933,8 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
             if (Math.abs(newVal - lastApplied[0]) < 0.01f) return;
             lastApplied[0] = newVal;
 
-            BufferedImage preview = filterName.contains("brilho")
+            System.out.println(filterName + "-------");
+            BufferedImage preview = filterName.contains("b")
                     ? filterManager.previewBrightness(newVal, pw, ph)
                     : filterManager.previewContrast(newVal, pw, ph);
 
@@ -1517,6 +1520,14 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
 
         contextMenu.add(batchCaptureMenu);
 
+        JMenu extractAudioMenu = new JMenu();
+        extractAudioMenu.setText("ExtractAudio");
+        JMenuItem confirmExtractAudioItem = new JMenuItem("Confirm");
+        confirmExtractAudioItem.addActionListener(e -> extractAudio.confirmExtraction(this,videoPlayer,grabber));
+        extractAudioMenu.add(confirmExtractAudioItem);
+
+        contextMenu.add(extractAudioMenu);
+
         // Menu de Filtros
         filtersMenu = new JMenu();
         videoResolutionCheck( grabber);
@@ -1870,12 +1881,6 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
         if (imagePtItem != null) {
             imagePtItem.setText(I18N.get("language.item2"));
         }
-
-
-//        updateVideoMenuTexts();
-//        updateAudioMenuTexts();
-//        updateMainPopupTexts();
-
     }
 
     private void updateVideoMenuTexts() {
@@ -2022,12 +2027,6 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
                     videoWidth, videoHeight
             ));
         }
-
-
-        updateImageMenuTexts();
-        updateAudioMenuTexts();
-        updateMainPopupTexts();
-
     }
 
     // Método específico para atualizar textos do menu de áudio
@@ -2213,6 +2212,9 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
     public void onLanguageChanged(Locale newLocale) {
         System.out.println("VideoPanel: Idioma mudou para: " + newLocale);
         updateVideoMenuTexts();
+        updateImageMenuTexts();
+        updateAudioMenuTexts();
+        updateMainPopupTexts();
         revalidate();
         repaint();
     }

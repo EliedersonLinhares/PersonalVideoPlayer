@@ -1460,7 +1460,12 @@ private void initComponents() {
                                         || file.getName().endsWith("wav")
                                         || file.getName().endsWith("ogg")
                                         || file.getName().endsWith("m4a")
-                                        || file.getName().endsWith("aac")) {
+                                        || file.getName().endsWith("aac")
+                                        || file.getName().endsWith("opus")
+                                        || file.getName().endsWith("wma")
+                                        || file.getName().endsWith("ac3")
+                                        || file.getName().endsWith("aiff")
+                                ) {
                                     loadAudio(file.getAbsolutePath());
                                 }
                                 else if( file.getName().endsWith("jpeg")
@@ -1496,7 +1501,12 @@ private void initComponents() {
                                                 || arquivoFinal.getName().endsWith("wav")
                                                 || arquivoFinal.getName().endsWith("ogg")
                                                 || arquivoFinal.getName().endsWith("m4a")
-                                                || arquivoFinal.getName().endsWith("aac")) {
+                                                || arquivoFinal.getName().endsWith("aac")
+                                                || arquivoFinal.getName().endsWith("opus")
+                                                || arquivoFinal.getName().endsWith("wma")
+                                                || arquivoFinal.getName().endsWith("ac3")
+                                                || arquivoFinal.getName().endsWith("aiff")
+                                        ) {
                                             loadAudio(arquivoFinal.getAbsolutePath());
                                         }
                                         else if( arquivoFinal.getName().endsWith("jpeg")
@@ -1562,7 +1572,7 @@ private void initComponents() {
         }
         JnaFileChooser fc = new JnaFileChooser();
         fc.addFilter("Arquivos de Vídeo (*.mp4,*.m4s, *.avi, *.mkv, *.mov, *.flv, *.webm, *.gif, *.wmv, *.mov, *.3gp)", "mp4","m4s", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv", "mov", "3gp");
-        fc.addFilter("Arquivos de Audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac )", "mp3", "flac", "wav", "ogg", "m4a", "aac");
+        fc.addFilter("Arquivos de Audio (*.mp3,*.flac, *.wav, *.ogg, *.m4a, *.aac, *.opus, *.wma, *.ac3, *.aiff)", "mp3", "flac", "wav", "ogg", "m4a", "aac", "opus" , "wma", "ac3", "aiff");
         fc.addFilter("Arquivos de Imagem(*.jpeg,*.jpg,*.png,*.webp)", "jpeg",  "jpg", "png", "webp");
         if (fc.showOpenDialog(this)) {
             File f = fc.getSelectedFile();
@@ -1577,7 +1587,12 @@ private void initComponents() {
                 || f.getName().endsWith("wav")
                 || f.getName().endsWith("ogg")
                 || f.getName().endsWith("m4a")
-                || f.getName().endsWith("aac")) {
+                || f.getName().endsWith("aac")
+                || f.getName().endsWith("opus")
+                || f.getName().endsWith("wma")
+                || f.getName().endsWith("ac3")
+                || f.getName().endsWith("aiff")
+        ) {
             loadAudio(f.getAbsolutePath());
         }else if( f.getName().endsWith("jpeg")
                 ||f.getName().endsWith("jpg")
@@ -1728,22 +1743,6 @@ private void initComponents() {
 
                     while (isPlaying) {
                         Frame frame = grabber.grab();
-
-//                        // **PROCESSAR VÍDEO**
-//                        if (frame.image != null) {
-//
-//                            BufferedImage img = converter.convert(frame);
-//
-//                            if (img != null) {
-//                                // **OTIMIZAÇÃO: Pular filtros em vídeos pesados se enabled**
-//                                if (filtersManager.isFiltersEnabled() ) {
-//                                    // Para 4K, aplicar filtros apenas a cada 2 frames
-//                                    if ( currentFrame % 2 == 0) {
-//                                        img = filtersManager.applyImageFilters(img);
-//                                    }
-//                                }
-//                                videoPanel.updateImage(img);
-//                            }
 
                         if (frame != null && frame.image != null) {
 
@@ -2737,10 +2736,40 @@ private void initComponents() {
                         audioLine.open(audioFormat, bufferSize);
                         System.out.println("10. AudioLine configurado com sucesso");
 
-                        // Combinação default - deve refletir o que está no menu
-                      audioLoudnessManager.setGlobalAudioGain(0.20f);          // 20% do volume
-                      audioLoudnessManager.setTargetLoudness(-18.0f);         // Target mais baixo
-                      audioLoudnessManager.setAudioNormalizationEnabled(false); // normalização desativada
+
+                        // Pré-análise de loudness (amostragem dos primeiros 10 segundos)
+                        float peakLevel = 0f;
+                        long analyzeUntil = Math.min(grabber.getLengthInTime(), 10_000_000L); // 10s em micros
+
+                        try (FFmpegFrameGrabber analyzer = new FFmpegFrameGrabber(filepath)) {
+                            analyzer.start();
+                            Frame f;
+                            while ((f = analyzer.grabSamples()) != null && analyzer.getTimestamp() < analyzeUntil) {
+                                if (f.samples != null && f.samples[0] instanceof ShortBuffer sb) {
+                                    while (sb.hasRemaining()) {
+                                        float sample = Math.abs(sb.get() / 32768f);
+                                        if (sample > peakLevel) peakLevel = sample;
+                                    }
+                                    sb.rewind();
+                                }
+                            }
+                        }
+                        // Calcula gain para normalizar ao redor de 0.85 de pico
+                        float targetPeak  = 0.85f;
+                        float detectedGain = (peakLevel > 0.01f) ? (targetPeak / peakLevel) : 1.0f;
+                        float finalGain    = Math.min(detectedGain, 4.0f); // limita para não distorcer demais
+
+                        audioLoudnessManager.setGlobalAudioGain(finalGain);
+                        audioLoudnessManager.setAudioNormalizationEnabled(false);
+                        audioLoudnessManager.setTargetLoudness(-14.0f);
+
+                        System.out.println("Loudness detectado — peak: " + peakLevel + ", gain aplicado: " + finalGain);
+
+
+//                        // Combinação default - deve refletir o que está no menu
+//                      audioLoudnessManager.setGlobalAudioGain(0.20f);          // 20% do volume
+//                      audioLoudnessManager.setTargetLoudness(-18.0f);         // Target mais baixo
+//                      audioLoudnessManager.setAudioNormalizationEnabled(false); // normalização desativada
 
                     } catch (Exception audioEx) {
                         System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
@@ -3510,6 +3539,26 @@ private void initComponents() {
 
         System.out.println("Áudio pausado no frame: " + currentFrame);
     }
+
+    public void reinicializarGrabber() {
+        try {
+            if (grabber != null) {
+                try { grabber.stop(); } catch (Exception ignored) {}
+                try { grabber.release(); } catch (Exception ignored) {}
+            }
+            grabber = new FFmpegFrameGrabber(videoFilePath);
+            grabber.start();
+
+            // Restaura o estado anterior se necessário
+            // grabber.setTimestamp(ultimaPosicao);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Erro ao reinicializar o player: " + e.getMessage());
+        }
+    }
+
+
 
     private void stopVideo() {
         isPlaying = false;

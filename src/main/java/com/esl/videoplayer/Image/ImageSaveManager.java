@@ -1,6 +1,7 @@
 package com.esl.videoplayer.Image;
 
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.localization.I18N;
 import jnafilechooser.api.JnaFileChooser;
 
 import javax.imageio.ImageIO;
@@ -8,6 +9,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.Locale;
 
 /**
  * Gerencia o salvamento da imagem editada em disco usando JnaFileChooser.
@@ -15,7 +17,7 @@ import java.io.File;
  * Suporta PNG e JPG. Cuida de: adicionar extensão ausente,
  * confirmar sobrescrita e converter ARGB para RGB antes de salvar em JPG.
  */
-public class ImageSaveManager {
+public class ImageSaveManager  implements I18N.LanguageChangeListener {
 
     /** Componente pai usado para posicionar os diálogos do Swing. */
     private final Component parent;
@@ -44,18 +46,15 @@ public class ImageSaveManager {
      * @return true se a imagem foi salva com sucesso, false caso contrário.
      */
     public boolean saveImage(BufferedImage image, VideoPlayer videoPlayer) {
-        if (image == null) {
-            showWarning("Nenhuma imagem para salvar.");
-            return false;
-        }
+
         // ── Configura o JnaFileChooser ────────────────────────────────────────
         JnaFileChooser fc = new JnaFileChooser(lastDirectory);
         fc.setDefaultFileName(videoPlayer.videoFilePath);
         fc.setMultiSelectionEnabled(false);
 
         // Filtros de formato — a ordem define o padrão (primeiro = padrão)
-        fc.addFilter("Imagem JPEG – comprimido (*.jpg)", "jpg", "jpeg");
-        fc.addFilter("Imagem PNG – sem perda (*.png)", "png");
+        fc.addFilter("JPEG (*.jpg)", "jpg", "jpeg");
+        fc.addFilter(" PNG (*.png)", "png");
 
 
         if (!fc.showSaveDialog((Window) parent)) {
@@ -198,5 +197,10 @@ public class ImageSaveManager {
     private void showError(String message) {
         JOptionPane.showMessageDialog(parent, message, "Erro ao salvar",
                 JOptionPane.ERROR_MESSAGE);
+    }
+
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+
     }
 }
