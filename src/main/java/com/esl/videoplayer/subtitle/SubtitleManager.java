@@ -2,20 +2,19 @@ package com.esl.videoplayer.subtitle;
 
 import com.esl.videoplayer.Video.VideoPanel;
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.localization.I18N;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class SubtitleManager {
+public class SubtitleManager implements I18N.LanguageChangeListener {
     private int currentSubtitleStream = -1; // -1 = desabilitado
     private int totalSubtitleStreams = 0;
     private Map<Integer, String> subtitleStreamNames = new HashMap<>();
@@ -95,8 +94,8 @@ public class SubtitleManager {
 
                 SwingUtilities.invokeLater(() -> {
                     JOptionPane.showMessageDialog(videoPlayer,
-                            "Legenda carregada com sucesso!",
-                            "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                            I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.text1"),
+                            I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.title1"), JOptionPane.INFORMATION_MESSAGE);
                 });
 
             } catch (Exception e) {
@@ -105,8 +104,8 @@ public class SubtitleManager {
 
                 SwingUtilities.invokeLater(() -> {
                     JOptionPane.showMessageDialog(videoPlayer,
-                            "Erro ao carregar legenda: " + e.getMessage(),
-                            "Erro", JOptionPane.ERROR_MESSAGE);
+                            I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.text2") + " " + e.getMessage(),
+                            I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.title2"), JOptionPane.ERROR_MESSAGE);
                 });
             }
         }, "SubtitleLoader").start();
@@ -247,7 +246,7 @@ public class SubtitleManager {
     }
     public void loadExternalSubtitle(String videoFilePath, VideoPlayer videoPlayer) {
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Selecionar Arquivo de Legenda");
+        fileChooser.setDialogTitle(I18N.get("SubtitleManager.loadExternalSubtitle.dialogTitle"));
         fileChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
             public boolean accept(java.io.File f) {
                 String name = f.getName().toLowerCase();
@@ -256,7 +255,7 @@ public class SubtitleManager {
             }
 
             public String getDescription() {
-                return "Arquivos de Legenda (*.srt, *.sub, *.ass, *.vtt)";
+                return  I18N.get("SubtitleManager.loadExternalSubtitle.description") + " (*.srt, *.sub, *.ass, *.vtt)";
             }
         });
 
@@ -424,14 +423,16 @@ public class SubtitleManager {
                         loadSubtitleFile(tempSubtitle, videoPlayer);
                         if (!getSubtitles().isEmpty()) {
                             JOptionPane.showMessageDialog(videoPlayer,
-                                    "Legenda carregada com sucesso!",
-                                    "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                                    I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.text1"),
+                                    I18N.get("SubtitleManager.loadSubtitleFile.showMessageDialog.title1"), JOptionPane.INFORMATION_MESSAGE);
                         }
 
                     });
 
                 } else {
-                    throw new Exception("Falha ao extrair legenda (código: " + exitCode + ", tamanho: " + tempSubtitle.length() + ")");
+                    throw new Exception( I18N.get("SubtitleManager.SwitchSubtitleStream.Exception.text1") +  " " +
+                            exitCode + "," + I18N.get("SubtitleManager.SwitchSubtitleStream.Exception.text2") + " " +
+                            tempSubtitle.length() + ")");
                 }
                 if(!videoPlayer.isPlaying){
                     videoPlayer.togglePlayPause();
@@ -443,13 +444,8 @@ public class SubtitleManager {
 
                 SwingUtilities.invokeLater(() -> {
                     JOptionPane.showMessageDialog(videoPlayer,
-                            "Não foi possível carregar a legenda embutida.\n" +
-                                    "Possíveis causas:\n" +
-                                    "- FFmpeg não está na pasta lib app\n" +
-                                    "- Stream de legenda incompatível\n" +
-                                    "- Formato de legenda não suportado\n\n" +
-                                    "Erro: " + e.getMessage(),
-                            "Erro", JOptionPane.ERROR_MESSAGE);
+                              I18N.get("SubtitleManager.SwitchSubtitleStream.ExtractionError.text") + "\n"  + e.getMessage(),
+                            I18N.get("ubtitleManager.loadSubtitleFile.showMessageDialog.title2"), JOptionPane.ERROR_MESSAGE);
                 });
             }
         }).start();
@@ -503,5 +499,10 @@ public class SubtitleManager {
 
     public void setSubtitleColor(Color subtitleColor) {
         this.subtitleColor = subtitleColor;
+    }
+
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+
     }
 }

@@ -108,15 +108,15 @@ public class ImageSaveManager  implements I18N.LanguageChangeListener {
             boolean ok = ImageIO.write(toSave, format, file);
 
             if (ok) {
-                showInfo("Imagem salva com sucesso!\n" + file.getAbsolutePath());
+                showInfo( I18N.get("ImageSaveManager.WriteImage.text1")  + "\n" + file.getAbsolutePath());
             } else {
-                showError("Formato não suportado: " + format);
+                showError( I18N.get("ImageSaveManager.WriteImage.text2") + " " + format);
             }
             return ok;
 
         } catch (Exception ex) {
             ex.printStackTrace();
-            showError("Erro ao salvar a imagem:\n" + ex.getMessage());
+            showError( I18N.get("ImageSaveManager.WriteImage.text3") + "\n" + ex.getMessage());
             return false;
         }
     }
@@ -183,19 +183,13 @@ public class ImageSaveManager  implements I18N.LanguageChangeListener {
     }
 
     // ── Helpers de diálogo ─────────────────────────────────────────────────────
-
-    private void showWarning(String message) {
-        JOptionPane.showMessageDialog(parent, message, "Aviso",
-                JOptionPane.WARNING_MESSAGE);
-    }
-
     private void showInfo(String message) {
-        JOptionPane.showMessageDialog(parent, message, "Salvo com sucesso",
+        JOptionPane.showMessageDialog(parent, message, I18N.get("ImageSaveManager.WriteImage.title1"),
                 JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(parent, message, "Erro ao salvar",
+        JOptionPane.showMessageDialog(parent, message, I18N.get("ImageSaveManager.WriteImage.title2"),
                 JOptionPane.ERROR_MESSAGE);
     }
 

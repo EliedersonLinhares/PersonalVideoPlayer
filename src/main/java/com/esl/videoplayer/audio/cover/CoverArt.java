@@ -9,17 +9,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 
-/**
- * Manages the extraction and storage of cover art (album art) from audio files
- * using an external FFmpeg process.
- *
- * The extraction process runs on a separate thread to avoid blocking the
- * Event Dispatch Thread (EDT) or main application flow.
- *
- * @author Eliederson Linhares
- * @version 1.0
- * @since 2025-11-25
- */
+
 public class CoverArt {
 
     /**

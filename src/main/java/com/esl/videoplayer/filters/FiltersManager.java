@@ -1,13 +1,15 @@
 package com.esl.videoplayer.filters;
 
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.localization.I18N;
 import org.bytedeco.javacv.Frame;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.util.Locale;
 
-public class FiltersManager {
+public class FiltersManager implements I18N.LanguageChangeListener {
 
     private boolean filtersEnabled = false;
     private double brightness = 0.0;  // -1.0 a 1.0
@@ -55,14 +57,16 @@ public class FiltersManager {
         // Apenas notificar que os filtros serão aplicados em tempo real
         String message;
         if (filtersEnabled && buildFilterString() != null) {
-            message = "Filtros ativados!\n\nOs filtros serão aplicados em tempo real durante a reprodução.";
+            message = I18N.get("filterManager.applyFilters.showMessageDialog.text1") +  "\n\n" +
+             I18N.get("filterManager.applyFilters.showMessageDialog.text2");
         } else {
-            message = "Filtros desativados!\n\nO vídeo será exibido sem filtros.";
+            message =  I18N.get("filterManager.applyFilters.showMessageDialog.text3") + "\n\n" +
+            I18N.get("filterManager.applyFilters.showMessageDialog.text4");
         }
 
         JOptionPane.showMessageDialog(videoPlayer,
                 message,
-                "Filtros",
+                I18N.get("filterManager.applyFilters.showMessageDialog.title"),
                 JOptionPane.INFORMATION_MESSAGE);
 
         // Forçar atualização do frame atual
@@ -196,7 +200,7 @@ public class FiltersManager {
     public void showBrightnessDialog(VideoPlayer videoPlayer) {
 
         // Criar diálogo customizado
-        JDialog dialog = new JDialog(videoPlayer, "Ajustar Brilho", true);
+        JDialog dialog = new JDialog(videoPlayer, I18N.get("filterManager.showBrightnessDialog.TileLabel"), true);
         dialog.setSize(450, 200);
         dialog.setLocationRelativeTo(videoPlayer);
         dialog.setResizable(false);
@@ -206,18 +210,20 @@ public class FiltersManager {
 
         // Painel superior com informações
         JPanel topPanel = new JPanel(new BorderLayout());
-        JLabel titleLabel = new JLabel("Ajustar Brilho", SwingConstants.CENTER);
+        JLabel titleLabel = new JLabel(I18N.get("filterManager.showBrightnessDialog.TileLabel"), SwingConstants.CENTER);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
         topPanel.add(titleLabel, BorderLayout.NORTH);
 
-        JLabel infoLabel = new JLabel("<html><center>Arraste o controle para ajustar<br>(-1.0 = mais escuro, 0 = normal, +1.0 = mais claro)</center></html>", SwingConstants.CENTER);
+        JLabel infoLabel = new JLabel("<html><center>" + I18N.get("filterManager.showBrightnessDialog.InfoLabel1") + "<br>"
+                + I18N.get("filterManager.showBrightnessDialog.InfoLabel2") + "</center></html>", SwingConstants.CENTER);
         topPanel.add(infoLabel, BorderLayout.CENTER);
         panel.add(topPanel, BorderLayout.NORTH);
 
         // Painel central com slider
         JPanel centerPanel = new JPanel(new BorderLayout(10, 5));
 
-        JLabel valueLabel = new JLabel(String.format("Valor: %.2f", brightness), SwingConstants.CENTER);
+        JLabel valueLabel = new JLabel(String.format( I18N.get("filterManager.showBrightnessDialog.ValueLabel2") +  ": %.2f", brightness)
+                , SwingConstants.CENTER);
         valueLabel.setFont(new Font("Arial", Font.BOLD, 14));
 
         JSlider slider = new JSlider(-100, 100, (int) (brightness * 100));
@@ -239,7 +245,7 @@ public class FiltersManager {
 
         slider.addChangeListener(e -> {
             double value = slider.getValue() / 100.0;
-            valueLabel.setText(String.format("Valor: %.2f", value));
+            valueLabel.setText(String.format( I18N.get("filterManager.showBrightnessDialog.ValueLabel2") + ": %.2f", value));
         });
 
         centerPanel.add(valueLabel, BorderLayout.NORTH);
@@ -249,9 +255,9 @@ public class FiltersManager {
         // Painel inferior com botões
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
 
-        JButton applyButton = new JButton("Aplicar");
-        JButton resetButton = new JButton("Resetar");
-        JButton cancelButton = new JButton("Cancelar");
+        JButton applyButton = new JButton(I18N.get("filterManager.showBrightnessDialog.ApplyButton"));
+        JButton resetButton = new JButton(I18N.get("filterManager.showBrightnessDialog.ResetButton"));
+        JButton cancelButton = new JButton(I18N.get("filterManager.showBrightnessDialog.CancelButton"));
 
         applyButton.addActionListener(e -> {
             brightness = slider.getValue() / 100.0;
@@ -260,21 +266,21 @@ public class FiltersManager {
 
             // Mostrar mensagem de processamento
             SwingUtilities.invokeLater(() -> {
-                JDialog processingDialog = new JDialog(videoPlayer, "Processando...", true);
+                JDialog processingDialog = new JDialog(videoPlayer, I18N.get("filterManager.showBrightnessDialog.processingDialog"), true);
                 processingDialog.setSize(300, 100);
                 processingDialog.setLocationRelativeTo(videoPlayer);
                 processingDialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 
                 JPanel procPanel = new JPanel(new BorderLayout(10, 10));
                 procPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-                JLabel procLabel = new JLabel("Aplicando filtros, aguarde...", SwingConstants.CENTER);
+                JLabel procLabel = new JLabel(I18N.get("filterManager.showBrightnessDialog.procLabel"), SwingConstants.CENTER);
                 procPanel.add(procLabel, BorderLayout.CENTER);
                 processingDialog.add(procPanel);
 
                 // Aplicar filtros em thread separada
                 new Thread(() -> {
                     applyFilters(videoPlayer);
-                    SwingUtilities.invokeLater(() -> processingDialog.dispose());
+                    SwingUtilities.invokeLater(processingDialog::dispose);
                 }).start();
 
                 processingDialog.setVisible(true);
@@ -337,5 +343,10 @@ public class FiltersManager {
 
     public void setSaturation(double saturation) {
         this.saturation = saturation;
+    }
+
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+
     }
 }

@@ -13,6 +13,7 @@ import java.awt.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class ExtractAudio implements I18N.LanguageChangeListener {
     public void confirmExtraction(VideoPanel videoPanel,VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
@@ -81,7 +82,7 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
         if (resposta == JOptionPane.YES_OPTION) {
             String formatoEscolhido = formatos[comboFormato.getSelectedIndex()][1];
             String bitrateEscolhido = comboBitrate.isEnabled()
-                    ? comboBitrate.getSelectedItem().toString()
+                    ? Objects.requireNonNull(comboBitrate.getSelectedItem()).toString()
                     : null; // null = deixa o FFmpeg decidir para sem perdas
             iniciarProcessamento(videoPanel,videoPlayer, grabber, formatoEscolhido, bitrateEscolhido);
         }
@@ -152,7 +153,6 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
                     JOptionPane.showMessageDialog(videoPlayer,  I18N.get("extractAudio.showMessageDialog.success.text") + "\n" + outputPath);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(videoPlayer,   I18N.get("extractAudio.showMessageDialog.success.error") + " " + e.getMessage());
-                    return; // não tenta reinicializar se a extração falhou
                 } finally {
                     // Sempre reinicializa o grabber, independente de sucesso ou erro
                     SwingUtilities.invokeLater(videoPlayer::reinicializarGrabber);
@@ -179,6 +179,6 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
 
     @Override
     public void onLanguageChanged(Locale newLocale) {
-
+     //Action when language are changed
     }
 }

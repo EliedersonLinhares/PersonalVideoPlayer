@@ -90,8 +90,8 @@ public class ThemeManager {
      */
     private void registerThemes() {
         // Adicionar temas existentes
-        availableThemes.put("FlatArcOrangeIJTheme",
-                new ThemeInfo("FlatArcOrangeIJTheme", "🔶 Arc Orange (Claro)", FlatArcOrangeIJTheme.class));
+        availableThemes.put(DEFAULT_THEME,
+                new ThemeInfo(DEFAULT_THEME, "🔶 Arc Orange (Claro)", FlatArcOrangeIJTheme.class));
 
         availableThemes.put("FlatArcDarkOrangeIJTheme",
                 new ThemeInfo("FlatArcDarkOrangeIJTheme", "🔸 Arc Dark Orange (Escuro)", FlatArcDarkOrangeIJTheme.class));
@@ -280,57 +280,6 @@ public class ThemeManager {
         } else {
             System.err.println("✗ Falha ao aplicar tema!");
             System.out.println("=== TROCA DE TEMA FALHOU ===\n");
-        }
-    }
-
-    /**
-     * Altera o tema e atualiza a interface
-     */
-    public void changeTheme(String themeName, JFrame frame) {
-        if (!availableThemes.containsKey(themeName)) {
-            System.err.println("Tema não existe: " + themeName);
-            return;
-        }
-
-        // Salvar novo tema
-        setTheme(themeName);
-
-        // Guardar tamanho e posição atuais da janela
-        Dimension currentSize = frame.getSize();
-        Point currentLocation = frame.getLocation();
-        boolean wasMaximized = (frame.getExtendedState() & JFrame.MAXIMIZED_BOTH) == JFrame.MAXIMIZED_BOTH;
-
-        // Aplicar tema
-        if (applyTheme(themeName)) {
-            // Atualizar todas as janelas abertas
-            SwingUtilities.updateComponentTreeUI(frame);
-
-            // Restaurar tamanho e posição
-            if (!wasMaximized) {
-                frame.setSize(currentSize);
-                frame.setLocation(currentLocation);
-            } else {
-                frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-            }
-
-            // Forçar repaint de todos os componentes
-            frame.revalidate();
-            frame.repaint();
-
-            System.out.println("✓ Tema alterado com sucesso!");
-
-            // Mostrar mensagem de sucesso
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(frame,
-                        "Tema alterado para: " + availableThemes.get(themeName).getDisplayName(),
-                        "Tema Aplicado",
-                        JOptionPane.INFORMATION_MESSAGE);
-            });
-        } else {
-            JOptionPane.showMessageDialog(frame,
-                    "Erro ao aplicar o tema.",
-                    "Erro",
-                    JOptionPane.ERROR_MESSAGE);
         }
     }
 

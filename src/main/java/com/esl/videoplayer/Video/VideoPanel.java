@@ -144,6 +144,8 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
     private JMenu audioPlaylistMenu;
     private JMenuItem audioOpenPlaylistItem;
     private JCheckBoxMenuItem audioAutoPlayItem;
+    private JMenu extractAudioMenu;
+    private JMenuItem confirmExtractAudioItem;
 
     // NOVOS: Atributos para buildAndShowPopup
     private JMenu mainPlaylistMenu;
@@ -187,7 +189,7 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
 
         //Parte do menu colocada no construtor para setar o auto-play
         setAutoPlayNext(true);
-        autoPlayItem = new JCheckBoxMenuItem("Auto-play Próxima", autoPlayNext);
+        autoPlayItem = new JCheckBoxMenuItem(I18N.get("videoPanel.autoPlayItem.text"), autoPlayNext);
         autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
 
         add(spectrumPanel, BorderLayout.CENTER);
@@ -615,155 +617,6 @@ public class VideoPanel extends JPanel implements I18N.LanguageChangeListener {
             }
         }
     }
-//    public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-//        JPopupMenu contextMenu = new JPopupMenu();
-//
-//
-//
-//        //Menu de mudança de idioma
-//        getAudioLanguageMenu(contextMenu);
-//
-//        // Listener do popup
-//        contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//
-//                addRecentFilesToMenu(contextMenu, videoPlayer);
-////                spectrumMenu.setEnabled(true);
-////                audioMenu2.setEnabled(true);
-//                updateLayoutMenuSelection();
-//            }
-//
-//            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-//                removeRecentFilesFromImageMenu(contextMenu);
-//            }
-//
-//            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-//                removeRecentFilesFromImageMenu(contextMenu);
-//            }
-//        });
-//
-//        // Adicionar listener de mouse
-//        addMouseListener(new MouseAdapter() {
-//            public void mousePressed(MouseEvent e) {
-//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//                }
-//            }
-//
-//            public void mouseReleased(MouseEvent e) {
-//                if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//                }
-//            }
-//        });
-//
-//        // IMPORTANTE: Atualizar textos pela primeira vez
-//       // updateAudioMenuTexts();
-//
-//        // IMPORTANTE: Registrar listener já foi feito no setupVideoContextMenu
-//        // Não precisa registrar novamente
-//
-//        // IMPORTANTE: Registrar listener APÓS criar tudo
-//        I18N.addLanguageChangeListener(this);
-//    }
-//
-//public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
-//    JPopupMenu contextMenu = new JPopupMenu();
-//
-//    // Carrega o frame original e exibe sem filtros
-//    currentFilteredImage = filterManager.loadOriginalFrame();
-//    if (currentFilteredImage != null) {
-//       // repaintImagePanel(currentFilteredImage);
-//    }
-//
-//    // ── Menu de idioma de áudio (já existia) ──────────────────────────────
-//    getAudioLanguageMenu(contextMenu);
-//
-//    contextMenu.addSeparator();
-//
-//    // ── Submenu: Filtros ───────────────────────────────────────────────────
-//    JMenu filtrosMenu = new JMenu("Filtros");
-//
-//    JMenuItem brilhoItem    = new JMenuItem("Ajustar brilho...");
-//    JMenuItem contrasteItem = new JMenuItem("Ajustar contraste...");
-//    JMenuItem resetItem     = new JMenuItem("Restaurar original");
-//
-//    brilhoItem.addActionListener(e ->
-//            showFilterDialog(grabber, "Brilho",
-//                    filterManager.getBrightness(),
-//                    newVal -> {
-//                        BufferedImage result = filterManager.setBrightness(newVal);
-//                        if (result != null) {
-//                            currentFilteredImage = result;
-//                        }
-//                    })
-//    );
-//
-//    contrasteItem.addActionListener(e ->
-//            showFilterDialog(grabber, "Contraste",
-//                    filterManager.getContrast(),
-//                    newVal -> {
-//                        BufferedImage result = filterManager.setContrast(newVal);
-//                        if (result != null) {
-//                            currentFilteredImage = result;
-//                        }
-//                    })
-//    );
-//
-//    resetItem.addActionListener(e -> {
-//        BufferedImage result = filterManager.reset();
-//        if (result != null) {
-//            currentFilteredImage = result;
-//        }
-//    });
-//
-//    filtrosMenu.add(brilhoItem);
-//    filtrosMenu.add(contrasteItem);
-//    filtrosMenu.addSeparator();
-//    filtrosMenu.add(resetItem);
-//    contextMenu.add(filtrosMenu);
-//
-//    contextMenu.addSeparator();
-//
-//    // ── Item: Salvar imagem ────────────────────────────────────────────────
-//    JMenuItem salvarItem = new JMenuItem("Salvar imagem...");
-//    salvarItem.addActionListener(e ->
-//            saveManager.saveImage(currentFilteredImage)
-//    );
-//    contextMenu.add(salvarItem);
-//
-//    contextMenu.addSeparator();
-//
-//    // ── Listener do popup (já existia) ────────────────────────────────────
-//    contextMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
-//        public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
-//            addRecentFilesToMenu(contextMenu, videoPlayer);
-//            updateLayoutMenuSelection();
-//        }
-//        public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {
-//            removeRecentFilesFromImageMenu(contextMenu);
-//        }
-//        public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {
-//            removeRecentFilesFromImageMenu(contextMenu);
-//        }
-//    });
-//
-//    // ── Listener de mouse (já existia) ────────────────────────────────────
-//    addMouseListener(new MouseAdapter() {
-//        public void mousePressed(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//        public void mouseReleased(MouseEvent e) {
-//            if (e.isPopupTrigger() || SwingUtilities.isRightMouseButton(e)) {
-//                contextMenu.show(e.getComponent(), e.getX(), e.getY());
-//            }
-//        }
-//    });
-//
-//    I18N.addLanguageChangeListener(this);
-//}
 
 // ── setupImageContextMenu ──────────────────────────────────────────────────
 
@@ -1520,9 +1373,8 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
 
         contextMenu.add(batchCaptureMenu);
 
-        JMenu extractAudioMenu = new JMenu();
-        extractAudioMenu.setText("ExtractAudio");
-        JMenuItem confirmExtractAudioItem = new JMenuItem("Confirm");
+        extractAudioMenu = new JMenu();
+        confirmExtractAudioItem = new JMenuItem();
         confirmExtractAudioItem.addActionListener(e -> extractAudio.confirmExtraction(this,videoPlayer,grabber));
         extractAudioMenu.add(confirmExtractAudioItem);
 
@@ -2005,6 +1857,13 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
             autoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
         }
 
+        if(extractAudioMenu != null){
+            extractAudioMenu.setText(I18N.get("videoPanel.extractAudioMenu"));
+        }
+        if(confirmExtractAudioItem != null){
+            confirmExtractAudioItem.setText(I18N.get("videoPanel.confirmExtractAudioItem"));
+        }
+
         // Menu de idioma do vídeo
         if (videoLanguageMenu != null) {
             videoLanguageMenu.setText(I18N.get("language.text"));
@@ -2371,72 +2230,7 @@ public void setupImageContextMenu(VideoPlayer videoPlayer, FFmpegFrameGrabber gr
     }
 
 
-//    @Override
-//    protected void paintComponent(Graphics g) {
-//        super.paintComponent(g);
-//
-//        // Se spectrum estiver visível, ele se desenha sozinho
-//        if (spectrumPanel != null && spectrumPanel.isVisible()) {
-//            return;
-//        }
-//
-//        if (currentImage == null) {
-//            // SUBSTITUIR: Desenhar imagem de fundo em vez de texto simples
-//            Graphics2D g2d = (Graphics2D) g;
-//            backgroundImageLoader.drawBackground(g2d, getWidth(), getHeight());
-//            return;
-//        }
-//
-//        // Calcular dimensões mantendo aspect ratio
-//        int panelWidth = getWidth();
-//        int panelHeight = getHeight();
-//        int imgWidth = currentImage.getWidth();
-//        int imgHeight = currentImage.getHeight();
-//
-//        double panelRatio = (double) panelWidth / panelHeight;
-//        double imgRatio = (double) imgWidth / imgHeight;
-//
-//        int drawWidth, drawHeight, x, y;
-//
-//        if (panelRatio > imgRatio) {
-//            drawHeight = panelHeight;
-//            drawWidth = (int) (imgWidth * ((double) panelHeight / imgHeight));
-//            x = (panelWidth - drawWidth) / 2;
-//            y = 0;
-//        } else {
-//            drawWidth = panelWidth;
-//            drawHeight = (int) (imgHeight * ((double) panelWidth / imgWidth));
-//            x = 0;
-//            y = (panelHeight - drawHeight) / 2;
-//        }
-//
-//        Graphics2D g2d = (Graphics2D) g;
-//        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-//        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
-//
-//        g2d.drawImage(currentImage, x, y, drawWidth, drawHeight, null);
-//
-//        // Desenhar legendas
-//        if (!subtitleManager.getCurrentSubtitleText().isEmpty()) {
-//            subtitleManager.drawSubtitles(g2d, panelWidth, panelHeight, getHeight());
-//        }
-//
-//        if (currentFilteredImage != null) {
-//            // Centraliza a imagem no painel mantendo proporção
-//            int panelW = getWidth();
-//            int panelH = getHeight();
-//            int imgW   = currentFilteredImage.getWidth();
-//            int imgH   = currentFilteredImage.getHeight();
-//
-//            double scale = Math.min((double) panelW / imgW, (double) panelH / imgH);
-//            int drawW = (int)(imgW * scale);
-//            int drawH = (int)(imgH * scale);
-//            int x1     = (panelW - drawW) / 2;
-//            int y2     = (panelH - drawH) / 2;
-//
-//            g.drawImage(currentFilteredImage, x1, y2, drawW, drawH, this);
-//        }
-//    }
+
 // ── paintComponent — integra currentFilteredImage ao fluxo existente ───────
 
     @Override

@@ -1,15 +1,18 @@
 package com.esl.videoplayer.Video;
 
+import com.esl.videoplayer.localization.I18N;
+
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.InputStream;
+import java.util.Locale;
 
 /**
  * Carrega e gerencia a imagem de fundo do VideoPanel
  */
-public class BackgroundImageLoader {
+public class BackgroundImageLoader implements I18N.LanguageChangeListener {
 
     private BufferedImage backgroundImage;
     private boolean imageLoaded = false;
@@ -125,31 +128,6 @@ public class BackgroundImageLoader {
         // Restaurar composite original
         g2d.setComposite(originalComposite);
 
-        // Desenhar texto por cima da imagem
-       // drawOverlayText(g2d, panelWidth, panelHeight);
-    }
-
-    /**
-     * Desenha texto sobre a imagem
-     */
-    private void drawOverlayText(Graphics2D g2d, int panelWidth, int panelHeight) {
-        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-
-        // Sombra do texto
-        g2d.setColor(new Color(0, 0, 0, 150));
-        g2d.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        String msg = "Clique com botão direito para abrir arquivo";
-        FontMetrics fm = g2d.getFontMetrics();
-        int x = (panelWidth - fm.stringWidth(msg)) / 2;
-        int y = panelHeight - 60;
-
-        // Desenhar sombra
-        g2d.drawString(msg, x + 2, y + 2);
-
-        // Desenhar texto principal
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(msg, x, y);
     }
 
     /**
@@ -162,7 +140,7 @@ public class BackgroundImageLoader {
         // Título principal
         g2d.setColor(Color.WHITE);
         g2d.setFont(new Font("Segoe UI", Font.BOLD, 24));
-        String title = "Video Player";
+        String title = "Media Player";
         FontMetrics fmTitle = g2d.getFontMetrics();
         int xTitle = (panelWidth - fmTitle.stringWidth(title)) / 2;
         int yTitle = panelHeight / 2 - 20;
@@ -171,7 +149,7 @@ public class BackgroundImageLoader {
         // Subtítulo
         g2d.setColor(new Color(200, 200, 200));
         g2d.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        String subtitle = "Clique com botão direito para começar";
+        String subtitle = I18N.get("BackgroundImageLoader.drawFallbackMessage.subtitleText");
         FontMetrics fmSub = g2d.getFontMetrics();
         int xSub = (panelWidth - fmSub.stringWidth(subtitle)) / 2;
         int ySub = panelHeight / 2 + 20;
@@ -205,5 +183,10 @@ public class BackgroundImageLoader {
      */
     public void reload() {
         loadBackgroundImage();
+    }
+
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+
     }
 }

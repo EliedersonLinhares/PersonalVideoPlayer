@@ -1,13 +1,15 @@
 package com.esl.videoplayer.Video;
 
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.localization.I18N;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 
 import javax.sound.sampled.SourceDataLine;
 import javax.swing.*;
 import java.awt.*;
+import java.util.Locale;
 
-public class ScreenMode {
+public class ScreenMode implements I18N.LanguageChangeListener {
 
     public void enterFullScreen(VideoPlayer videoPlayer, SourceDataLine audioLine, JPanel controlPanel, Rectangle normalBounds,
                                  FFmpegFrameGrabber grabber, boolean isPlaying, Thread playbackThread, String currentVideoPath) {
@@ -18,17 +20,14 @@ public class ScreenMode {
         if (!gd.isFullScreenSupported()) {
             System.out.println("Tela cheia não suportada neste dispositivo");
             JOptionPane.showMessageDialog(videoPlayer,
-                    "Tela cheia não é suportada neste dispositivo.",
-                    "Aviso", JOptionPane.WARNING_MESSAGE);
+                    I18N.get("ScreenMode.enterFullScreen.showMessageDialog.text"),
+                    I18N.get("ScreenMode.enterFullScreen.showMessageDialog.title"), JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         try {
             // Salvar estado do vídeo atual
             videoPlayer.saveVideoState();
-
-            // Salvar geometria da janela
-            normalBounds = videoPlayer.getBounds();
 
             // Fechar vídeo atual
             if (grabber != null) {
@@ -144,4 +143,8 @@ public class ScreenMode {
         }
     }
 
+    @Override
+    public void onLanguageChanged(Locale newLocale) {
+
+    }
 }

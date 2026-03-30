@@ -1,7 +1,4 @@
 package com.esl.videoplayer.playlist;
-
-import com.esl.videoplayer.VideoPlayer;
-
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Collections;
