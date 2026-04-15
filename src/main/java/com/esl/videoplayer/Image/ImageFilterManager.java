@@ -12,7 +12,7 @@ import java.awt.image.RescaleOp;
  * Gerencia a aplicação de filtros de imagem usando Java2D (RescaleOp + Graphics2D).
  *
  * Interface 100% compatível com a versão anterior baseada em FFmpegFrameFilter —
- * basta trocar a instância no VideoPanel, sem alterar nenhuma outra chamada.
+ * basta trocar a instância no MainPanel, sem alterar nenhuma outra chamada.
  *
  * Implementação:
  *   - Brilho  → RescaleOp com scaleFactor (multiplicador por canal RGB)
@@ -139,7 +139,7 @@ public class ImageFilterManager {
         // Mapeia cada valor 0-255 para um novo valor que aumenta ou reduz o contraste.
         // contrast=1.0 → tabela identidade | >1.0 → curva S ampliada | <1.0 → achatada
         if (Float.compare(contrast, 1.0f) != 0) {
-            result = applyContrast(result, contrast);
+            result = mainPanel(result, contrast);
         }
 
         // Passo 4: redimensiona para o preview mantendo proporção, se necessário
@@ -185,7 +185,7 @@ public class ImageFilterManager {
      *   - contrast>1.0 → amplia a distância do ponto médio (mais contraste)
      *   - contrast<1.0 → comprime em direção ao cinza médio (menos contraste)
      */
-    private BufferedImage applyContrast(BufferedImage src, float contrastVal) {
+    private BufferedImage mainPanel(BufferedImage src, float contrastVal) {
         // Monta a tabela de lookup uma vez (256 entradas)
         byte[] lut = new byte[256];
         for (int i = 0; i < 256; i++) {

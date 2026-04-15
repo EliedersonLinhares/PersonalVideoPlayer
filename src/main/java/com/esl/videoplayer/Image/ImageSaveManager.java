@@ -49,7 +49,7 @@ public class ImageSaveManager  implements I18N.LanguageChangeListener {
 
         // ── Configura o JnaFileChooser ────────────────────────────────────────
         JnaFileChooser fc = new JnaFileChooser(lastDirectory);
-        fc.setDefaultFileName(videoPlayer.videoFilePath);
+        fc.setDefaultFileName(videoPlayer.getVideoFilePath());
         fc.setMultiSelectionEnabled(false);
 
         // Filtros de formato — a ordem define o padrão (primeiro = padrão)

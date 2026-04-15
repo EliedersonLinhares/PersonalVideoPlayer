@@ -1,6 +1,6 @@
 package com.esl.videoplayer.audio.cover;
 
-import com.esl.videoplayer.Video.VideoPanel;
+import com.esl.videoplayer.Video.MainPanel;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -40,14 +40,14 @@ public class CoverArt {
      * Initiates the extraction of cover art from a specified audio file using FFmpeg.
      *
      * The extraction runs asynchronously on a new thread. Upon completion or failure,
-     * it updates the provided {@link VideoPanel} on the Event Dispatch Thread (EDT).
+     * it updates the provided {@link MainPanel} on the Event Dispatch Thread (EDT).
      *
      * @param audioFilePath The absolute path to the input audio file (e.g., MP3, FLAC).
      * @param ffmpegPath The absolute path to the FFmpeg executable.
-     * @param videoPanel The {@link VideoPanel} instance that needs to be updated with the extracted cover art.
-     * @throws NullPointerException if {@code audioFilePath}, {@code ffmpegPath}, or {@code videoPanel} is {@code null}.
+     * @param mainPanel The {@link MainPanel} instance that needs to be updated with the extracted cover art.
+     * @throws NullPointerException if {@code audioFilePath}, {@code ffmpegPath}, or {@code mainPanel} is {@code null}.
      */
-    public void extractCoverArt(String audioFilePath, String ffmpegPath, VideoPanel videoPanel) {
+    public void extractCoverArt(String audioFilePath, String ffmpegPath, MainPanel mainPanel) {
         System.out.println("=== Tentando extrair cover art ===");
 
         // Resetar cover anterior (garantia adicional)
@@ -102,8 +102,8 @@ public class CoverArt {
 
                         SwingUtilities.invokeLater(() -> {
                             // Atualizar painel para mostrar a capa
-                            videoPanel.setCoverArt(audioCoverArt);
-                            videoPanel.repaint();
+                            mainPanel.setCoverArt(audioCoverArt);
+                            mainPanel.repaint();
                             System.out.println("Cover art carregada: " + coverImage.getWidth() + "x" + coverImage.getHeight());
                         });
                     } else {
@@ -114,14 +114,14 @@ public class CoverArt {
                     System.out.println("Este arquivo não possui cover art (attached pic)");
                     // GARANTIR que cover art está null
                     SwingUtilities.invokeLater(() -> {
-                        videoPanel.setCoverArt(null);
-                        videoPanel.repaint();
+                        mainPanel.setCoverArt(null);
+                        mainPanel.repaint();
                     });
                 } else {
                     System.out.println("Falha ao extrair cover art (código: " + exitCode + ")");
                     SwingUtilities.invokeLater(() -> {
-                        videoPanel.setCoverArt(null);
-                        videoPanel.repaint();
+                        mainPanel.setCoverArt(null);
+                        mainPanel.repaint();
                     });
                 }
 
@@ -130,8 +130,8 @@ public class CoverArt {
                 e.printStackTrace();
                 //If there's an error, don`t use cover image
                 SwingUtilities.invokeLater(() -> {
-                    videoPanel.setCoverArt(null);
-                    videoPanel.repaint();
+                    mainPanel.setCoverArt(null);
+                    mainPanel.repaint();
                 });
             }
         }, "CoverArtExtractor").start();

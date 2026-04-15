@@ -1,6 +1,6 @@
 package com.esl.videoplayer.audio;
 
-import com.esl.videoplayer.Video.VideoPanel;
+import com.esl.videoplayer.Video.MainPanel;
 
 import javax.swing.*;
 import java.nio.ShortBuffer;
@@ -138,7 +138,7 @@ public class AudioLoudnessManager {
 
 
     // Método auxiliar para processar samples de áudio (para áudio apenas)
-    public byte[] processAudioSamples(ShortBuffer channelSamples, AudioLoudnessAnalyzer loudnessAnalyzer, VideoPanel videoPanel,
+    public byte[] processAudioSamples(ShortBuffer channelSamples, AudioLoudnessAnalyzer loudnessAnalyzer, MainPanel mainPanel,
                                       boolean isAudioOnly, int audioChannels, float volume) {
         try {
             // Copiar samples para array
@@ -221,7 +221,7 @@ public class AudioLoudnessManager {
                 }
 
                 SwingUtilities.invokeLater(() -> {
-                    videoPanel.updateSpectrum(spectrumData);
+                    mainPanel.updateSpectrum(spectrumData);
                 });
             }
 

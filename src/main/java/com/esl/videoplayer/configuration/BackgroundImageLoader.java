@@ -1,4 +1,4 @@
-package com.esl.videoplayer.Video;
+package com.esl.videoplayer.configuration;
 
 import com.esl.videoplayer.localization.I18N;
 
@@ -10,7 +10,7 @@ import java.io.InputStream;
 import java.util.Locale;
 
 /**
- * Carrega e gerencia a imagem de fundo do VideoPanel
+ * Carrega e gerencia a imagem de fundo do MainPanel
  */
 public class BackgroundImageLoader implements I18N.LanguageChangeListener {
 

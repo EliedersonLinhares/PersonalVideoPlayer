@@ -1,6 +1,6 @@
 package com.esl.videoplayer.subtitle;
 
-import com.esl.videoplayer.Video.VideoPanel;
+import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.localization.I18N;
 
@@ -268,7 +268,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
         }
     }
 
-    public void updateSubtitle(long currentTimeMs, VideoPanel videoPanel) {
+    public void updateSubtitle(long currentTimeMs, MainPanel mainPanel) {
         if (getCurrentSubtitleStream() == -1 || subtitles.isEmpty()) {
             currentSubtitleText = "";
             return;
@@ -279,7 +279,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
             if (currentTimeMs >= entry.getStartTime() && currentTimeMs <= entry.getEndTime()) {
                 if (!currentSubtitleText.equals(entry.getText())) {
                     currentSubtitleText = entry.getText();
-                    videoPanel.repaint();
+                    mainPanel.repaint();
                 }
                 return;
             }
@@ -288,7 +288,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
         // Nenhuma legenda no tempo atual
         if (!currentSubtitleText.isEmpty()) {
             currentSubtitleText = "";
-            videoPanel.repaint();
+            mainPanel.repaint();
         }
     }
 
@@ -366,7 +366,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
         // Extrair legenda embutida usando FFmpeg em thread separada
         new Thread(() -> {
             try {
-                if(videoPlayer.isPlaying){
+                if(videoPlayer.isPlaying()){
                     videoPlayer.togglePlayPause();
                 }
 
@@ -434,7 +434,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
                             exitCode + "," + I18N.get("SubtitleManager.SwitchSubtitleStream.Exception.text2") + " " +
                             tempSubtitle.length() + ")");
                 }
-                if(!videoPlayer.isPlaying){
+                if(!videoPlayer.isPlaying()){
                     videoPlayer.togglePlayPause();
                 }
 

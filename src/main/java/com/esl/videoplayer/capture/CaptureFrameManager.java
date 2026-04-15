@@ -1,6 +1,6 @@
 package com.esl.videoplayer.capture;
 
-import com.esl.videoplayer.Video.VideoPanel;
+import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.localization.I18N;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
@@ -16,11 +16,12 @@ import java.util.Locale;
 public class CaptureFrameManager implements I18N.LanguageChangeListener {
 
     private JFileChooser folderChooser ;
+    private BatchCaptureExecution batchCaptureExecution;
 
-    public CaptureFrameManager() {
+    public CaptureFrameManager(VideoPlayer videoPlayer) {
         // IMPORTANTE: Atualizar textos pela primeira vez
         updateTexts();
-
+        batchCaptureExecution = new BatchCaptureExecution(videoPlayer);
         // IMPORTANTE: Registrar listener APÓS criar todos os componentes
         I18N.addLanguageChangeListener(this);
     }
@@ -53,10 +54,10 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
         this.batchCaptureCancelled = batchCaptureCancelled;
     }
 
-    public void captureFrame(VideoPlayer videoPlayer, VideoPanel videoPanel, String customCapturePath, String videoFilePath, long currentFrame, boolean silentCapture) {
+    public void captureFrame(VideoPlayer videoPlayer, MainPanel mainPanel, String customCapturePath, String videoFilePath, long currentFrame, boolean silentCapture) {
 
         // Verificar se há uma imagem atual no painel
-        BufferedImage currentImage = videoPanel.getCurrentImage();
+        BufferedImage currentImage = mainPanel.getCurrentImage();
         try {
             // Determinar o diretório de destino
             String targetDirectory;
@@ -237,7 +238,7 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
             return;
         }
         // Iniciar captura em lote
-        videoPlayer.startBatchCapture(targetDirectory, totalFramesToCapture, isPlaying);
+        batchCaptureExecution.startBatchCapture(targetDirectory, totalFramesToCapture, isPlaying);
     }
 
 

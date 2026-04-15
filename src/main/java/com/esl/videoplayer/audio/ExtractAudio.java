@@ -1,6 +1,6 @@
 package com.esl.videoplayer.audio;
 
-import com.esl.videoplayer.Video.VideoPanel;
+import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.localization.I18N;
 import org.bytedeco.ffmpeg.global.avcodec;
@@ -16,7 +16,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 public class ExtractAudio implements I18N.LanguageChangeListener {
-    public void confirmExtraction(VideoPanel videoPanel,VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
+    public void confirmExtraction(MainPanel mainPanel, VideoPlayer videoPlayer, FFmpegFrameGrabber grabber) {
 
         String[][] formatos = {
                 {"MP3",  "mp3"},
@@ -73,7 +73,7 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
         panel.add(comboBitrate, gbc);
 
         int resposta = JOptionPane.showConfirmDialog(
-                videoPanel,
+                mainPanel,
                 panel,
                 I18N.get("extractAudio.ConfirmDialog.title"),
                 JOptionPane.YES_NO_OPTION
@@ -84,14 +84,14 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
             String bitrateEscolhido = comboBitrate.isEnabled()
                     ? Objects.requireNonNull(comboBitrate.getSelectedItem()).toString()
                     : null; // null = deixa o FFmpeg decidir para sem perdas
-            iniciarProcessamento(videoPanel,videoPlayer, grabber, formatoEscolhido, bitrateEscolhido);
+            iniciarProcessamento(mainPanel,videoPlayer, grabber, formatoEscolhido, bitrateEscolhido);
         }
     }
-    private void iniciarProcessamento(VideoPanel videoPanel,VideoPlayer videoPlayer, FFmpegFrameGrabber grabberOriginal,
+    private void iniciarProcessamento(MainPanel mainPanel, VideoPlayer videoPlayer, FFmpegFrameGrabber grabberOriginal,
                                       String formato, String bitrate) {
         try { grabberOriginal.stop(); } catch (Exception e) { e.printStackTrace(); }
 
-        String inputPath  = videoPlayer.videoFilePath;
+        String inputPath  = videoPlayer.getVideoFilePath();
         String outputPath = inputPath.replaceAll("\\.[^.]+$", "") + "_audio." + formato;
 
         JDialog janelaProgresso = new JDialog(videoPlayer, I18N.get("extractAudio.JDialog.title"), true);
@@ -100,7 +100,7 @@ public class ExtractAudio implements I18N.LanguageChangeListener {
         janelaProgresso.add(new JLabel(I18N.get("extractAudio.JLabel4")), BorderLayout.NORTH);
         janelaProgresso.add(progressBar, BorderLayout.CENTER);
         janelaProgresso.setSize(300, 100);
-        janelaProgresso.setLocationRelativeTo(videoPanel);
+        janelaProgresso.setLocationRelativeTo(mainPanel);
 
         SwingWorker<Void, Integer> worker = new SwingWorker<>() {
             @Override

@@ -1,4 +1,4 @@
-package com.esl.videoplayer.Video;
+package com.esl.videoplayer.configuration;
 
 import java.io.*;
 import java.nio.file.*;

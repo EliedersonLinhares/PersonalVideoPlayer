@@ -188,7 +188,7 @@ public class ConfigManager {
     }
 
     // -------------------------------------------------------------------------
-    // Atalhos específicos para idioma (usados pelo I18N / VideoPanel)
+    // Atalhos específicos para idioma (usados pelo I18N / MainPanel)
     // -------------------------------------------------------------------------
 
     /**
@@ -219,7 +219,7 @@ public class ConfigManager {
     }
 
     // -------------------------------------------------------------------------
-    // Atalhos específicos para legenda (usados pelo SubtitleManager / VideoPanel)
+    // Atalhos específicos para legenda (usados pelo SubtitleManager / MainPanel)
     // -------------------------------------------------------------------------
 
     /**

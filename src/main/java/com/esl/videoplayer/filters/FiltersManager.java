@@ -70,14 +70,14 @@ public class FiltersManager implements I18N.LanguageChangeListener {
                 JOptionPane.INFORMATION_MESSAGE);
 
         // Forçar atualização do frame atual
-        if (!videoPlayer.isPlaying) {
+        if (!videoPlayer.isPlaying()) {
             try {
-                Frame frame = videoPlayer.grabber.grab();
+                Frame frame = videoPlayer.getGrabber().grab();
                 if (frame != null && frame.image != null) {
-                    BufferedImage img = videoPlayer.converter.convert(frame);
+                    BufferedImage img = videoPlayer.getConverter().convert(frame);
                     if (img != null) {
                         img = applyImageFilters(img);
-                        videoPlayer.videoPanel.updateImage(img);
+                        videoPlayer.getMainPanel().updateImage(img);
                     }
                 }
             } catch (Exception e) {
