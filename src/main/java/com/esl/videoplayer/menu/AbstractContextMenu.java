@@ -1,5 +1,7 @@
 package com.esl.videoplayer.menu;
 
+import com.esl.videoplayer.configuration.AboutDialog;
+import com.esl.videoplayer.configuration.AppInfo;
 import com.esl.videoplayer.configuration.RecentFilesManager;
 import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
@@ -22,6 +24,17 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
     protected final MainPanel mainPanel;
     protected final ConfigManager configManager;
     protected RecentFilesManager recentFilesManager;
+
+    /**
+     * Cria um submenu de idioma com RadioButtons para EN e PT-BR,
+     * já com o idioma atual selecionado.
+     * Cada subclasse adiciona este menu onde quiser via {@code menu.add(buildLanguageMenu())}.
+     */
+    protected JMenu                langMenu;
+    protected JRadioButtonMenuItem langEnItem;
+    protected JRadioButtonMenuItem langPtItem;
+
+    protected JMenuItem aboutItem;
 
     protected AbstractContextMenu(MainPanel mainPanel, VideoPlayer videoPlayer) {
         this.mainPanel = mainPanel;
@@ -82,14 +95,15 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
         });
     }
 
-    /**
-     * Cria um submenu de idioma com RadioButtons para EN e PT-BR,
-     * já com o idioma atual selecionado.
-     * Cada subclasse adiciona este menu onde quiser via {@code menu.add(buildLanguageMenu())}.
-     */
-    protected JMenu                langMenu;
-    protected JRadioButtonMenuItem langEnItem;
-    protected JRadioButtonMenuItem langPtItem;
+    // ── Submenus ──────────────────────────────────────────────────────────────
+
+    public JMenuItem buildAboutItem() {
+        aboutItem = new JMenuItem();
+        aboutItem.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        aboutItem.addActionListener(e ->
+                AboutDialog.show(mainPanel, AppInfo.getLogo()));  // veja nota abaixo
+        return aboutItem;
+    }
 
     /**
      * Cria o submenu de idioma e guarda referências para atualização posterior.

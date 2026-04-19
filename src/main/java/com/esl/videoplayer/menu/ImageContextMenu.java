@@ -4,6 +4,7 @@ import com.esl.videoplayer.Image.ImageFilterManager;
 import com.esl.videoplayer.Image.ImageSaveManager;
 import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
+import com.esl.videoplayer.configuration.MediaInfoDialog;
 import com.esl.videoplayer.localization.I18N;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 
@@ -25,6 +26,8 @@ public class ImageContextMenu extends AbstractContextMenu {
     private JMenuItem resetFilterItem;
     private JMenuItem saveAsItem;
 
+    private JMenuItem fileInfoItem;
+
     // ── Construtor ────────────────────────────────────────────────────────────
     public ImageContextMenu(MainPanel mainPanel, VideoPlayer videoPlayer,
                             ImageFilterManager filterManager,
@@ -45,6 +48,9 @@ public class ImageContextMenu extends AbstractContextMenu {
         menu.addSeparator();
         menu.add(buildSaveAsItem());
         menu.addSeparator();
+        menu.add(buildFileInfoItem());
+        menu.add(buildAboutItem());
+        menu.addSeparator();
         menu.add(buildLanguageMenu());
 
         menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
@@ -64,6 +70,16 @@ public class ImageContextMenu extends AbstractContextMenu {
 
         return menu;
     }
+
+    // --- novo método buildFileInfoItem() ---
+    private JMenuItem buildFileInfoItem() {
+        fileInfoItem = new JMenuItem();
+        fileInfoItem.addActionListener(e ->
+                MediaInfoDialog.showForImage(mainPanel, grabber,
+                       videoPlayer.getVideoFilePath()));   // ajuste o getter conforme seu MainPanel
+        return fileInfoItem;
+    }
+
 
     // ── Submenus ──────────────────────────────────────────────────────────────
 
@@ -209,6 +225,9 @@ public class ImageContextMenu extends AbstractContextMenu {
         if (contrastItem != null) contrastItem.setText(I18N.get("mainPanel.imageContrastItem.text"));
         if (resetFilterItem != null) resetFilterItem.setText(I18N.get("mainPanel.imageFilterResetItem.text"));
         if (saveAsItem != null) saveAsItem.setText(I18N.get("mainPanel.imageSaveAsItem.text"));
+
+        if (fileInfoItem != null) fileInfoItem.setText(I18N.get("mediainfo.menuitem"));
+        if (aboutItem != null) aboutItem.setText(I18N.get("about.menuitem"));
 
         updateLanguageMenuTexts();
     }

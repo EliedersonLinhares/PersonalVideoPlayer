@@ -6,12 +6,12 @@ import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
 import com.esl.videoplayer.audio.ExtractAudio;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
+import com.esl.videoplayer.audio.cover.CoverArt;
 import com.esl.videoplayer.capture.CaptureFrameManager;
-import com.esl.videoplayer.configuration.BackgroundImageLoader;
-import com.esl.videoplayer.configuration.ConfigManager;
-import com.esl.videoplayer.configuration.RecentFilesManager;
+import com.esl.videoplayer.configuration.*;
 import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.localization.I18N;
+import com.esl.videoplayer.menu.AbstractContextMenu;
 import com.esl.videoplayer.menu.AudioContextMenu;
 import com.esl.videoplayer.menu.ImageContextMenu;
 import com.esl.videoplayer.menu.VideoContextMenu;
@@ -135,6 +135,7 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
 
     private void buildAndShowDefaultPopup(MouseEvent e, VideoPlayer videoPlayer) {
         JPopupMenu menu = new JPopupMenu();
+        menu.add(buildDefaultAboutItem());
         menu.add(buildDefaultPlaylistMenu(videoPlayer));
         menu.add(buildDefaultThemeMenu(videoPlayer));
         addDefaultLanguageMenu(menu);
@@ -172,7 +173,7 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
     public void setupAudioContextMenu(VideoPlayer videoPlayer,
                                       FFmpegFrameGrabber grabber, PlaylistManager playlistManager) {
         audioContextMenu = new AudioContextMenu(
-                this, videoPlayer, audioLoudnessManager, grabber, playlistManager);
+                this, videoPlayer, audioLoudnessManager, grabber, playlistManager, videoPlayer.getCoverArt(),videoPlayer.getVideoFilePath());
         audioContextMenu.setRecentFilesManager(recentFilesManager);
         audioContextMenu.install();
     }
@@ -191,6 +192,14 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
     }
 
     // ── Menu padrão (sem mídia carregada) — helpers internos ─────────────────
+
+
+    private JMenuItem buildDefaultAboutItem() {
+        JMenuItem item = new JMenuItem(I18N.get("about.menuitem"));
+        item.addActionListener(e -> AboutDialog.show(this, AppInfo.getLogo()));
+        return item;
+    }
+
 
     private JMenu buildDefaultPlaylistMenu(VideoPlayer videoPlayer) {
         JMenu menu = new JMenu("\uD83D\uDCCB " + I18N.get("menu.playlist"));

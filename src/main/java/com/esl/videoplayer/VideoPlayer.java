@@ -51,17 +51,17 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     private final String ffmpegPath = new File("lib/ffmpeg/bin/ffmpeg.exe").getAbsolutePath();
     private final String ffprobePath = new File("lib/ffmpeg/bin/ffprobe.exe").getAbsolutePath();
     private final PlaylistManager playlistManager;
-    private SubtitleManager subtitleManager;
-    private AudioLoudnessManager audioLoudnessManager;
-    private AudioLoudnessAnalyzer loudnessAnalyzer;
-    private CaptureFrameManager captureFrameManager;
-    private FiltersManager filtersManager;
-    private CoverArt coverArt;
-    private ScreenMode screenMode;
-    private RecentFilesManager recentFilesManager;
+    private final SubtitleManager subtitleManager;
+    private final AudioLoudnessManager audioLoudnessManager;
+    private final AudioLoudnessAnalyzer loudnessAnalyzer;
+    private final CaptureFrameManager captureFrameManager;
+    private final FiltersManager filtersManager;
+    private final CoverArt coverArt;
+    private final ScreenMode screenMode;
+    private final RecentFilesManager recentFilesManager;
     private ThemeManager themeManager;
-    private ConfigManager configManager;
-    private VideoProgressManager videoProgressManager;
+    private final ConfigManager configManager;
+    private final VideoProgressManager videoProgressManager;
     private JPanel controlPanel;
     private JButton playPauseButton;
     private JButton stopButton;
@@ -88,7 +88,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     private long currentFrame = 0;
 
     // Variáveis de instância para salvar estado completo
-    private Rectangle normalBounds = null;
+    private static final Rectangle normalBounds = null;
     private String currentVideoPath = null;
     private long savedFramePosition = 0;
     private boolean savedPlayingState = false;

@@ -26,6 +26,7 @@ public class FileManager {
     public FileManager(VideoPlayer videoPlayer){
         this.videoPlayer = videoPlayer;
     }
+    private String filePath;
 
     private void handleFile(File file, JComponent parent) {
         if (file.getName().endsWith(".lnk")) {

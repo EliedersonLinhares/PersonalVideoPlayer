@@ -6,7 +6,7 @@
 
     <groupId>com.esl</groupId>
     <artifactId>VideoPlayer</artifactId>
-    <version>1.1-SNAPSHOT</version>
+    <version>1.2-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
@@ -75,7 +75,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>com.esl.videoplayer.VideoPlayer</mainClass>
+                            <mainClass>com.esl.videoplayer.PlayerExecutor</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

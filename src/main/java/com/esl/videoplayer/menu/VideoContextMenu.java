@@ -4,6 +4,7 @@ import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.ExtractAudio;
 import com.esl.videoplayer.capture.CaptureFrameManager;
+import com.esl.videoplayer.configuration.MediaInfoDialog;
 import com.esl.videoplayer.filters.FiltersManager;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.playlist.PlayListExecution;
@@ -69,6 +70,8 @@ public class VideoContextMenu extends AbstractContextMenu {
     private JMenuItem noAudio;
     private PlayListExecution playListExecution;
 
+    private JMenuItem fileInfoItem;
+
     // ── Construtor ────────────────────────────────────────────────────────────
     public VideoContextMenu(MainPanel mainPanel, VideoPlayer videoPlayer,
                             SubtitleManager subtitleManager,
@@ -107,6 +110,8 @@ public class VideoContextMenu extends AbstractContextMenu {
         menu.add(buildExtractAudioSubmenu());
         menu.add(buildFiltersSubmenu());
         menu.add(buildFullscreenItem());
+        menu.add(buildFileInfoItem());
+        menu.add(buildAboutItem());
         menu.add(buildLanguageMenu());
         menu.add(buildPlaylistSubmenu());
 
@@ -137,6 +142,15 @@ public class VideoContextMenu extends AbstractContextMenu {
         });
 
         return menu;
+    }
+
+
+    // --- novo método ---
+    private JMenuItem buildFileInfoItem() {
+        fileInfoItem = new JMenuItem();
+        fileInfoItem.addActionListener(e ->
+                MediaInfoDialog.showForVideo(mainPanel, grabber, videoFilePath));
+        return fileInfoItem;
     }
 
     // ── Submenus ──────────────────────────────────────────────────────────────
@@ -526,6 +540,9 @@ public class VideoContextMenu extends AbstractContextMenu {
         if (playlistMenu != null) playlistMenu.setText(I18N.get("menu.playlist"));
         if (openPlaylistItem != null) openPlaylistItem.setText(I18N.get("menu.playlist.manage"));
         if (autoPlayItem != null) autoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
+
+        if (fileInfoItem != null) fileInfoItem.setText(I18N.get("mediainfo.menuitem"));
+        if (aboutItem != null) aboutItem.setText(I18N.get("about.menuitem"));
 
         updateLanguageMenuTexts();
     }

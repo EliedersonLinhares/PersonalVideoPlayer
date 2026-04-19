@@ -4,9 +4,12 @@ import com.esl.videoplayer.Video.MainPanel;
 import com.esl.videoplayer.VideoPlayer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
 import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
+import com.esl.videoplayer.audio.cover.CoverArt;
+import com.esl.videoplayer.configuration.AboutDialog;
+import com.esl.videoplayer.configuration.AppInfo;
+import com.esl.videoplayer.configuration.MediaInfoDialog;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.playlist.PlayListExecution;
-import com.esl.videoplayer.playlist.PlaylistDialog;
 import com.esl.videoplayer.playlist.PlaylistManager;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 
@@ -62,13 +65,22 @@ public class AudioContextMenu extends AbstractContextMenu {
     private JCheckBoxMenuItem autoPlayItem;
     private PlayListExecution playListExecution;
 
+    private JMenuItem fileInfoItem;
+
+
+
+    private final CoverArt coverArt;          // receba via construtor
+    private final String   audioFilePath;     // receba via construtor
+
     // ── Construtor ────────────────────────────────────────────────────────────
     public AudioContextMenu(MainPanel mainPanel, VideoPlayer videoPlayer,
                             AudioLoudnessManager audioLoudnessManager,
-                            FFmpegFrameGrabber grabber, PlaylistManager playlistManager) {
+                            FFmpegFrameGrabber grabber, PlaylistManager playlistManager, CoverArt coverArt, String audioFilePath) {
         super(mainPanel, videoPlayer);
         this.audioLoudnessManager = audioLoudnessManager;
         this.grabber = grabber;
+        this.coverArt = coverArt;
+        this.audioFilePath = audioFilePath;
         playListExecution = new PlayListExecution(mainPanel,videoPlayer,playlistManager);
     }
 
@@ -79,6 +91,8 @@ public class AudioContextMenu extends AbstractContextMenu {
 
         menu.add(buildSpectrumSubmenu());
         menu.add(buildAudioSubmenu());
+        menu.add(buildFileInfoItem());
+        menu.add(buildAboutItem());
         menu.add(buildLanguageMenu());
         menu.add(buildPlaylistSubmenu());
 
@@ -110,7 +124,22 @@ public class AudioContextMenu extends AbstractContextMenu {
         return menu;
     }
 
-    // ── Submenus ──────────────────────────────────────────────────────────────
+
+
+
+    // --- novo método ---
+    private JMenuItem buildFileInfoItem() {
+        fileInfoItem = new JMenuItem();
+        fileInfoItem.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        fileInfoItem.addActionListener(e ->
+                MediaInfoDialog.showForAudio(
+                        mainPanel,
+                        grabber,
+                        audioFilePath,
+                        coverArt != null ? coverArt.getAudioCoverArt() : null));
+        return fileInfoItem;
+    }
+
 
     private JMenu buildSpectrumSubmenu() {
         spectrumMenu = new JMenu();
@@ -472,6 +501,8 @@ public class AudioContextMenu extends AbstractContextMenu {
         if (playlistMenu != null) playlistMenu.setText(I18N.get("menu.playlist"));
         if (openPlaylistItem != null) openPlaylistItem.setText(I18N.get("menu.playlist.manage"));
         if (autoPlayItem != null) autoPlayItem.setText(I18N.get("menu.playlist.autoplay"));
+        if (fileInfoItem != null) fileInfoItem.setText(I18N.get("mediainfo.menuitem"));
+        if (aboutItem != null) aboutItem.setText(I18N.get("about.menuitem"));
 
         updateLanguageMenuTexts();
     }
