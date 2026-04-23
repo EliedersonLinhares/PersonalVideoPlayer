@@ -18,7 +18,11 @@ public class ImageExecution {
 
     public void loadImage(String filepath) {
         videoPlayer.getMainPanel().clearFilteredImage();
+        videoPlayer.setImage(true);
         videoPlayer.setAudioOnly(false);
+        videoPlayer.setVideo(false);
+
+        videoPlayer.getPlayListExecution().getPlaylistDialog().setVisible(false);
 
         // Salvar caminho do vídeo
         videoPlayer.setCurrentVideoPath(filepath);

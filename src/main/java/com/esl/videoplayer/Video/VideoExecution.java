@@ -23,7 +23,9 @@ public class VideoExecution {
 
     public void loadVideo(String filepath) {
         videoPlayer.getMainPanel().clearFilteredImage();
+        videoPlayer.setImage(false);
         videoPlayer.setAudioOnly(false);
+        videoPlayer.setVideo(true);
 
         // Salvar caminho do vídeo
         videoPlayer.setCurrentVideoPath(filepath);
@@ -40,7 +42,9 @@ public class VideoExecution {
     }
 
     public void loadVideoFromPlaylist(String filepath) {
+        videoPlayer.setImage(false);
         videoPlayer.setAudioOnly(false);
+        videoPlayer.setVideo(true);
 
         // Salvar caminho do vídeo
         videoPlayer.setCurrentVideoPath(filepath);

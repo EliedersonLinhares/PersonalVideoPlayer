@@ -14,6 +14,7 @@ public class PlayListExecution {
     private final PlaylistDialog playlistDialog;
     private final PlaylistManager playlistManager;
 
+
     public PlaylistManager getPlaylistManager() {
         return playlistManager;
     }
@@ -125,6 +126,7 @@ public class PlayListExecution {
     public void playFromPlaylist(String filePath, VideoPlayer videoPlayer) {
         // IMPORTANTE: Não chamar clearPlaylistAndCloseDialog() aqui
         // Este método é usado pela playlist, então deve manter ela ativa
+
 
         if (filePath.toLowerCase().endsWith(".mp3") ||
                 filePath.toLowerCase().endsWith(".wav") ||

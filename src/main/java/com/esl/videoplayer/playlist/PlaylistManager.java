@@ -1,4 +1,6 @@
 package com.esl.videoplayer.playlist;
+import com.esl.videoplayer.VideoPlayer;
+
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,8 +15,14 @@ public class PlaylistManager {
     private boolean repeatOne;
     private List<Integer> shuffleOrder;
     private Random random;
+    private VideoPlayer videoPlayer;
 
-    public PlaylistManager() {
+    public VideoPlayer getVideoPlayer() {
+        return videoPlayer;
+    }
+
+    public PlaylistManager(VideoPlayer videoPlayer) {
+        this.videoPlayer = videoPlayer;
         playlist = new ArrayList<>();
         currentIndex = -1;
         shuffle = false;

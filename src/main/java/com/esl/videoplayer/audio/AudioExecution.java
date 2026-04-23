@@ -90,7 +90,10 @@ public class AudioExecution {
                 System.out.println("5. grabber.start() CONCLUÍDO!");
 
                 // Marcar como áudio apenas
+                videoPlayer.setImage(false);
                 videoPlayer.setAudioOnly(true);
+                videoPlayer.setVideo(false);
+
 
                 System.out.println("11. Tentando extrair cover art...");
                 videoPlayer.getCoverArt().extractCoverArt(filepath, videoPlayer.getFfmpegPath(), videoPlayer.getMainPanel());

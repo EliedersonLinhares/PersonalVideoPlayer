@@ -108,6 +108,8 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
 
     // Adicionar variável de instância para controlar se é áudio ou vídeo
     private boolean isAudioOnly = false;
+    private boolean isVideo = false;
+    private boolean isImage = false;
     //Variaveis para exiber a resoluçao atual da tela
     private int screenWidth;
     private int screenHeight;
@@ -174,7 +176,25 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     public Map<Integer, String> getSavedAudioStreamNames() {return savedAudioStreamNames;}
     public Map<Integer, String> getSavedSubtitleStreamNames() {return savedSubtitleStreamNames;}
 
+    public boolean isAudioOnly() {return isAudioOnly;}
     public void setAudioOnly(boolean audioOnly) {isAudioOnly = audioOnly;}
+
+    public boolean isVideo() {return isVideo;}
+
+    public void setVideo(boolean video) {
+        boolean antigo = this.isVideo;
+        this.isVideo = video;
+        // Dispara o aviso: "a propriedade 'isVideo' mudou de X para Y"
+        firePropertyChange("isVideo", antigo, video);
+    }
+    public boolean isImage() {return isImage;}
+
+    public void setImage(boolean image) {
+        boolean antigo = this.isImage;
+        this.isImage = image;
+        firePropertyChange("isImage", antigo, image);
+    }
+
     public int getScreenWidth() {return screenWidth;}
     public int getScreenHeight() {return screenHeight;}
 
@@ -184,6 +204,9 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     public AudioExecution getAudioExecution() {return audioExecution;}
     public ImageExecution getImageExecution() {return imageExecution;}
     public FileManager getFileManager() {return fileManager;}
+
+    public PlayListExecution getPlayListExecution() {return playListExecution;}
+
 
     public VideoPlayer() {
         setTitle("Media Player");
@@ -210,7 +233,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         coverArt = new CoverArt();
         screenMode = new ScreenMode();
 
-        playlistManager = new PlaylistManager();
+        playlistManager = new PlaylistManager(this);
         mainPanel = new MainPanel(grabber, subtitleManager, this, audioLoudnessManager, playlistManager);
         playListExecution = new PlayListExecution(mainPanel,this, playlistManager);
         recentFilesManager = new RecentFilesManager();
@@ -266,11 +289,11 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
             // Processar atalhos globais
             switch (e.getKeyCode()) {
                 case KeyEvent.VK_ESCAPE:
+
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-                    if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                        screenMode.exitFullScreen(VideoPlayer.this, audioLine, controlPanel, normalBounds,
-                                grabber, isPlaying, playbackThread, currentVideoPath);
-                        return true; // Consumir evento
+                    if (gd.getFullScreenWindow() != null) {
+                        screenMode.exitFullScreen(VideoPlayer.this,controlPanel, normalBounds, currentVideoPath);
+                        return true;
                     }
                     break;
 
@@ -337,9 +360,8 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
             public void keyPressed(KeyEvent e) {
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-                    if (gd.getFullScreenWindow() == VideoPlayer.this) {
-                        screenMode.exitFullScreen(VideoPlayer.this, audioLine, controlPanel, normalBounds,
-                                grabber, isPlaying, playbackThread, currentVideoPath);
+                    if (gd.getFullScreenWindow() != null) {
+                        screenMode.exitFullScreen(VideoPlayer.this,controlPanel, normalBounds, currentVideoPath);
                     }
                 } else if (e.getKeyCode() == KeyEvent.VK_F11) {
                     toggleFullScreen();
@@ -380,6 +402,14 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                // Sempre sair do fullscreen ANTES de fechar
+                GraphicsDevice gd = GraphicsEnvironment
+                        .getLocalGraphicsEnvironment().getDefaultScreenDevice();
+                if (gd.getFullScreenWindow() != null) {
+                    gd.setFullScreenWindow(null);
+                }
+                screenMode.cleanup();
+
                 // Em windowClosing / dispose
                 if (videoFilePath != null && grabber != null) {
                     videoProgressManager.saveProgress(videoFilePath, currentFrame, totalFrames);
@@ -392,17 +422,27 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         fileManager.setupDropTarget((JComponent) this.getComponent(0));
     }
 
-    public void toggleFullScreen() {
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+//    public void toggleFullScreen() {
+//        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+//
+//        if (gd.getFullScreenWindow() == this) {
+//            screenMode.exitFullScreen(this, audioLine, controlPanel, normalBounds,
+//                    grabber, isPlaying, playbackThread, currentVideoPath);
+//        } else {
+//            screenMode.enterFullScreen(this, audioLine, controlPanel, normalBounds,
+//                    grabber, isPlaying, playbackThread, currentVideoPath);
+//        }
+//    }
+public void toggleFullScreen() {
+    GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
 
-        if (gd.getFullScreenWindow() == this) {
-            screenMode.exitFullScreen(this, audioLine, controlPanel, normalBounds,
-                    grabber, isPlaying, playbackThread, currentVideoPath);
-        } else {
-            screenMode.enterFullScreen(this, audioLine, controlPanel, normalBounds,
-                    grabber, isPlaying, playbackThread, currentVideoPath);
-        }
+    // Verifica a fullscreenWindow, não o próprio VideoPlayer
+    if (gd.getFullScreenWindow() != null) {
+        screenMode.exitFullScreen(this,controlPanel, normalBounds, currentVideoPath);
+    } else {
+        screenMode.enterFullScreen(this, controlPanel, currentVideoPath);
     }
+}
 
     public void saveVideoState() {
         if (videoFilePath != null) {

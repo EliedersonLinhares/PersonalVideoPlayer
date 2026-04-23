@@ -7,6 +7,7 @@ import jnafilechooser.api.JnaFileChooser;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
@@ -44,9 +45,22 @@ public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListen
         setSize(400, 500);
         setDefaultCloseOperation(HIDE_ON_CLOSE);
 
-        int newX = parent.getX() + (parent.getWidth()  - 10);
-        int newY = parent.getY() - (parent.getHeight() / 2 - 250);
-        setLocation(newX, newY);
+        if(!manager.getVideoPlayer().isVideo() && !manager.getVideoPlayer().isImage()){
+            int newX = parent.getX() + (parent.getWidth()  - 10);
+            int newY = parent.getY() - (parent.getHeight() / 2 - 250);
+            setLocation(newX, newY);
+        }else {
+            setLocationRelativeTo(parent);
+        }
+
+        // Fechar o JDialog atual caso execute um video ou imagem enquanto um JDialog antigo estiver aberto
+        PropertyChangeListener closeListener = evt -> {
+            if ((boolean) evt.getNewValue()) {
+                dispose();
+            }
+        };
+        parent.addPropertyChangeListener("isVideo", closeListener);
+        parent.addPropertyChangeListener("isImage", closeListener);
 
         initComponents();
         refreshPlaylist();

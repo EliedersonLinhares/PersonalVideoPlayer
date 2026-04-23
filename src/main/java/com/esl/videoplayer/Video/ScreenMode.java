@@ -11,137 +11,101 @@ import java.util.Locale;
 
 public class ScreenMode implements I18N.LanguageChangeListener {
 
-    public void enterFullScreen(VideoPlayer videoPlayer, SourceDataLine audioLine, JPanel controlPanel, Rectangle normalBounds,
-                                 FFmpegFrameGrabber grabber, boolean isPlaying, Thread playbackThread, String currentVideoPath) {
-        System.out.println("Entrando em modo tela cheia...");
+    private JWindow fullscreenWindow;  // janela dedicada, criada uma vez
 
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+    private void ensureFullscreenWindow(VideoPlayer videoPlayer) {
+        if (fullscreenWindow == null) {
+            fullscreenWindow = new JWindow(videoPlayer);
+            fullscreenWindow.setBackground(Color.BLACK);
+        }
+    }
+
+    public void enterFullScreen(VideoPlayer videoPlayer,JPanel controlPanel, String currentVideoPath) {
+
+        GraphicsDevice gd = GraphicsEnvironment
+                .getLocalGraphicsEnvironment().getDefaultScreenDevice();
 
         if (!gd.isFullScreenSupported()) {
-            System.out.println("Tela cheia não suportada neste dispositivo");
             JOptionPane.showMessageDialog(videoPlayer,
                     I18N.get("ScreenMode.enterFullScreen.showMessageDialog.text"),
-                    I18N.get("ScreenMode.enterFullScreen.showMessageDialog.title"), JOptionPane.WARNING_MESSAGE);
+                    I18N.get("ScreenMode.enterFullScreen.showMessageDialog.title"),
+                    JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        try {
-            // Salvar estado do vídeo atual
-            videoPlayer.saveVideoState();
+        ensureFullscreenWindow(videoPlayer);
 
-            // Fechar vídeo atual
-            if (grabber != null) {
+        fullscreenWindow.getContentPane().removeAll();
+        fullscreenWindow.getContentPane().add(videoPlayer.getMainPanel());
+        fullscreenWindow.getContentPane().revalidate();
+
+        videoPlayer.saveVideoState();
+        controlPanel.setVisible(false);
+
+        // Ativar fullscreen na janela dedicada, não na principal
+        gd.setFullScreenWindow(fullscreenWindow);
+        fullscreenWindow.setVisible(true);
+
+        if (currentVideoPath != null) {
+            SwingUtilities.invokeLater(() -> {
                 try {
-                    if (isPlaying) {
-                        isPlaying = false;
-                        if (playbackThread != null) {
-                            playbackThread.interrupt();
-                            playbackThread.join(500);
-                        }
-                    }
-                    grabber.stop();
-                    grabber.release();
-                    grabber = null;
+                    Thread.sleep(150);
+                    videoPlayer.restoreVideoState();
                 } catch (Exception e) {
-                    System.err.println("Erro ao fechar grabber: " + e.getMessage());
+                    e.printStackTrace();
                 }
-            }
-
-            if (audioLine != null && audioLine.isOpen()) {
-                audioLine.close();
-                audioLine = null;
-            }
-
-            // Transição para tela cheia
-            videoPlayer.dispose();
-            videoPlayer.setUndecorated(true);
-            gd.setFullScreenWindow(videoPlayer);
-            videoPlayer.setVisible(true);
-            controlPanel.setVisible(false);
-            System.out.println("Modo tela cheia ativado");
-
-            // Recarregar vídeo na posição salva
-            if (currentVideoPath != null) {
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        Thread.sleep(200); // Pequeno delay para estabilizar
-                        videoPlayer.restoreVideoState();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-
-        } catch (Exception e) {
-            System.err.println("Erro ao entrar em tela cheia: " + e.getMessage());
-            e.printStackTrace();
+            });
         }
     }
 
-    public void exitFullScreen(VideoPlayer videoPlayer, SourceDataLine audioLine, JPanel controlPanel, Rectangle normalBounds,
-                               FFmpegFrameGrabber grabber, boolean isPlaying, Thread playbackThread, String currentVideoPath) {
-        System.out.println("Saindo do modo tela cheia...");
 
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+    public void exitFullScreen(VideoPlayer videoPlayer,  JPanel controlPanel, Rectangle normalBounds,
+                               String currentVideoPath) {
 
-        try {
-            // Salvar estado do vídeo atual
-            videoPlayer.saveVideoState();
+        GraphicsDevice gd = GraphicsEnvironment
+                .getLocalGraphicsEnvironment().getDefaultScreenDevice();
 
-            // Fechar vídeo atual
-            if (grabber != null) {
+        videoPlayer.saveVideoState();
+
+        // Sair do fullscreen
+        gd.setFullScreenWindow(null);
+
+        if (fullscreenWindow != null) {
+            fullscreenWindow.getContentPane().removeAll();
+            fullscreenWindow.setVisible(false);
+        }
+
+        // Devolver o MainPanel ao VideoPlayer (o JFrame principal)
+        videoPlayer.getContentPane().add(videoPlayer.getMainPanel());
+        videoPlayer.getContentPane().revalidate();
+        videoPlayer.getContentPane().repaint();
+
+        controlPanel.setVisible(true);
+
+        if (normalBounds != null) {
+            videoPlayer.setBounds(normalBounds);
+        }
+
+        if (currentVideoPath != null) {
+            SwingUtilities.invokeLater(() -> {
                 try {
-                    if (isPlaying) {
-                        isPlaying = false;
-                        if (playbackThread != null) {
-                            playbackThread.interrupt();
-                            playbackThread.join(500);
-                        }
-                    }
-                    grabber.stop();
-                    grabber.release();
-                    grabber = null;
+                    Thread.sleep(150);
+                    videoPlayer.restoreVideoState();
                 } catch (Exception e) {
-                    System.err.println("Erro ao fechar grabber: " + e.getMessage());
+                    e.printStackTrace();
                 }
-            }
-
-            if (audioLine != null && audioLine.isOpen()) {
-                audioLine.close();
-                audioLine = null;
-            }
-
-            // Sair de tela cheia
-            gd.setFullScreenWindow(null);
-            videoPlayer.dispose();
-            videoPlayer.setUndecorated(false);
-            controlPanel.setVisible(true);
-            // Restaurar geometria
-            if (normalBounds != null) {
-                videoPlayer.setBounds(normalBounds);
-            }
-
-            videoPlayer.setVisible(true);
-
-            System.out.println("Modo tela cheia desativado");
-
-            // Recarregar vídeo na posição salva
-            if (currentVideoPath != null) {
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        Thread.sleep(200); // Pequeno delay para estabilizar
-                        videoPlayer.restoreVideoState();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-
-        } catch (Exception e) {
-            System.err.println("Erro ao sair de tela cheia: " + e.getMessage());
-            e.printStackTrace();
+            });
         }
     }
+
+    // Chamar isso apenas quando o aplicativo for realmente encerrado
+    public void cleanup() {
+        if (fullscreenWindow != null) {
+            fullscreenWindow.dispose();
+            fullscreenWindow = null;
+        }
+    }
+
 
     @Override
     public void onLanguageChanged(Locale newLocale) {
