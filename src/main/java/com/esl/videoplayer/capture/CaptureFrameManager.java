@@ -17,8 +17,10 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
 
     private JFileChooser folderChooser ;
     private BatchCaptureExecution batchCaptureExecution;
+    private final MainPanel mainPanel;
 
-    public CaptureFrameManager(VideoPlayer videoPlayer) {
+    public CaptureFrameManager(VideoPlayer videoPlayer, MainPanel mainPanel) {
+        this.mainPanel = mainPanel;
         // IMPORTANTE: Atualizar textos pela primeira vez
         updateTexts();
         batchCaptureExecution = new BatchCaptureExecution(videoPlayer);
@@ -133,7 +135,7 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFolder = folderChooser.getSelectedFile();
             customCapturePath = selectedFolder.getAbsolutePath();
-
+            mainPanel.setCustomCapturePath(customCapturePath);
             JOptionPane.showMessageDialog(videoPlayer, I18N.get("captureFrameManager.folderChooser.ShowDialogResult.text") + "\n" + customCapturePath, I18N.get("captureFrameManager.folderChooser.ShowDialogResult.title"), JOptionPane.INFORMATION_MESSAGE);
 
             System.out.println("Pasta de captura definida: " + customCapturePath);
@@ -166,7 +168,7 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFolder = folderChooser.getSelectedFile();
             batchCapturePath = selectedFolder.getAbsolutePath();
-
+            mainPanel.setCustomCapturePath(batchCapturePath);
             JOptionPane.showMessageDialog(videoPlayer, I18N.get("captureFrameManager.BatchCaptureFolder.ShowDialogResult.text1")+"\n" + batchCapturePath, I18N.get("captureFrameManager.BatchCaptureFolder.ShowDialogResult.title"), JOptionPane.INFORMATION_MESSAGE);
 
             System.out.println("Pasta de captura em lote definida: " + batchCapturePath);

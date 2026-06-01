@@ -17,9 +17,11 @@ public class VideoExecution {
     public boolean hardwareAccelerationEnabled = false;
     private VideoPlayer videoPlayer;
 
+
     public VideoExecution(VideoPlayer videoPlayer){
         this.videoPlayer = videoPlayer;
     }
+
 
     public void loadVideo(String filepath) {
         videoPlayer.getMainPanel().clearFilteredImage();
@@ -55,12 +57,14 @@ public class VideoExecution {
         loadVideoBase(filepath);
     }
 
+
+
     private void loadVideoBase(String filepath) {
 
         // **VERIFICAR SE É AV1 EM ALTA RESOLUÇÃO (BLOQUEAR SE SIM)**
         if (!checkAV1Resolution(filepath)) {
             System.out.println("Vídeo bloqueado - AV1 em alta resolução com decoder lento");
-            return; // Sair sem carregar o vídeo
+            return;
         }
 
         //Limpa os items setados anteriormente
@@ -401,6 +405,7 @@ public class VideoExecution {
                 System.out.println("=== VÍDEO AV1 DETECTADO ===");
 
                 if (videoCodec.contains("libaom")) {
+
                     System.out.println("AVISO: Usando libaom-av1 (encoder como decoder)");
                     System.out.println("Isso é mais lento. Idealmente deveria usar libdav1d.");
                     System.out.println("Solução: Recompilar JavaCV com libdav1d ou usar build diferente.");
@@ -413,6 +418,7 @@ public class VideoExecution {
                     grabber.setOption("fps", "20");
                     grabber.setOption("c:v", "libdav1d");
                     grabber.setVideoCodec(AV_CODEC_ID_AV1);
+
                     // grabber.setPixelFormat(org.bytedeco.ffmpeg.global.avutil.AV_PIX_FMT_YUV420P10LE); // 10-bit color (opcional)
                 } else if (videoCodec.contains("libdav1d") || videoCodec.contains("dav1d")) {
                     System.out.println("✓ Usando libdav1d - decoder otimizado!");
@@ -440,13 +446,14 @@ public class VideoExecution {
      * Retorna true se o vídeo pode ser reproduzido, false se deve ser bloqueado
      */
     private boolean checkAV1Resolution(String filepath) {
+        System.out.println("Entrou no checkAV1Resolution...");
         FFmpegFrameGrabber tempGrabber = null;
 
         try {
             String extension = filepath.substring(filepath.lastIndexOf('.') + 1).toLowerCase();
 
             // Verificar apenas arquivos MP4
-            if (!extension.equals("mp5")) {
+            if (!extension.equals("mp4")) {
                 return true; // Permitir outros formatos
             }
 
@@ -530,17 +537,8 @@ public class VideoExecution {
             System.err.println("Erro ao verificar codec/resolução: " + e.getMessage());
             e.printStackTrace();
 
-            // Em caso de erro na verificação, permitir tentar reproduzir
-            if (tempGrabber != null) {
-                try {
-                    tempGrabber.stop();
-                    tempGrabber.release();
-                } catch (Exception ex) {
-                    // Ignorar erro ao fechar
-                }
-            }
 
-            return true; // Permitir reprodução em caso de erro na verificação
+          return false;
         }
     }
 

@@ -5,36 +5,36 @@ import com.esl.videoplayer.File.FileManager;
 import com.esl.videoplayer.Image.ImageExecution;
 import com.esl.videoplayer.Video.AudioStreams;
 import com.esl.videoplayer.Video.MainPanel;
+import com.esl.videoplayer.Video.ScreenMode;
 import com.esl.videoplayer.Video.VideoExecution;
 import com.esl.videoplayer.audio.AudioExecution;
-import com.esl.videoplayer.configuration.RecentFilesManager;
-import com.esl.videoplayer.Video.ScreenMode;
-import com.esl.videoplayer.configuration.ConfigManager;
-import com.esl.videoplayer.configuration.ConfigurationFrame;
-import com.esl.videoplayer.configuration.VideoProgressManager;
-import com.esl.videoplayer.localization.I18N;
-import com.esl.videoplayer.playlist.PlayListExecution;
-import com.esl.videoplayer.theme.ThemeManager;
-import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.audio.AudioLoudnessAnalyzer;
 import com.esl.videoplayer.audio.AudioLoudnessManager;
+import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
 import com.esl.videoplayer.audio.cover.CoverArt;
 import com.esl.videoplayer.capture.CaptureFrameManager;
+import com.esl.videoplayer.configuration.ConfigManager;
+import com.esl.videoplayer.configuration.ConfigurationFrame;
+import com.esl.videoplayer.configuration.RecentFilesManager;
+import com.esl.videoplayer.configuration.VideoProgressManager;
 import com.esl.videoplayer.filters.FiltersManager;
+import com.esl.videoplayer.localization.I18N;
+import com.esl.videoplayer.playlist.PlayListExecution;
 import com.esl.videoplayer.playlist.PlaylistItem;
 import com.esl.videoplayer.playlist.PlaylistManager;
 import com.esl.videoplayer.subtitle.SubtitleEntry;
 import com.esl.videoplayer.subtitle.SubtitleManager;
-
-import org.bytedeco.javacv.*;
+import com.esl.videoplayer.theme.ThemeManager;
+import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
+import org.bytedeco.javacv.Java2DFrameConverter;
 
 import javax.sound.sampled.SourceDataLine;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
 import java.util.*;
@@ -42,11 +42,11 @@ import java.util.List;
 
 public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
 
-    private final MainPanel mainPanel;
+    // Variáveis de instância para salvar estado completo
+    private static final Rectangle normalBounds = null;
     private static FFmpegFrameGrabber grabber;
+    private final MainPanel mainPanel;
     private final Java2DFrameConverter converter;
-    private volatile boolean isPlaying = false;
-    private String videoFilePath;
     // Adicionar no início da classe, junto com outras variáveis de instância
     private final String ffmpegPath = new File("lib/ffmpeg/bin/ffmpeg.exe").getAbsolutePath();
     private final String ffprobePath = new File("lib/ffmpeg/bin/ffprobe.exe").getAbsolutePath();
@@ -59,9 +59,13 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     private final CoverArt coverArt;
     private final ScreenMode screenMode;
     private final RecentFilesManager recentFilesManager;
-    private ThemeManager themeManager;
     private final ConfigManager configManager;
     private final VideoProgressManager videoProgressManager;
+    public PlayListExecution playListExecution;
+    public float volume = 1.0f;
+    private volatile boolean isPlaying = false;
+    private String videoFilePath;
+    private ThemeManager themeManager;
     private JPanel controlPanel;
     private JButton playPauseButton;
     private JButton stopButton;
@@ -80,15 +84,11 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     private SourceDataLine audioLine;
     private int audioChannels;
     private int sampleRate;
-    private float volume = 1.0f;
     private float previousVolume = 1.0f; // Guardar volume anterior ao mutar
     private boolean isMuted = false;
     private long totalFrames;
     private double frameRate;
     private long currentFrame = 0;
-
-    // Variáveis de instância para salvar estado completo
-    private static final Rectangle normalBounds = null;
     private String currentVideoPath = null;
     private long savedFramePosition = 0;
     private boolean savedPlayingState = false;
@@ -98,14 +98,12 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     // Adicionar variável de instância
     private Map<Integer, String> savedAudioStreamNames = new HashMap<>();
     private Map<Integer, String> savedSubtitleStreamNames = new HashMap<>();
-
     // No início da classe, junto com outras variáveis:
     private JButton rewindButton;
     private JButton forwardButton;
     private JButton nextFrameButton;
     private JButton captureFrameButton;
     private JButton captureAllFrameButton;
-
     // Adicionar variável de instância para controlar se é áudio ou vídeo
     private boolean isAudioOnly = false;
     private boolean isVideo = false;
@@ -113,100 +111,11 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     //Variaveis para exiber a resoluçao atual da tela
     private int screenWidth;
     private int screenHeight;
-
-    public PlayListExecution playListExecution;
     private ImageExecution imageExecution;
     private AudioExecution audioExecution;
     private AudioStreams audioStreams;
     private VideoExecution videoExecution;
     private FileManager fileManager;
-
-    public FFmpegFrameGrabber getGrabber() {return grabber;}
-    public void setGrabber(FFmpegFrameGrabber grabber) {this.grabber = grabber;}
-    public Java2DFrameConverter getConverter() {return converter;}
-    public AudioStreams getAudioStreams() {
-        return audioStreams;
-    }
-    public MainPanel getMainPanel() {return mainPanel;}
-    public boolean isPlaying() {return isPlaying;}
-    public void setPlaying(boolean playing) {isPlaying = playing;}
-    public String getVideoFilePath() {return videoFilePath;}
-    public void setVideoFilePath(String videoFilePath) {this.videoFilePath = videoFilePath;}
-    public String getFfmpegPath() {return ffmpegPath;}
-    public String getFfprobePath() {return ffprobePath;}
-    public PlaylistManager getPlaylistManager() {return playlistManager;}
-
-    public SubtitleManager getSubtitleManager() {return subtitleManager;}
-    public AudioLoudnessManager getAudioLoudnessManager() {return audioLoudnessManager;}
-    public AudioLoudnessAnalyzer getLoudnessAnalyzer() {return loudnessAnalyzer;}
-    public FiltersManager getFiltersManager() {return filtersManager;}
-    public CoverArt getCoverArt() {return coverArt;}
-    public RecentFilesManager getRecentFilesManager() {return recentFilesManager;}
-
-    public JButton getPlayPauseButton() {return playPauseButton;}
-    public JSlider getProgressSlider() {return progressSlider;}
-    public JSlider getVolumeSlider() {return volumeSlider;}
-    public JButton getOpenButton() {return openButton;}
-    public JButton getVolumeButton() {return volumeButton;}
-    public JButton getRewindButton() {return rewindButton;}
-    public JButton getForwardButton() {return forwardButton;}
-    public JButton getNextFrameButton() {return nextFrameButton;}
-    public JButton getCaptureFrameButton() {return captureFrameButton;}
-    public JButton getCaptureAllFrameButton() {return captureAllFrameButton;}
-    public JButton getStopButton() {return stopButton;}
-
-    public Thread getPlaybackThread() {return playbackThread;}
-    public void setPlaybackThread(Thread playbackThread) {this.playbackThread = playbackThread;}
-    public void setStopped(boolean stopped) {isStopped = stopped;}
-    public boolean isSeeking() {return isSeeking;}
-    public SourceDataLine getAudioLine() {return audioLine;}
-    public void setAudioLine(SourceDataLine audioLine) {this.audioLine = audioLine;}
-    public int getAudioChannels() {return audioChannels;}
-    public void setAudioChannels(int audioChannels) {this.audioChannels = audioChannels;}
-    public int getSampleRate() {return sampleRate;}
-    public void setSampleRate(int sampleRate) {this.sampleRate = sampleRate;}
-    public long getTotalFrames() {return totalFrames;}
-    public void setTotalFrames(long totalFrames) {this.totalFrames = totalFrames;}
-    public double getFrameRate() {return frameRate;}
-
-    public void setFrameRate(double frameRate) {this.frameRate = frameRate;}
-    public long getCurrentFrame() {return currentFrame;}
-    public void setCurrentFrame(long currentFrame) {this.currentFrame = currentFrame;}
-    public void setCurrentVideoPath(String currentVideoPath) {this.currentVideoPath = currentVideoPath;}
-    public Map<Integer, String> getSavedAudioStreamNames() {return savedAudioStreamNames;}
-    public Map<Integer, String> getSavedSubtitleStreamNames() {return savedSubtitleStreamNames;}
-
-    public boolean isAudioOnly() {return isAudioOnly;}
-    public void setAudioOnly(boolean audioOnly) {isAudioOnly = audioOnly;}
-
-    public boolean isVideo() {return isVideo;}
-
-    public void setVideo(boolean video) {
-        boolean antigo = this.isVideo;
-        this.isVideo = video;
-        // Dispara o aviso: "a propriedade 'isVideo' mudou de X para Y"
-        firePropertyChange("isVideo", antigo, video);
-    }
-    public boolean isImage() {return isImage;}
-
-    public void setImage(boolean image) {
-        boolean antigo = this.isImage;
-        this.isImage = image;
-        firePropertyChange("isImage", antigo, image);
-    }
-
-    public int getScreenWidth() {return screenWidth;}
-    public int getScreenHeight() {return screenHeight;}
-
-    public CaptureFrameManager getCaptureFrameManager() {return captureFrameManager;}
-    public VideoProgressManager getVideoProgressManager() {return videoProgressManager;}
-    public VideoExecution getVideoExecution() {return videoExecution;}
-    public AudioExecution getAudioExecution() {return audioExecution;}
-    public ImageExecution getImageExecution() {return imageExecution;}
-    public FileManager getFileManager() {return fileManager;}
-
-    public PlayListExecution getPlayListExecution() {return playListExecution;}
-
 
     public VideoPlayer() {
         setTitle("Media Player");
@@ -225,7 +134,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         } catch (NullPointerException e) {
             JOptionPane.showMessageDialog(this, I18N.get("videoPlayer.icons.showMessageDialog.text") + " " + e.getMessage());
         }
-        captureFrameManager = new CaptureFrameManager(this);
+
         filtersManager = new FiltersManager();
         subtitleManager = new SubtitleManager();
         loudnessAnalyzer = new AudioLoudnessAnalyzer();
@@ -235,7 +144,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
 
         playlistManager = new PlaylistManager(this);
         mainPanel = new MainPanel(grabber, subtitleManager, this, audioLoudnessManager, playlistManager);
-        playListExecution = new PlayListExecution(mainPanel,this, playlistManager);
+        playListExecution = new PlayListExecution(mainPanel, this, playlistManager);
         recentFilesManager = new RecentFilesManager();
         themeManager = new ThemeManager();
         configManager = new ConfigManager();
@@ -245,6 +154,8 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         audioStreams = new AudioStreams(this);
         videoExecution = new VideoExecution(this);
         fileManager = new FileManager(this);
+
+        captureFrameManager = new CaptureFrameManager(this, getMainPanel());
 
         // DEBUG: Verificar estado inicial
         // recentFilesManager.printDebugInfo();
@@ -292,7 +203,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
 
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                     if (gd.getFullScreenWindow() != null) {
-                        screenMode.exitFullScreen(VideoPlayer.this,controlPanel, normalBounds, currentVideoPath);
+                        screenMode.exitFullScreen(VideoPlayer.this, controlPanel, normalBounds, currentVideoPath);
                         return true;
                     }
                     break;
@@ -361,7 +272,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
                 if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
                     GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
                     if (gd.getFullScreenWindow() != null) {
-                        screenMode.exitFullScreen(VideoPlayer.this,controlPanel, normalBounds, currentVideoPath);
+                        screenMode.exitFullScreen(VideoPlayer.this, controlPanel, normalBounds, currentVideoPath);
                     }
                 } else if (e.getKeyCode() == KeyEvent.VK_F11) {
                     toggleFullScreen();
@@ -422,27 +333,277 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         fileManager.setupDropTarget((JComponent) this.getComponent(0));
     }
 
-//    public void toggleFullScreen() {
-//        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-//
-//        if (gd.getFullScreenWindow() == this) {
-//            screenMode.exitFullScreen(this, audioLine, controlPanel, normalBounds,
-//                    grabber, isPlaying, playbackThread, currentVideoPath);
-//        } else {
-//            screenMode.enterFullScreen(this, audioLine, controlPanel, normalBounds,
-//                    grabber, isPlaying, playbackThread, currentVideoPath);
-//        }
-//    }
-public void toggleFullScreen() {
-    GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-
-    // Verifica a fullscreenWindow, não o próprio VideoPlayer
-    if (gd.getFullScreenWindow() != null) {
-        screenMode.exitFullScreen(this,controlPanel, normalBounds, currentVideoPath);
-    } else {
-        screenMode.enterFullScreen(this, controlPanel, currentVideoPath);
+    public FFmpegFrameGrabber getGrabber() {
+        return grabber;
     }
-}
+
+    public void setGrabber(FFmpegFrameGrabber grabber) {
+        this.grabber = grabber;
+    }
+
+    public Java2DFrameConverter getConverter() {
+        return converter;
+    }
+
+    public AudioStreams getAudioStreams() {
+        return audioStreams;
+    }
+
+    public MainPanel getMainPanel() {
+        return mainPanel;
+    }
+
+    public boolean isPlaying() {
+        return isPlaying;
+    }
+
+    public void setPlaying(boolean playing) {
+        isPlaying = playing;
+    }
+
+    public String getVideoFilePath() {
+        return videoFilePath;
+    }
+
+    public void setVideoFilePath(String videoFilePath) {
+        this.videoFilePath = videoFilePath;
+    }
+
+    public String getFfmpegPath() {
+        return ffmpegPath;
+    }
+
+    public String getFfprobePath() {
+        return ffprobePath;
+    }
+
+    public PlaylistManager getPlaylistManager() {
+        return playlistManager;
+    }
+
+    public SubtitleManager getSubtitleManager() {
+        return subtitleManager;
+    }
+
+    public AudioLoudnessManager getAudioLoudnessManager() {
+        return audioLoudnessManager;
+    }
+
+    public AudioLoudnessAnalyzer getLoudnessAnalyzer() {
+        return loudnessAnalyzer;
+    }
+
+    public FiltersManager getFiltersManager() {
+        return filtersManager;
+    }
+
+    public CoverArt getCoverArt() {
+        return coverArt;
+    }
+
+    public RecentFilesManager getRecentFilesManager() {
+        return recentFilesManager;
+    }
+
+    public JButton getPlayPauseButton() {
+        return playPauseButton;
+    }
+
+    public JSlider getProgressSlider() {
+        return progressSlider;
+    }
+
+    public JSlider getVolumeSlider() {
+        return volumeSlider;
+    }
+
+    public JButton getOpenButton() {
+        return openButton;
+    }
+
+    public JButton getVolumeButton() {
+        return volumeButton;
+    }
+
+    public JButton getRewindButton() {
+        return rewindButton;
+    }
+
+    public JButton getForwardButton() {
+        return forwardButton;
+    }
+
+    public JButton getNextFrameButton() {
+        return nextFrameButton;
+    }
+
+    public JButton getCaptureFrameButton() {
+        return captureFrameButton;
+    }
+
+    public JButton getCaptureAllFrameButton() {
+        return captureAllFrameButton;
+    }
+
+    public JButton getStopButton() {
+        return stopButton;
+    }
+
+    public Thread getPlaybackThread() {
+        return playbackThread;
+    }
+
+    public void setPlaybackThread(Thread playbackThread) {
+        this.playbackThread = playbackThread;
+    }
+
+    public void setStopped(boolean stopped) {
+        isStopped = stopped;
+    }
+
+    public boolean isSeeking() {
+        return isSeeking;
+    }
+
+    public SourceDataLine getAudioLine() {
+        return audioLine;
+    }
+
+    public void setAudioLine(SourceDataLine audioLine) {
+        this.audioLine = audioLine;
+    }
+
+    public int getAudioChannels() {
+        return audioChannels;
+    }
+
+    public void setAudioChannels(int audioChannels) {
+        this.audioChannels = audioChannels;
+    }
+
+    public int getSampleRate() {
+        return sampleRate;
+    }
+
+    public void setSampleRate(int sampleRate) {
+        this.sampleRate = sampleRate;
+    }
+
+    public long getTotalFrames() {
+        return totalFrames;
+    }
+
+    public void setTotalFrames(long totalFrames) {
+        this.totalFrames = totalFrames;
+    }
+
+    public double getFrameRate() {
+        return frameRate;
+    }
+
+    public void setFrameRate(double frameRate) {
+        this.frameRate = frameRate;
+    }
+
+    public long getCurrentFrame() {
+        return currentFrame;
+    }
+
+    public void setCurrentFrame(long currentFrame) {
+        this.currentFrame = currentFrame;
+    }
+
+    public void setCurrentVideoPath(String currentVideoPath) {
+        this.currentVideoPath = currentVideoPath;
+    }
+
+    public Map<Integer, String> getSavedAudioStreamNames() {
+        return savedAudioStreamNames;
+    }
+
+    public Map<Integer, String> getSavedSubtitleStreamNames() {
+        return savedSubtitleStreamNames;
+    }
+
+    public boolean isAudioOnly() {
+        return isAudioOnly;
+    }
+
+    public void setAudioOnly(boolean audioOnly) {
+        isAudioOnly = audioOnly;
+    }
+
+    public boolean isVideo() {
+        return isVideo;
+    }
+
+    public void setVideo(boolean video) {
+        boolean antigo = this.isVideo;
+        this.isVideo = video;
+        // Dispara o aviso: "a propriedade 'isVideo' mudou de X para Y"
+        firePropertyChange("isVideo", antigo, video);
+    }
+
+    public boolean isImage() {
+        return isImage;
+    }
+
+    public void setImage(boolean image) {
+        boolean antigo = this.isImage;
+        this.isImage = image;
+        firePropertyChange("isImage", antigo, image);
+    }
+
+    public int getScreenWidth() {
+        return screenWidth;
+    }
+
+    public int getScreenHeight() {
+        return screenHeight;
+    }
+
+    public CaptureFrameManager getCaptureFrameManager() {
+        return captureFrameManager;
+    }
+
+    public VideoProgressManager getVideoProgressManager() {
+        return videoProgressManager;
+    }
+
+    public VideoExecution getVideoExecution() {
+        return videoExecution;
+    }
+
+    public AudioExecution getAudioExecution() {
+        return audioExecution;
+    }
+
+    public ImageExecution getImageExecution() {
+        return imageExecution;
+    }
+
+    public FileManager getFileManager() {
+        return fileManager;
+    }
+
+    public PlayListExecution getPlayListExecution() {
+        return playListExecution;
+    }
+
+    public void toggleFullScreen() {
+        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+
+        // Verifica a fullscreenWindow, não o próprio VideoPlayer
+        if (gd.getFullScreenWindow() != null) {
+            screenMode.exitFullScreen(this, controlPanel, normalBounds, currentVideoPath);
+        } else {
+            screenMode.enterFullScreen(this, controlPanel, currentVideoPath);
+        }
+    }
+
+    public float getVolume() {
+        return volume;
+    }
 
     public void saveVideoState() {
         if (videoFilePath != null) {
@@ -656,7 +817,7 @@ public void toggleFullScreen() {
         loadPlaylistButton = new JButton("📂");
         loadPlaylistButton.setEnabled(true);
         loadPlaylistButton.setPreferredSize(new Dimension(35, 35));
-        loadPlaylistButton.addActionListener(e -> playListExecution.loadAndPlayPlaylist(mainPanel,this));
+        loadPlaylistButton.addActionListener(e -> playListExecution.loadAndPlayPlaylist(mainPanel, this));
 
         rewindButton = new JButton("⏪");
         rewindButton.setEnabled(false);
@@ -1094,8 +1255,8 @@ public void toggleFullScreen() {
     }
 
     // **MÉTODO AUXILIAR PARA FIM DE VÍDEO**
-    private void handleVideoEnd() {
-        if ( playListExecution.getPlaylistManager().size() > 0 && playListExecution.getPlaylistManager().isShuffle()) {
+    public void handleVideoEnd() {
+        if (playListExecution.getPlaylistManager().size() > 0 && playListExecution.getPlaylistManager().isShuffle()) {
             playlistManager.markCurrentAsPlayed();
         }
 
@@ -1105,7 +1266,7 @@ public void toggleFullScreen() {
                 playListExecution.getPlaylistDialog().refreshPlaylist();
                 if (next != null) {
                     System.out.println("Auto-play: " + next.getDisplayName());
-                    playListExecution.playFromPlaylist(next.getFilePath(),this);
+                    playListExecution.playFromPlaylist(next.getFilePath(), this);
                 } else {
                     stopVideo();
                 }
@@ -1178,6 +1339,7 @@ public void toggleFullScreen() {
             System.err.println("Erro ao retroceder: " + e.getMessage());
             e.printStackTrace();
         }
+
     }
 
     private void forward10Seconds() {

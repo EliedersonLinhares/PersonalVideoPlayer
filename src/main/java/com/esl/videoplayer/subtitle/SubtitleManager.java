@@ -298,8 +298,8 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
 
         // Usar tamanho adaptativo baseado no tamanho da janela
         int adaptiveFontSize = getAdaptiveSubtitleSize(getJPanelHeight);
-       // Font subtitleFont = new Font("Arial", Font.BOLD, adaptiveFontSize);
-        Font subtitleFont = resolveSubtitleFont(adaptiveFontSize);
+        Font subtitleFont = new Font("Dialog", Font.BOLD, adaptiveFontSize);
+      //  Font subtitleFont = resolveSubtitleFont(adaptiveFontSize);
         g2d.setFont(subtitleFont);
 
         // Dividir texto em linhas
