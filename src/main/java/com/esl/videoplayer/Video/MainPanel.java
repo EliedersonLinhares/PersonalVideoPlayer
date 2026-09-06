@@ -65,6 +65,8 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
     // autoPlayItem mantido aqui pois é lido externamente via getAutoPlayItem()
     private JCheckBoxMenuItem autoPlayItem;
 
+    private boolean playListFirstItemRandom;
+
     // ── Construtor ────────────────────────────────────────────────────────────
 
     public MainPanel(FFmpegFrameGrabber grabber, SubtitleManager subtitleManager,
@@ -77,6 +79,10 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
         extractAudio = new ExtractAudio();
         filterManager = new ImageFilterManager();
         saveManager = new ImageSaveManager(videoPlayer);
+
+        autoPlayNext = configManager.isSavedPlaylistAutoPlay();
+        playListFirstItemRandom = configManager.isSavedPlaylistRandom();
+
         playListExecution = new PlayListExecution(this,videoPlayer,playlistManager);
 
         subtitleManager.setBaseSubtitleFontSize(configManager.getSavedSubtitleSize());
@@ -86,13 +92,16 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
         setDoubleBuffered(true);
         setLayout(null);
 
-        spectrumPanel = new AudioSpectrumPanel();
+        spectrumPanel = new AudioSpectrumPanel(getConfigManager());
         spectrumPanel.setVisible(false);
         add(spectrumPanel, BorderLayout.CENTER);
 
-        setAutoPlayNext(true);
+        setAutoPlayNext(configManager.isSavedPlaylistAutoPlay());
         autoPlayItem = new JCheckBoxMenuItem(I18N.get("mainPanel.autoPlayItem.text"), autoPlayNext);
-        autoPlayItem.addActionListener(e -> autoPlayNext = autoPlayItem.isSelected());
+        autoPlayItem.addActionListener(e -> {
+            autoPlayNext = autoPlayItem.isSelected();
+            configManager.savedPlaylistAutoPlay(autoPlayNext);
+        });
 
         if (grabber == null) {
             setupDefaultContextMenu(videoPlayer);
@@ -291,13 +300,13 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
         menu.addSeparator();
         JMenuItem title = new JMenuItem(I18N.get("recent.title"));
         title.setEnabled(false);
-        title.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        title.setFont(new Font("Segoe UI", Font.BOLD, 14));
         menu.add(title);
 
         int idx = 1;
         for (RecentFilesManager.RecentFile rf : files) {
             JMenuItem item = new JMenuItem(rf.getIcon() + " " + idx + ". " + rf.getDisplayName());
-            item.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            item.setFont(new Font("Segoe UI", Font.PLAIN, 14));
             item.setToolTipText(rf.getFilePath());
             if (idx <= 5)
                 item.setAccelerator(KeyStroke.getKeyStroke(
@@ -319,6 +328,7 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
 
         menu.addSeparator();
         JMenuItem clear = new JMenuItem("🗑️ " + I18N.get("recent.clear"));
+        clear.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         clear.addActionListener(e -> {
             int confirmDialogOk = JOptionPane.showConfirmDialog(this,
                     I18N.get("recent.clear.confirm"), I18N.get("dialog.confirm"),
@@ -331,6 +341,14 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
             }
         });
         menu.add(clear);
+        JMenuItem saveRecentPlayedItem = new JCheckBoxMenuItem(I18N.get("videoPlayer.Playlist.SaveItemToRecentFiles"));
+        saveRecentPlayedItem.setSelected(configManager.isSavedRecentItemPlayed());
+        saveRecentPlayedItem.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        saveRecentPlayedItem.addActionListener(e ->{
+            videoPlayer.setSaveRecentPlayedFile(saveRecentPlayedItem.isSelected());
+            configManager.savedRecentItemPlayed(saveRecentPlayedItem.isSelected());
+        });
+        menu.add(saveRecentPlayedItem);
     }
 
     private void updateDefaultPopupTexts(JPopupMenu menu) {
@@ -591,5 +609,21 @@ public class MainPanel extends JPanel implements I18N.LanguageChangeListener {
 
     public void setBatchCaptureInterval(int v) {
         this.batchCaptureInterval = v;
+    }
+
+    public ConfigManager getConfigManager() {
+        return configManager;
+    }
+
+    public PlayListExecution getPlayListExecution() {
+        return playListExecution;
+    }
+
+    public boolean isPlayListFirstItemRandom() {
+        return playListFirstItemRandom;
+    }
+
+    public void setPlayListFirstItemRandom(boolean playListFirstItemRamdom) {
+        this.playListFirstItemRandom = playListFirstItemRamdom;
     }
 }

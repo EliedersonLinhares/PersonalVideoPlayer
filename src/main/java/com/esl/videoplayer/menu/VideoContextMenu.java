@@ -544,6 +544,8 @@ public class VideoContextMenu extends AbstractContextMenu {
         if (fileInfoItem != null) fileInfoItem.setText(I18N.get("mediainfo.menuitem"));
         if (aboutItem != null) aboutItem.setText(I18N.get("about.menuitem"));
 
+        if (getSaveRecentPlayedItem() != null) getSaveRecentPlayedItem().setText(I18N.get("videoPlayer.Playlist.SaveItemToRecentFiles"));
+
         updateLanguageMenuTexts();
     }
 }

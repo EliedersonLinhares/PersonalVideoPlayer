@@ -1,5 +1,7 @@
 package com.esl.videoplayer.audio.Spectrum;
 
+import com.esl.videoplayer.configuration.ConfigManager;
+
 import javax.swing.*;
 import javax.swing.Timer;
 import java.awt.*;
@@ -31,6 +33,14 @@ public class AudioSpectrumPanel extends JPanel {
         DEFAULT,        // Verde -> Amarelo -> Vermelho
         CUSTOM,         // Cores personalizadas
         COVER_PALETTE   // Baseado na paleta da capa
+    }
+
+    public enum CustomPalette {
+        NONE, // Caso o usuário defina uma cor livre via Dialog
+        SYNTHWAVE,
+        MATRIX,
+        FIRE,
+        ICE
     }
 
     // Variáveis de layout
@@ -95,12 +105,25 @@ public class AudioSpectrumPanel extends JPanel {
     // Parâmetros para extração de cores
     private float coverColorDifferenceMultiplier = 1.5f; // Multiplicador para aumentar diferença entre cores
 
-    public AudioSpectrumPanel() {
+    private final ConfigManager configManager;
+
+    public AudioSpectrumPanel(ConfigManager configManager) {
+        this.configManager = configManager;
         initArrays(barCount);
 
         setBackground(Color.BLACK);
         setOpaque(true);
         setPreferredSize(new Dimension(panelWidth, panelHeight));
+
+        spectrumVisible = configManager.getSavedShowAudioSpectrum();
+        coverArtVisible= configManager.getSavedShowAudioImageCover();
+        layoutMode = configManager.getSavedSpectrumLayout();
+        waveformAmplitude = configManager.getSavedWaveformAmplitude();
+        waveformFilled = configManager.getSavedWaveformFilled();
+        waveformLayers = configManager.getSavedWaveformLayers();
+        waveformLayerSpacing = configManager.getSavedWaveformSpacing();
+
+
 
         // Atualização ~60 FPS
         animationTimer = new Timer(16, e -> {

@@ -7,6 +7,9 @@ import com.esl.videoplayer.localization.I18N;
 import javax.swing.*;
 import java.awt.*;
 import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
@@ -65,12 +68,41 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
         System.out.println("Nenhuma legenda externa encontrada");
     }
 
+    private String readFileWithEncodingDetection(File file) throws IOException {
+        byte[] bytes = Files.readAllBytes(file.toPath());
+
+        // 1. Verificar BOM (UTF-8 ou UTF-16)
+        if (bytes.length >= 3 && (bytes[0] & 0xFF) == 0xEF
+                && (bytes[1] & 0xFF) == 0xBB && (bytes[2] & 0xFF) == 0xBF) {
+            return new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8);
+        }
+        if (bytes.length >= 2 && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xFE) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16LE);
+        }
+        if (bytes.length >= 2 && (bytes[0] & 0xFF) == 0xFE && (bytes[1] & 0xFF) == 0xFF) {
+            return new String(bytes, 2, bytes.length - 2, StandardCharsets.UTF_16BE);
+        }
+
+        // 2. Sem BOM: tentar UTF-8 estrito
+        try {
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+            decoder.onMalformedInput(CodingErrorAction.REPORT);
+            decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+            return decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+        } catch (Exception e) {
+            // 3. Não é UTF-8 válido -> assumir Windows-1252 (cobre Latin-1/ISO-8859-1)
+            System.out.println("Arquivo não é UTF-8 válido, usando Windows-1252");
+            return new String(bytes, Charset.forName("windows-1252"));
+        }
+    }
+
     public void loadSubtitleFile(File file, VideoPlayer videoPlayer) {
         System.out.println("Carregando legenda: " + file.getName());
 
         new Thread(() -> {
             try {
-                String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+              //  String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+                String content = readFileWithEncodingDetection(file);
                 System.out.println("Arquivo lido: " + content.length() + " caracteres");
 
                 // Detectar formato
@@ -299,7 +331,7 @@ public class SubtitleManager implements I18N.LanguageChangeListener {
         // Usar tamanho adaptativo baseado no tamanho da janela
         int adaptiveFontSize = getAdaptiveSubtitleSize(getJPanelHeight);
         Font subtitleFont = new Font("Dialog", Font.BOLD, adaptiveFontSize);
-      //  Font subtitleFont = resolveSubtitleFont(adaptiveFontSize);
+      // Font subtitleFont = resolveSubtitleFont(adaptiveFontSize);
         g2d.setFont(subtitleFont);
 
         // Dividir texto em linhas

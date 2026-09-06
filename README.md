@@ -37,7 +37,12 @@ Project to create a functional video and audio player using java with javacv and
 - ✅ 🎨 Can apply simple filters brightness and Contrast
 - ✅ 🎨 Can save image in jpg or png
 - ✅ 🎵 Implemented an audio extractor where you can set the format 
+- ✅ 📃 Playlist now can persist data
  
 ## 🚀 Features to be implemented
 - ℹ️ Add one helper to explain program functions 
+
+##  Limitations
+- Can’t play high resolution(< 1920x1080) videos with AV1 decoder
+- Dont open files with unicode Characters or some Languages like Cyrillic
 

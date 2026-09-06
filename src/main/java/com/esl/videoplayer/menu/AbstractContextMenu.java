@@ -33,6 +33,7 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
     protected JMenu                langMenu;
     protected JRadioButtonMenuItem langEnItem;
     protected JRadioButtonMenuItem langPtItem;
+    private JMenuItem saveRecentPlayedItem;
 
     protected JMenuItem aboutItem;
 
@@ -136,6 +137,7 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
         if (langMenu   != null) langMenu.setText(I18N.get("language.text"));
         if (langEnItem != null) langEnItem.setText(I18N.get("language.item1"));
         if (langPtItem != null) langPtItem.setText(I18N.get("language.item2"));
+
     }
 
     /**
@@ -200,6 +202,14 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
             }
         });
         menu.add(clear);
+        saveRecentPlayedItem = new JCheckBoxMenuItem(I18N.get("videoPlayer.Playlist.SaveItemToRecentFiles"));
+        saveRecentPlayedItem.setSelected(configManager.isSavedRecentItemPlayed());
+        saveRecentPlayedItem.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        saveRecentPlayedItem.addActionListener(e ->{
+            videoPlayer.setSaveRecentPlayedFile(saveRecentPlayedItem.isSelected());
+            configManager.savedRecentItemPlayed(saveRecentPlayedItem.isSelected());
+        });
+        menu.add(saveRecentPlayedItem);
     }
 
     /**
@@ -234,4 +244,22 @@ public abstract class AbstractContextMenu implements I18N.LanguageChangeListener
         configManager.saveLocale(locale);
     }
 
+    public JMenuItem buildSaveRecentFilesItem() {
+        saveRecentPlayedItem = new JMenuItem();
+        saveRecentPlayedItem.setSelected(configManager.isSavedRecentItemPlayed());
+        saveRecentPlayedItem.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        saveRecentPlayedItem.addActionListener(e ->{
+            videoPlayer.setSaveRecentPlayedFile(saveRecentPlayedItem.isSelected());
+            configManager.savedRecentItemPlayed(saveRecentPlayedItem.isSelected());
+        });
+        return saveRecentPlayedItem;
+    }
+
+    public JMenuItem getSaveRecentPlayedItem() {
+        return saveRecentPlayedItem;
+    }
+
+    public void setSaveRecentPlayedItem(JMenuItem saveRecentPlayedItem) {
+        this.saveRecentPlayedItem = saveRecentPlayedItem;
+    }
 }

@@ -117,6 +117,8 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
     private VideoExecution videoExecution;
     private FileManager fileManager;
 
+   private boolean saveRecentPlayedFile;
+
     public VideoPlayer() {
         setTitle("Media Player");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -138,7 +140,11 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         filtersManager = new FiltersManager();
         subtitleManager = new SubtitleManager();
         loudnessAnalyzer = new AudioLoudnessAnalyzer();
-        audioLoudnessManager = new AudioLoudnessManager();
+        configManager = new ConfigManager();
+
+        saveRecentPlayedFile = configManager.isSavedRecentItemPlayed();
+
+        audioLoudnessManager = new AudioLoudnessManager(getConfigManager());
         coverArt = new CoverArt();
         screenMode = new ScreenMode();
 
@@ -147,7 +153,7 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         playListExecution = new PlayListExecution(mainPanel, this, playlistManager);
         recentFilesManager = new RecentFilesManager();
         themeManager = new ThemeManager();
-        configManager = new ConfigManager();
+
         videoProgressManager = new VideoProgressManager();
         imageExecution = new ImageExecution(this);
         audioExecution = new AudioExecution(this);
@@ -1975,4 +1981,15 @@ public class VideoPlayer extends JFrame implements I18N.LanguageChangeListener {
         repaint();
     }
 
+    public ConfigManager getConfigManager() {
+        return configManager;
+    }
+
+    public boolean isSaveRecentPlayedFile() {
+        return saveRecentPlayedFile;
+    }
+
+    public void setSaveRecentPlayedFile(boolean saveRecentPlayedFile) {
+        this.saveRecentPlayedFile = saveRecentPlayedFile;
+    }
 }

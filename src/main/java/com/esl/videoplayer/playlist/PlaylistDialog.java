@@ -3,6 +3,7 @@ package com.esl.videoplayer.playlist;
 
 import com.esl.videoplayer.localization.I18N;
 import jnafilechooser.api.JnaFileChooser;
+import org.bytedeco.javacv.FFmpegFrameGrabber;
 
 import javax.swing.*;
 import java.awt.*;
@@ -11,6 +12,7 @@ import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
+import java.util.Map;
 
 public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListener {
     private PlaylistManager playlistManager;
@@ -75,12 +77,35 @@ public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListen
         playlistList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         playlistList.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 
+//        playlistList.setCellRenderer(new DefaultListCellRenderer() {
+//            @Override
+//            public Component getListCellRendererComponent(JList<?> list, Object value,
+//                                                          int index, boolean isSelected, boolean cellHasFocus) {
+//                PlaylistItem item = (PlaylistItem) value;
+//                String displayText = item.toString();
+//
+//                super.getListCellRendererComponent(list, displayText, index, isSelected, cellHasFocus);
+//
+//                if (index == playlistManager.getCurrentIndex()) {
+//                    setForeground(new Color(0, 150, 255));
+//                    setFont(getFont().deriveFont(Font.BOLD));
+//                } else if (item.isPlayed() && playlistManager.isShuffle()) {
+//                    if (!isSelected) {
+//                        setForeground(new Color(120, 120, 120));
+//                    }
+//                    setFont(getFont().deriveFont(Font.ITALIC));
+//                }
+//
+//                return this;
+//            }
+//        });
+
         playlistList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value,
                                                           int index, boolean isSelected, boolean cellHasFocus) {
                 PlaylistItem item = (PlaylistItem) value;
-                String displayText = item.toString();
+                String displayText = item.toDisplayString(index + 1); // posição começando em 1
 
                 super.getListCellRendererComponent(list, displayText, index, isSelected, cellHasFocus);
 
@@ -175,20 +200,39 @@ public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListen
         nextButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.nextButton"));
         nextButton.addActionListener(e -> playNext());
 
+//        shuffleButton = new JToggleButton("🔀");
+//        shuffleButton.setPreferredSize(new Dimension(35, 35));
+//        shuffleButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.shuffleButton"));
+//        shuffleButton.addActionListener(e -> toggleShuffle());
+//
+//        repeatButton = new JToggleButton("🔁");
+//        repeatButton.setPreferredSize(new Dimension(35, 35));
+//        repeatButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.repeatButton"));
+//        repeatButton.addActionListener(e -> toggleRepeat());
+//
+//        repeatOneButton = new JToggleButton("🔂");
+//        repeatOneButton.setPreferredSize(new Dimension(35, 35));
+//        repeatOneButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.repeatOneButton"));
+//        repeatOneButton.addActionListener(e -> toggleRepeatOne());
+
         shuffleButton = new JToggleButton("🔀");
         shuffleButton.setPreferredSize(new Dimension(35, 35));
         shuffleButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.shuffleButton"));
+        shuffleButton.setSelected(playlistManager.isShuffle()); // <-- reflete estado salvo
         shuffleButton.addActionListener(e -> toggleShuffle());
 
         repeatButton = new JToggleButton("🔁");
         repeatButton.setPreferredSize(new Dimension(35, 35));
         repeatButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.repeatButton"));
+        repeatButton.setSelected(playlistManager.isRepeat()); // <-- reflete estado salvo
         repeatButton.addActionListener(e -> toggleRepeat());
 
         repeatOneButton = new JToggleButton("🔂");
         repeatOneButton.setPreferredSize(new Dimension(35, 35));
         repeatOneButton.setToolTipText(I18N.get("PlaylistDialog.initComponents.repeatOneButton"));
+        repeatOneButton.setSelected(playlistManager.isRepeatOne()); // <-- reflete estado salvo
         repeatOneButton.addActionListener(e -> toggleRepeatOne());
+
 
         playbackPanel.add(previousButton);
         playbackPanel.add(playButton);
@@ -222,6 +266,40 @@ public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListen
         refreshPlaylist();
     }
 
+//    private void addTracks() {
+//        JnaFileChooser fc = new JnaFileChooser();
+//        fc.setMultiSelectionEnabled(true);
+//        fc.addFilter(I18N.get("PlaylistDialog.addTracks.addFilters1"), "mp3", "wav", "flac", "ogg", "m4a", "aac", "wma", "ac3", "aiff");
+//        fc.addFilter(I18N.get("PlaylistDialog.addTracks.addFilters2"), "mp4", "avi", "mkv", "mov", "flv", "webm");
+//
+//        if (fc.showOpenDialog(this)) {
+//            File[] files = fc.getSelectedFiles();
+//            for (File file : files) {
+//                PlaylistItem item = new PlaylistItem(file.getAbsolutePath());
+//                playlistManager.addItem(item);
+//            }
+//            notifyPlaylistChanged();
+//        }
+//    }
+//private void addTracks() {
+//    JnaFileChooser fc = new JnaFileChooser();
+//    fc.setMultiSelectionEnabled(true);
+//    fc.addFilter(I18N.get("PlaylistDialog.addTracks.addFilters1"), "mp3", "wav", "flac", "ogg", "m4a", "aac", "wma", "ac3", "aiff");
+//    fc.addFilter(I18N.get("PlaylistDialog.addTracks.addFilters2"), "mp4", "avi", "mkv", "mov", "flv", "webm");
+//
+//    if (fc.showOpenDialog(this)) {
+//        File[] files = fc.getSelectedFiles();
+//        for (File file : files) {
+//            PlaylistItem item = new PlaylistItem(file.getAbsolutePath());
+//            if (item.isAudio()) {
+//                loadAudioMetadata(item);
+//            }
+//            playlistManager.addItem(item);
+//        }
+//        notifyPlaylistChanged();
+//    }
+//}
+
     private void addTracks() {
         JnaFileChooser fc = new JnaFileChooser();
         fc.setMultiSelectionEnabled(true);
@@ -230,13 +308,77 @@ public class PlaylistDialog extends JDialog implements I18N.LanguageChangeListen
 
         if (fc.showOpenDialog(this)) {
             File[] files = fc.getSelectedFiles();
-            for (File file : files) {
-                PlaylistItem item = new PlaylistItem(file.getAbsolutePath());
-                playlistManager.addItem(item);
-            }
-            notifyPlaylistChanged();
+
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            addButton.setEnabled(false);
+
+            new SwingWorker<Void, Void>() {
+                @Override
+                protected Void doInBackground() {
+                    for (File file : files) {
+                        PlaylistItem item = new PlaylistItem(file.getAbsolutePath());
+                        playlistManager.addItem(item); // já lê metadados aqui, fora da EDT
+                    }
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    setCursor(Cursor.getDefaultCursor());
+                    addButton.setEnabled(true);
+                    notifyPlaylistChanged();
+                }
+            }.execute();
         }
     }
+
+    /**
+     * Abre um FFmpegFrameGrabber temporário só para ler metadados
+     * (título, autor, duração) sem afetar a reprodução atual.
+     */
+    private void loadAudioMetadata(PlaylistItem item) {
+        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber(item.getFilePath());
+        try {
+            grabber.start();
+
+            Map<String, String> metadata = grabber.getMetadata();
+            if (metadata != null) {
+                String title = getMetadataValue(metadata, "title");
+                String artist = getMetadataValue(metadata, "artist", "author", "album_artist");
+
+                if (title != null) {
+                    item.setDisplayName(title);
+                }
+                if (artist != null) {
+                    item.setArtist(artist);
+                }
+            }
+
+            long durationMicros = grabber.getLengthInTime();
+            if (durationMicros > 0) {
+                item.setDuration(durationMicros / 1_000_000);
+            }
+        } catch (Exception e) {
+            System.out.println("Não foi possível ler metadados de: " + item.getFilePath() + " (" + e.getMessage() + ")");
+        } finally {
+            try {
+                grabber.stop();
+                grabber.release();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private String getMetadataValue(Map<String, String> metadata, String... keys) {
+        for (String key : keys) {
+            String value = metadata.get(key);
+            if (value != null && !value.isBlank()) return value;
+            value = metadata.get(key.toUpperCase());
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
+
     private void removeSelectedTrack() {
         int selected = playlistList.getSelectedIndex();
         if (selected >= 0) {

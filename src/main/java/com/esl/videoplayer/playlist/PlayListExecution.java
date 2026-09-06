@@ -8,6 +8,8 @@ import jnafilechooser.api.JnaFileChooser;
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+import java.util.Random;
 
 public class PlayListExecution {
 
@@ -57,7 +59,156 @@ public class PlayListExecution {
         }
     }
 
-    // NOVO: Método para carregar e iniciar playlist direto
+//    public void loadAndPlayPlaylistFromContext(MainPanel mainPanel, VideoPlayer videoPlayer, String filePath) {
+//
+//        if (mainPanel.getAutoPlayItem().isSelected()) {
+//            System.out.println("====Reativando o autoplay");
+//            mainPanel.setAutoPlayNext(true);
+//        }
+//        // Atualiza o dialog SEMPRE (mesmo invisível)
+//        SwingUtilities.invokeLater(playlistDialog::refreshPlaylist);
+//
+//            try {
+//                playlistManager.loadM3U(filePath);
+//
+//                // Atualizar dialog se estiver aberto
+//                if (playlistDialog != null && playlistDialog.isVisible()) {
+//                    playlistDialog.refreshPlaylist();
+//
+//                }
+//
+//                // Tocar primeira música automaticamente
+//                if (playlistManager.size() > 0) {
+//
+//                    if(mainPanel.isPlayListFirstItemRandom()){
+//                        playlistManager.setCurrentIndex(randomInt(playlistManager.getPlaylist()));
+//                    }else {
+//                        playlistManager.setCurrentIndex(0);
+//                    }
+//                    PlaylistItem firstItem = playlistManager.getCurrentItem();
+//
+//                    if (firstItem != null) {
+//                        playFromPlaylist(firstItem.getFilePath(),videoPlayer);
+//
+//                        // Atualizar dialog se estiver aberto
+//                        if (playlistDialog != null && playlistDialog.isVisible()) {
+//                            playlistDialog.refreshPlaylist();
+//                        }
+//                    }
+//                    playlistDialog.setVisible(true);
+//                } else {
+//                    JOptionPane.showMessageDialog(videoPlayer,
+//                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.text"),
+//                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.title"),
+//                            JOptionPane.WARNING_MESSAGE);
+//                }
+//
+//            } catch (IOException e) {
+//                JOptionPane.showMessageDialog(videoPlayer,
+//                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.text") + "\n" + e.getMessage(),
+//                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.title"),
+//                        JOptionPane.ERROR_MESSAGE);
+//                e.printStackTrace();
+//            }
+//
+//    }
+//
+//
+//    // NOVO: Método para carregar e iniciar playlist direto
+//    public void loadAndPlayPlaylist(MainPanel mainPanel, VideoPlayer videoPlayer) {
+//        JnaFileChooser fc = new JnaFileChooser();
+//        fc.addFilter("M3U Playlist", "m3u");
+//        if (mainPanel.getAutoPlayItem().isSelected()) {
+//            System.out.println("====Reativando o autoplay");
+//            mainPanel.setAutoPlayNext(true);
+//        }
+//        // Atualiza o dialog SEMPRE (mesmo invisível)
+//        SwingUtilities.invokeLater(() -> {
+//            playlistDialog.refreshPlaylist();
+//        });
+//
+//        if (fc.showOpenDialog(videoPlayer)) {
+//            File file = fc.getSelectedFile();
+//            try {
+//                playlistManager.loadM3U(file.getAbsolutePath());
+//
+//                // Atualizar dialog se estiver aberto
+//                if (playlistDialog != null && playlistDialog.isVisible()) {
+//                    playlistDialog.refreshPlaylist();
+//
+//                }
+//
+//                // Tocar primeira música automaticamente
+//                if (playlistManager.size() > 0) {
+//                    if(mainPanel.isPlayListFirstItemRandom()){
+//                        playlistManager.setCurrentIndex(randomInt(playlistManager.getPlaylist()));
+//                    }else {
+//                        playlistManager.setCurrentIndex(0);
+//                    }
+//
+//                    PlaylistItem firstItem = playlistManager.getCurrentItem();
+//
+//                    if (firstItem != null) {
+//                        System.out.println("Iniciando playlist: " + file.getName());
+//                        System.out.println("Primeira música: " + firstItem.getDisplayName());
+//                        playFromPlaylist(firstItem.getFilePath(),videoPlayer);
+//
+//                        // Atualizar dialog se estiver aberto
+//                        if (playlistDialog != null && playlistDialog.isVisible()) {
+//                            playlistDialog.refreshPlaylist();
+//                        }
+//                    }
+//                    playlistDialog.setVisible(true);
+//                } else {
+//                    JOptionPane.showMessageDialog(videoPlayer,
+//                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.text"),
+//                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.title"),
+//                            JOptionPane.WARNING_MESSAGE);
+//                }
+//
+//            } catch (IOException e) {
+//                JOptionPane.showMessageDialog(videoPlayer,
+//                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.text") + "\n" + e.getMessage(),
+//                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.title"),
+//                        JOptionPane.ERROR_MESSAGE);
+//                e.printStackTrace();
+//            }
+//        }
+//    }
+
+    public void loadAndPlayPlaylistFromContext(MainPanel mainPanel, VideoPlayer videoPlayer, String filePath) {
+
+        if (mainPanel.getAutoPlayItem().isSelected()) {
+            System.out.println("====Reativando o autoplay");
+            mainPanel.setAutoPlayNext(true);
+        }
+        SwingUtilities.invokeLater(playlistDialog::refreshPlaylist);
+
+        try {
+            playlistManager.loadM3U(filePath);
+
+            if (playlistDialog != null && playlistDialog.isVisible()) {
+                playlistDialog.refreshPlaylist();
+            }
+
+            if (playlistManager.size() > 0) {
+                startPlaylistPlayback(mainPanel, videoPlayer);
+            } else {
+                JOptionPane.showMessageDialog(videoPlayer,
+                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.text"),
+                        I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.title"),
+                        JOptionPane.WARNING_MESSAGE);
+            }
+
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(videoPlayer,
+                    I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.text") + "\n" + e.getMessage(),
+                    I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog3.title"),
+                    JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
+    }
+
     public void loadAndPlayPlaylist(MainPanel mainPanel, VideoPlayer videoPlayer) {
         JnaFileChooser fc = new JnaFileChooser();
         fc.addFilter("M3U Playlist", "m3u");
@@ -65,46 +216,19 @@ public class PlayListExecution {
             System.out.println("====Reativando o autoplay");
             mainPanel.setAutoPlayNext(true);
         }
-        // Atualiza o dialog SEMPRE (mesmo invisível)
-        SwingUtilities.invokeLater(() -> {
-            playlistDialog.refreshPlaylist();
-        });
+        SwingUtilities.invokeLater(() -> playlistDialog.refreshPlaylist());
 
         if (fc.showOpenDialog(videoPlayer)) {
             File file = fc.getSelectedFile();
             try {
                 playlistManager.loadM3U(file.getAbsolutePath());
 
-                // Atualizar dialog se estiver aberto
                 if (playlistDialog != null && playlistDialog.isVisible()) {
                     playlistDialog.refreshPlaylist();
-
                 }
 
-                // Tocar primeira música automaticamente
                 if (playlistManager.size() > 0) {
-                    playlistManager.setCurrentIndex(0);
-                    PlaylistItem firstItem = playlistManager.getCurrentItem();
-
-                    if (firstItem != null) {
-                        System.out.println("Iniciando playlist: " + file.getName());
-                        System.out.println("Primeira música: " + firstItem.getDisplayName());
-                        playFromPlaylist(firstItem.getFilePath(),videoPlayer);
-
-                        // Atualizar dialog se estiver aberto
-                        if (playlistDialog != null && playlistDialog.isVisible()) {
-                            playlistDialog.refreshPlaylist();
-                        }
-                    }
-
-                    JOptionPane.showMessageDialog(videoPlayer,
-                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog1.text1") + " " + playlistManager.size() + " "
-                                    + I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog1.text2") + "\n"
-                                    + I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog1.text3") + " " + firstItem.getDisplayName(),
-                            I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog1.title"),
-                            JOptionPane.INFORMATION_MESSAGE);
-
-                    playlistDialog.setVisible(true);
+                    startPlaylistPlayback(mainPanel, videoPlayer);
                 } else {
                     JOptionPane.showMessageDialog(videoPlayer,
                             I18N.get("videoPlayer.loadAndPlayPlaylist.showMessageDialog2.text"),
@@ -120,6 +244,12 @@ public class PlayListExecution {
                 e.printStackTrace();
             }
         }
+    }
+
+
+    private int randomInt(List<PlaylistItem> list) {
+        Random random = new Random();
+        return random.nextInt(list.size());
     }
 
     // Método para tocar do playlist (NÃO limpa playlist)
@@ -158,5 +288,58 @@ public class PlayListExecution {
 
         // Desabilitar auto-play
         mainPanel.setAutoPlayNext(false);
+    }
+
+    private boolean askContinueOrRestart(VideoPlayer videoPlayer) {
+        Object[] options = {
+                I18N.get("PlaylistExecution.resumeDialog.continueOption"),
+                I18N.get("PlaylistExecution.resumeDialog.restartOption")
+        };
+
+        int choice = JOptionPane.showOptionDialog(
+                videoPlayer,
+                I18N.get("PlaylistExecution.resumeDialog.text"),
+                I18N.get("PlaylistExecution.resumeDialog.title"),
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+        );
+
+        return choice == 0; // true = continuar, false (ou fechar) = recomeçar
+    }
+
+    private void startPlaylistPlayback(MainPanel mainPanel, VideoPlayer videoPlayer) {
+        boolean resumed = false;
+
+        if (playlistManager.hasSavedStateForCurrentPlaylist()) {
+            boolean wantsContinue = askContinueOrRestart(videoPlayer);
+            if (wantsContinue) {
+                playlistManager.applySavedState();
+                resumed = true;
+            } else {
+                playlistManager.clearSavedStateForCurrentPlaylist();
+            }
+        }
+
+        if (!resumed) {
+            if (mainPanel.isPlayListFirstItemRandom()) {
+                playlistManager.setCurrentIndex(randomInt(playlistManager.getPlaylist()));
+            } else {
+                playlistManager.setCurrentIndex(0);
+            }
+        }
+
+        PlaylistItem currentItem = playlistManager.getCurrentItem();
+
+        if (currentItem != null) {
+            playFromPlaylist(currentItem.getFilePath(), videoPlayer);
+
+            if (playlistDialog != null && playlistDialog.isVisible()) {
+                playlistDialog.refreshPlaylist();
+            }
+        }
+        playlistDialog.setVisible(true);
     }
 }

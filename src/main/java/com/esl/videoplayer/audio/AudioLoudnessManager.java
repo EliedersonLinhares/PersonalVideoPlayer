@@ -1,6 +1,7 @@
 package com.esl.videoplayer.audio;
 
 import com.esl.videoplayer.Video.MainPanel;
+import com.esl.videoplayer.configuration.ConfigManager;
 
 import javax.swing.*;
 import java.nio.ShortBuffer;
@@ -25,6 +26,16 @@ public class AudioLoudnessManager {
     // Variáveis para spectrum analyzer
     private float[] spectrumData = new float[64]; // 64 barras de frequência
     private final Object spectrumLock = new Object();
+
+    private final ConfigManager configManager;
+
+    public AudioLoudnessManager(ConfigManager configManager) {
+        this.configManager = configManager;
+        globalAudioGain = configManager.getSavedAudioGlobalGain();
+        audioNormalizationEnabled = configManager.getSavedAudioNormalization();
+        targetLoudness = configManager.getSavedAudioTargetLoudness();
+
+    }
 
     public float calculateNormalizationGain(float currentDbFS, float targetDbFS) {
         // Calcular diferença em dB
