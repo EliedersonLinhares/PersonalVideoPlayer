@@ -129,6 +129,23 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <plugin>
+                <groupId>com.github.maven-nar</groupId>
+                <artifactId>nar-maven-plugin</artifactId>
+                <version>3.10.1</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <libraries>
+                        <library>
+                            <type>jni</type>
+                            <linkCPP>false</linkCPP>
+                        </library>
+                    </libraries>
+                    <!-- Ele procura os .c/.cpp automaticamente em src/main/native -->
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
     <repositories>

@@ -33,8 +33,9 @@ public class ImageExecution {
         videoPlayer.playListExecution.clearPlaylistAndCloseDialog(videoPlayer.getMainPanel());
 
         // ADICIONAR: Registrar arquivo como recente
-        videoPlayer.getRecentFilesManager().addRecentFile(filepath, false);
-
+        if(videoPlayer.isSaveRecentPlayedFile()) {
+            videoPlayer.getRecentFilesManager().addRecentFile(filepath, false);
+        }
         loadImageBase(filepath);
     }
 

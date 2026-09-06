@@ -34,8 +34,9 @@ public class AudioExecution {
         videoPlayer.playListExecution.clearPlaylistAndCloseDialog(videoPlayer.getMainPanel());
 
         // ADICIONAR: Registrar arquivo como recente
-        videoPlayer.getRecentFilesManager().addRecentFile(filepath, false);
-
+        if(videoPlayer.isSaveRecentPlayedFile()) {
+            videoPlayer.getRecentFilesManager().addRecentFile(filepath, false);
+        }
         loadAudioBase(filepath);
     }
 
@@ -159,17 +160,7 @@ public class AudioExecution {
                         float detectedGain = (peakLevel > 0.01f) ? (targetPeak / peakLevel) : 1.0f;
                         float finalGain = Math.min(detectedGain, 4.0f); // limita para não distorcer demais
 
-                        videoPlayer.getAudioLoudnessManager().setGlobalAudioGain(0.20f);
-                        videoPlayer.getAudioLoudnessManager().setAudioNormalizationEnabled(false);
-                        videoPlayer.getAudioLoudnessManager().setTargetLoudness(-18.0f);
-
                         System.out.println("Loudness detectado — peak: " + peakLevel + ", gain aplicado: " + finalGain);
-
-
-//                        // Combinação default - deve refletir o que está no menu
-//                      audioLoudnessManager.setGlobalAudioGain(0.20f);          // 20% do volume
-//                      audioLoudnessManager.setTargetLoudness(-18.0f);         // Target mais baixo
-//                      audioLoudnessManager.setAudioNormalizationEnabled(false); // normalização desativada
 
                     } catch (Exception audioEx) {
                         System.err.println("10. Erro ao configurar áudio: " + audioEx.getMessage());
@@ -203,11 +194,6 @@ public class AudioExecution {
 
                     videoPlayer.updateTimeLabel();
 
-                    // Limpar painel de vídeo e mostrar mensagem
-//                    mainPanel.updateImage(null);
-//                    mainPanel.repaint();
-                    // Mostrar spectrum analyzer
-
                     // USAR O MÉTODO PÚBLICO EM VEZ DE ACESSAR spectrumPanel DIRETAMENTE
                     videoPlayer.getMainPanel().setSpectrumSize(600, 400);
                     // Ativar reflexo
@@ -223,13 +209,6 @@ public class AudioExecution {
 
                     // Ajustar opacidade da capa (0.0 = invisível, 1.0 = opaco)
                     videoPlayer.getMainPanel().setCoverOpacity(0.5f); // 30% de opacidade (padrão)
-
-                    // Para capa mais visível
-                    // mainPanel.setCoverOpacity(0.5f);
-
-                    // Para capa mais discreta
-                    // mainPanel.setCoverOpacity(0.2f);
-
 
                     // ATIVAR MODO COVER_PALETTE se houver capa
                     videoPlayer.getMainPanel().setSpectrumColorMode(AudioSpectrumPanel.ColorMode.COVER_PALETTE);

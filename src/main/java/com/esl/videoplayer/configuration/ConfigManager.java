@@ -1,5 +1,7 @@
 package com.esl.videoplayer.configuration;
 
+import com.esl.videoplayer.audio.Spectrum.AudioSpectrumPanel;
+
 import java.awt.*;
 import java.io.*;
 import java.util.LinkedHashMap;
@@ -25,6 +27,34 @@ public class ConfigManager {
     public static final String KEY_FRAME_SKIP_VALUE    = "frame_skip_value";
     public static final String KEY_CAPTURE_FRAME_INTERVAL    = "capture_frame_interval";
 
+    //Audio
+    public static final String KEY_SHOW_AUDIO_SPECTRUM     = "show_spectrum";
+    public static final String KEY_SHOW_AUDIO_IMAGE_COVER = "show_audio_image_cover";
+    public static final String KEY_SPECTRUM_LAYOUT = "spectrum_layout";
+
+    public static final String KEY_WAVEFORM_AMPLITUDE     = "waveform_amplitude";
+    public static final String KEY_WAVEFORM_FILLED        = "waveform_filled";
+    public static final String KEY_WAVEFORM_LAYERS        = "waveform_layers";
+    public static final String KEY_WAVEFORM_SPACING       = "waveform_spacing";
+
+    public static final String KEY_SPECTRUM_COLOR = "spectrum_color";
+    public static final String KEY_SPECTRUM_CUSTOM_PALETTE = "spectrum_custom_palette";
+    public static final String KEY_SPECTRUM_REFLECTION         = "spectrum_reflection";
+    public static final String KEY_SPECTRUM_REFLECTION_HEIGHT  = "spectrum_reflection_height";
+    public static final String KEY_SPECTRUM_REFLECTION_ALPHA   = "spectrum_reflection_alpha";
+
+    public static final String KEY_AUDIO_NORMALIZATION         = "audio_normalization";
+    public static final String KEY_AUDIO_TARGET_LOUDNESS       = "audio_target_loudness";
+    public static final String KEY_AUDIO_GLOBAL_GAIN           = "audio_global_gain";
+
+    public static final String KEY_PLAYLIST_FIRSTITEM_RANDOM           = "playlist_firstitem_random";
+    public static final String KEY_PLAYLIST_AUTOPLAY           = "playlist_autoplay";
+    public static final String KEY_PLAYLIST_SHUFFLE          = "playlist_shuffle";
+    public static final String KEY_PLAYLIST_REPEAT           = "playlist_repeat";
+    public static final String KEY_PLAYLIST_REPEAT_ONE       = "playlist_repeat_one";
+    public static final String KEY_SAVE_RECENT_PLAYED_FILES  = "save_recent_played_files";
+
+
     // Valores padrão para cada chave
     private static final Map<String, String> DEFAULTS = new LinkedHashMap<>();
     static {
@@ -36,6 +66,32 @@ public class ConfigManager {
         DEFAULTS.put(KEY_SUBTITLE_COLOR, String.valueOf(Color.WHITE.getRGB())); // -1 = branco opaco
         DEFAULTS.put(KEY_FRAME_SKIP_VALUE,  "1");
         DEFAULTS.put(KEY_CAPTURE_FRAME_INTERVAL,  "2");
+        DEFAULTS.put(KEY_SAVE_RECENT_PLAYED_FILES,  "true");
+
+        //Audio
+        DEFAULTS.put(KEY_SHOW_AUDIO_SPECTRUM, "true");
+        DEFAULTS.put(KEY_SHOW_AUDIO_IMAGE_COVER, "true");
+        DEFAULTS.put(KEY_SPECTRUM_LAYOUT, "LINEAR");
+        DEFAULTS.put(KEY_WAVEFORM_AMPLITUDE, "180");
+        DEFAULTS.put(KEY_WAVEFORM_FILLED, "false");
+        DEFAULTS.put(KEY_WAVEFORM_LAYERS, "5");
+        DEFAULTS.put(KEY_WAVEFORM_SPACING, "0.8");
+        DEFAULTS.put(KEY_SPECTRUM_COLOR, "DEFAULT");
+        DEFAULTS.put(KEY_SPECTRUM_CUSTOM_PALETTE, "NONE");
+        DEFAULTS.put(KEY_SPECTRUM_REFLECTION, "true");
+        DEFAULTS.put(KEY_SPECTRUM_REFLECTION_HEIGHT, "0.5"); // Equivale a 50% (i == 1)
+        DEFAULTS.put(KEY_SPECTRUM_REFLECTION_ALPHA, "128");  // Equivale a 50% / Opacidade 128 (i == 1)
+
+        DEFAULTS.put(KEY_AUDIO_NORMALIZATION, "false");
+        DEFAULTS.put(KEY_AUDIO_TARGET_LOUDNESS, "-18.0");    // Padrão do quietItem (-18.0f)
+        DEFAULTS.put(KEY_AUDIO_GLOBAL_GAIN, "0.2");          // Padrão do primeiro item (20% -> 0.2f)
+
+        //Playlist
+        DEFAULTS.put(KEY_PLAYLIST_FIRSTITEM_RANDOM, "true");
+        DEFAULTS.put(KEY_PLAYLIST_AUTOPLAY, "true");
+        DEFAULTS.put(KEY_PLAYLIST_SHUFFLE, "false");
+        DEFAULTS.put(KEY_PLAYLIST_REPEAT, "false");
+        DEFAULTS.put(KEY_PLAYLIST_REPEAT_ONE, "false");
 
     }
 
@@ -298,7 +354,125 @@ public class ConfigManager {
         setInt(KEY_CAPTURE_FRAME_INTERVAL, frameInterval);
     }
 
+    public boolean isSavedRecentItemPlayed() {
+        return getBoolean(KEY_SAVE_RECENT_PLAYED_FILES, true);
+    }
+    public void savedRecentItemPlayed(boolean savedRecentItemPlayed) {
+        setBoolean(KEY_SAVE_RECENT_PLAYED_FILES, savedRecentItemPlayed);
+    }
+    // -------------------------------------------------------------------------
+    // Opçóes de Áudio
+    // -------------------------------------------------------------------------
 
+    public boolean getSavedShowAudioSpectrum() {return getBoolean(KEY_SHOW_AUDIO_SPECTRUM, true);}
+    public void saveShowAudioSpectrum(boolean spectrum) {setBoolean(KEY_SHOW_AUDIO_SPECTRUM, spectrum);}
+
+    public boolean getSavedShowAudioImageCover() {return getBoolean(KEY_SHOW_AUDIO_IMAGE_COVER, true);}
+    public void saveShowAudioImageCover(boolean cover) {setBoolean(KEY_SHOW_AUDIO_IMAGE_COVER, cover);}
+
+    public AudioSpectrumPanel.LayoutMode getSavedSpectrumLayout() {
+        String layoutStr = get(KEY_SPECTRUM_LAYOUT);
+        try {
+            return AudioSpectrumPanel.LayoutMode.valueOf(layoutStr);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Caso o arquivo tenha um valor inválido, retorna o padrão
+            return AudioSpectrumPanel.LayoutMode.LINEAR;
+        }
+    }
+    public void saveSpectrumLayout(AudioSpectrumPanel.LayoutMode layoutMode) {
+        set(KEY_SPECTRUM_LAYOUT, layoutMode.name());
+    }
+
+    public int getSavedWaveformAmplitude() { return getInt(KEY_WAVEFORM_AMPLITUDE, 180); }
+    public void saveWaveformAmplitude(int amplitude) { setInt(KEY_WAVEFORM_AMPLITUDE, amplitude); }
+
+    public boolean getSavedWaveformFilled() { return getBoolean(KEY_WAVEFORM_FILLED, false); }
+    public void saveWaveformFilled(boolean filled) { setBoolean(KEY_WAVEFORM_FILLED, filled); }
+
+    public int getSavedWaveformLayers() { return getInt(KEY_WAVEFORM_LAYERS, 5); }
+    public void saveWaveformLayers(int layers) { setInt(KEY_WAVEFORM_LAYERS, layers); }
+
+    public float getSavedWaveformSpacing() { return getFloat(KEY_WAVEFORM_SPACING, 0.8f); }
+    public void saveWaveformSpacing(float spacing) { setFloat(KEY_WAVEFORM_SPACING, spacing); }
+
+
+    public AudioSpectrumPanel.ColorMode getSavedSpectrumColor() {
+        String colorStr = get(KEY_SPECTRUM_COLOR);
+        try {
+            return AudioSpectrumPanel.ColorMode.valueOf(colorStr);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Caso o arquivo tenha um valor inválido, retorna o padrão
+            return AudioSpectrumPanel.ColorMode.DEFAULT;
+        }
+    }
+    public void saveSpectrumColor(AudioSpectrumPanel.ColorMode colorMode) {
+        set(KEY_SPECTRUM_COLOR, colorMode.name());
+    }
+
+    public AudioSpectrumPanel.CustomPalette getSavedSpectrumCustomPalette() {
+        String paletteStr = get(KEY_SPECTRUM_CUSTOM_PALETTE);
+        try {
+            return AudioSpectrumPanel.CustomPalette.valueOf(paletteStr);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return AudioSpectrumPanel.CustomPalette.NONE;
+        }
+    }
+    public void saveSpectrumCustomPalette(AudioSpectrumPanel.CustomPalette palette) {
+        set(KEY_SPECTRUM_CUSTOM_PALETTE, palette.name());
+    }
+
+    public boolean getSavedSpectrumReflection() { return getBoolean(KEY_SPECTRUM_REFLECTION, true); }
+    public void saveSpectrumReflection(boolean enabled) { setBoolean(KEY_SPECTRUM_REFLECTION, enabled); }
+
+    public float getSavedSpectrumReflectionHeight() { return getFloat(KEY_SPECTRUM_REFLECTION_HEIGHT, 0.5f); }
+    public void saveSpectrumReflectionHeight(float height) { setFloat(KEY_SPECTRUM_REFLECTION_HEIGHT, height); }
+
+    public int getSavedSpectrumReflectionAlpha() { return getInt(KEY_SPECTRUM_REFLECTION_ALPHA, 128); }
+    public void saveSpectrumReflectionAlpha(int alpha) { setInt(KEY_SPECTRUM_REFLECTION_ALPHA, alpha); }
+
+    public boolean getSavedAudioNormalization() { return getBoolean(KEY_AUDIO_NORMALIZATION, false); }
+    public void saveAudioNormalization(boolean enabled) { setBoolean(KEY_AUDIO_NORMALIZATION, enabled); }
+
+    public float getSavedAudioTargetLoudness() { return getFloat(KEY_AUDIO_TARGET_LOUDNESS, -18.0f); }
+    public void saveAudioTargetLoudness(float loudness) { setFloat(KEY_AUDIO_TARGET_LOUDNESS, loudness); }
+
+    public float getSavedAudioGlobalGain() { return getFloat(KEY_AUDIO_GLOBAL_GAIN, 0.2f); }
+    public void saveAudioGlobalGain(float gain) { setFloat(KEY_AUDIO_GLOBAL_GAIN, gain); }
+
+    //Playlist
+    public boolean isSavedPlaylistRandom() {
+        return getBoolean(KEY_PLAYLIST_FIRSTITEM_RANDOM, true);
+    }
+    public void savedPlaylistRandom(boolean random) {
+        setBoolean(KEY_PLAYLIST_FIRSTITEM_RANDOM, random);
+    }
+    public boolean isSavedPlaylistAutoPlay() {
+        return getBoolean(KEY_PLAYLIST_AUTOPLAY, true);
+    }
+    public void savedPlaylistAutoPlay(boolean autoPlay) {
+        setBoolean(KEY_PLAYLIST_AUTOPLAY, autoPlay);
+    }
+
+    public boolean isSavedPlaylistShuffle() {
+        return getBoolean(KEY_PLAYLIST_SHUFFLE, false);
+    }
+    public void savedPlaylistShuffle(boolean shuffle) {
+        setBoolean(KEY_PLAYLIST_SHUFFLE, shuffle);
+    }
+
+    public boolean isSavedPlaylistRepeat() {
+        return getBoolean(KEY_PLAYLIST_REPEAT, false);
+    }
+    public void savedPlaylistRepeat(boolean repeat) {
+        setBoolean(KEY_PLAYLIST_REPEAT, repeat);
+    }
+
+    public boolean isSavedPlaylistRepeatOne() {
+        return getBoolean(KEY_PLAYLIST_REPEAT_ONE, false);
+    }
+    public void savedPlaylistRepeatOne(boolean repeatOne) {
+        setBoolean(KEY_PLAYLIST_REPEAT_ONE, repeatOne);
+    }
 
     // -------------------------------------------------------------------------
     // Persistência interna — formato "chave=valor", uma por linha

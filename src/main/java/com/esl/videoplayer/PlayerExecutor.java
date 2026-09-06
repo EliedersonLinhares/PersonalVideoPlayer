@@ -1,24 +1,29 @@
 package com.esl.videoplayer;
 
 import com.esl.videoplayer.File.FileManager;
+import com.esl.videoplayer.Video.VideoThumbnail;
 import com.esl.videoplayer.localization.I18N;
 import com.esl.videoplayer.theme.ThemeManager;
 import com.formdev.flatlaf.intellijthemes.FlatArcDarkOrangeIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatArcOrangeIJTheme;
 import com.formdev.flatlaf.intellijthemes.FlatDraculaIJTheme;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
+import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class PlayerExecutor {
 
-    public static void main(String[] args) {
+
+    public static void main(String[] args) throws IOException {
+
 
         // Substitui os args corrompidos pelos args nativos do Windows (UTF-16)
         String[] safeArgs = getWindowsArgs();
@@ -171,5 +176,7 @@ public class PlayerExecutor {
 
         return filePath; // retorna original se tudo falhar
     }
+
+
 
 }

@@ -38,5 +38,13 @@ build/
 
 lib/ffmpeg
 
+
 ### Mac OS ###
 .DS_Store
+/src/main/resources/native/
+/src/main/java/com/esl/videoplayer/Video/FFmpegBridge.java
+/src/main/java/com/esl/videoplayer/Video/FFmpegBridge.class
+/src/main/java/com/esl/videoplayer/Video/VideoThumbnail.java
+/src/main/java/com/esl/videoplayer/Video/VideoThumbnail$Builder.class
+/src/main/java/com/esl/videoplayer/Video/VideoThumbnail$Result.class
+/src/main/java/com/esl/videoplayer/Video/VideoThumbnail.class

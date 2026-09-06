@@ -20,6 +20,7 @@ public class FileManager {
     private static final Set<String> AUDIO_EXTS = Set.of("mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma", "ac3", "aiff");
     private static final Set<String> IMAGE_EXTS = Set.of("jpeg", "jpg", "png", "webp", "psd", "bmp", "tiff");
     private static final Set<String> VIDEO_EXTS = Set.of("mp4", "m4s", "avi", "mkv", "mov", "flv", "webm", "gif", "wmv");
+    private static final Set<String> PLAYLIST_EXTS = Set.of("m3u");
 
 
     private VideoPlayer videoPlayer;
@@ -42,6 +43,7 @@ public class FileManager {
         if (AUDIO_EXTS.contains(ext)) videoPlayer.getAudioExecution().loadAudio(file.getAbsolutePath());
         else if (IMAGE_EXTS.contains(ext)) videoPlayer.getImageExecution().loadImage(file.getAbsolutePath());
         else if (VIDEO_EXTS.contains(ext)) videoPlayer.getVideoExecution().loadVideo(file.getAbsolutePath());
+        else if (PLAYLIST_EXTS.contains(ext)) videoPlayer.getMainPanel().getPlayListExecution().loadAndPlayPlaylistFromContext(videoPlayer.getMainPanel(), videoPlayer, file.getAbsolutePath());
         else showError(parent, I18N.get("videoPlayer.OpenFile.NoFileSupport.text"));
     }
     public void fileTypesAction(File f) {
@@ -84,7 +86,10 @@ public class FileManager {
         if (!isMediaFile(path.toFile())) {
             throw new Exception(I18N.get("videoPlayer.ContextOpen.openFile.Exception.UnsupportedFileFormat") + " " + filePath);
         }
-
+        if (filePath.endsWith("m3u")){
+            videoPlayer.getMainPanel().getPlayListExecution().loadAndPlayPlaylistFromContext(videoPlayer.getMainPanel(),videoPlayer, filePath);
+            return;
+        }
         if (filePath.endsWith("mp3")
                 || filePath.endsWith("flac")
                 || filePath.endsWith("wav")
@@ -144,12 +149,13 @@ public class FileManager {
         String[] supportedFormats = {
                 // Vídeo
                 ".mp4", ".avi", ".mkv", ".mov", ".flv", ".webm",
-                ".gif", ".wmv", ".3gp",
+                ".gif", ".wmv", ".3gp", ".m3u",
                 // Áudio
                 ".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"
                 , ".wma", ".ac3", ".aiff",
                 // Image
-                ".jpeg", ".jpg", ".png", ".webp", ".psd", ".bmp", ".tiff"
+                ".jpeg", ".jpg", ".png", ".webp", ".psd", ".bmp", ".tiff",
+
         };
 
         for (String format : supportedFormats) {
@@ -186,5 +192,9 @@ public class FileManager {
                 return false;
             }
         });
+    }
+
+    public VideoPlayer getVideoPlayer() {
+        return videoPlayer;
     }
 }

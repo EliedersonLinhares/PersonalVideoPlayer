@@ -117,6 +117,8 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
         }
     }
 
+
+
     public void selectCaptureFolder(String customCapturePath, String videoFilePath, VideoPlayer videoPlayer) {
         folderChooser = new JFileChooser();
         folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -174,11 +176,6 @@ public class CaptureFrameManager implements I18N.LanguageChangeListener {
             System.out.println("Pasta de captura em lote definida: " + batchCapturePath);
         }
     }
-
-//    public void resetBatchCaptureFolder(VideoPlayer videoPlayer) {
-//        JOptionPane.showMessageDialog(videoPlayer, "A pasta de captura em lote foi redefinida.\n" + "As capturas serão salvas na pasta do vídeo.", "Configuração Restaurada", JOptionPane.INFORMATION_MESSAGE);
-//        System.out.println("Pasta de captura em lote restaurada para padrão");
-//    }
 
     public void batchCaptureFrames(FFmpegFrameGrabber grabber, VideoPlayer videoPlayer, boolean isPlaying, long totalFrames, int batchCaptureInterval, double frameRate, String batchCapturePath, String videoFilePath) {
 
